@@ -1,0 +1,42 @@
+{
+  "name": "mchpai-alpha",
+  "displayName": "MCHPAI Alpha — Memecoin Discovery & Copy Trading",
+  "version": "0.1.0",
+  "description": "Solana intelligence-driven dynamic memecoin discovery and smart-money copy-trading for the MCHPAI platform.",
+  "entrypoint": {
+    "type": "service",
+    "api": "http://api-gateway:8080",
+    "websocket": "ws://api-gateway:8080/ws/live",
+    "healthcheck": "/healthz"
+  },
+  "capabilities": [
+    "memecoin.discovery",
+    "wallet.profiling",
+    "graph.cluster_detection",
+    "prediction.buy_signal",
+    "execution.copy_trade"
+  ],
+  "scores": [
+    "wallet_alpha_score",
+    "cluster_score",
+    "buy_probability",
+    "expected_value",
+    "risk_score"
+  ],
+  "panels": [
+    { "id": "discovery", "title": "New Tokens", "source": "/discovery/new" },
+    { "id": "leaderboard", "title": "Wallet Leaderboard", "source": "/leaderboard" },
+    { "id": "clusters", "title": "Smart-Money Clusters", "source": "/clusters" },
+    { "id": "signals", "title": "Live Signals", "source": "/ws/live", "kind": "stream" }
+  ],
+  "controls": [
+    { "id": "pause", "title": "Pause Execution", "action": "POST /control/pause" },
+    { "id": "resume", "title": "Resume Execution", "action": "POST /control/resume" }
+  ],
+  "config": {
+    "execution_mode": { "type": "enum", "values": ["paper", "live"], "default": "paper" },
+    "tau_buy_probability": { "type": "number", "default": 0.65 },
+    "tau_expected_value_bps": { "type": "number", "default": 150 },
+    "tau_risk_score_max": { "type": "number", "default": 55 }
+  }
+}

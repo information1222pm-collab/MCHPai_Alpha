@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prediction-engine"
+version = "0.1.0"
+description = "MCHPAI prediction-engine: scores + buy probability + expected value."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common", "numpy>=1.26"]
+
+# ML backends are optional so the service boots without heavy deps in dev.
+[project.optional-dependencies]
+ml = ["xgboost>=2.0", "lightgbm>=4.3", "catboost>=1.2", "scikit-learn>=1.4"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["prediction_engine*"]

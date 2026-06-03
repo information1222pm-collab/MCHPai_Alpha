@@ -1,0 +1,35 @@
+# Secrets
+.env
+*.pem
+*.key
+hot_wallet.json
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Rust
+target/
+**/*.rs.bk
+
+# Data / artifacts
+data/
+*.parquet
+*.duckdb
+models/saved_models/*.bin
+models/saved_models/*.txt
+models/saved_models/*.pt
+!models/saved_models/.gitkeep
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

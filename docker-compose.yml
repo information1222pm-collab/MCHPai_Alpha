@@ -1,0 +1,201 @@
+# ============================================================================
+# MCHPAI — local/dev orchestration.
+# Tiers: event-bus · datastores · observability · services.
+# Production uses infrastructure/kubernetes + deployments/ overlays instead.
+# ============================================================================
+
+x-py-build: &py-build
+  context: .
+  dockerfile: infrastructure/docker/python.Dockerfile
+
+x-py-env: &py-env
+  env_file: .env
+  depends_on:
+    nats: { condition: service_started }
+    redis: { condition: service_started }
+    postgres: { condition: service_healthy }
+
+networks:
+  mchpai:
+    driver: bridge
+
+volumes:
+  pg_data:
+  ch_data:
+  neo4j_data:
+  redis_data:
+  minio_data:
+  nats_data:
+  prom_data:
+  grafana_data:
+
+services:
+  # ---------------------------------------------------------------- event bus
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222", "-c", "/etc/nats/nats.conf"]
+    volumes:
+      - nats_data:/data
+      - ./infrastructure/nats/nats.conf:/etc/nats/nats.conf:ro
+    ports: ["4222:4222", "8222:8222"]
+    networks: [mchpai]
+
+  # ---------------------------------------------------------------- datastores
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mchpai
+      POSTGRES_USER: mchpai
+      POSTGRES_PASSWORD: mchpai_dev_pw
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mchpai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [mchpai]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    environment:
+      CLICKHOUSE_DB: mchpai
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ./infrastructure/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports: ["8123:8123", "9000:9000"]
+    networks: [mchpai]
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/mchpai_dev_pw
+      NEO4J_PLUGINS: '["graph-data-science","apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: gds.*,apoc.*
+    volumes:
+      - neo4j_data:/data
+    ports: ["7474:7474", "7687:7687"]
+    networks: [mchpai]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis_data:/data
+      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports: ["6379:6379"]
+    networks: [mchpai]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: mchpai
+      MINIO_ROOT_PASSWORD: mchpai_dev_secret
+    volumes:
+      - minio_data:/data
+    ports: ["9002:9000", "9001:9001"]
+    networks: [mchpai]
+
+  # ------------------------------------------------------------- observability
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports: ["9090:9090"]
+    networks: [mchpai]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: mchpai
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+    networks: [mchpai]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./monitoring/otel/config.yaml:/etc/otel/config.yaml:ro
+    ports: ["4317:4317", "4318:4318"]
+    networks: [mchpai]
+
+  # ------------------------------------------------------------------ services
+  token-ingestion:
+    build: { <<: *py-build, args: { SERVICE: token-ingestion } }
+    <<: *py-env
+    command: ["python", "-m", "token_ingestion.main"]
+    networks: [mchpai]
+
+  wallet-ingestion:
+    build: { <<: *py-build, args: { SERVICE: wallet-ingestion } }
+    <<: *py-env
+    command: ["python", "-m", "wallet_ingestion.main"]
+    networks: [mchpai]
+
+  feature-engine:
+    build: { <<: *py-build, args: { SERVICE: feature-engine } }
+    <<: *py-env
+    command: ["python", "-m", "feature_engine.main"]
+    networks: [mchpai]
+
+  graph-engine:
+    build: { <<: *py-build, args: { SERVICE: graph-engine } }
+    <<: *py-env
+    depends_on:
+      neo4j: { condition: service_started }
+      nats: { condition: service_started }
+    command: ["python", "-m", "graph_engine.main"]
+    networks: [mchpai]
+
+  prediction-engine:
+    build: { <<: *py-build, args: { SERVICE: prediction-engine } }
+    <<: *py-env
+    command: ["python", "-m", "prediction_engine.main"]
+    networks: [mchpai]
+
+  strategy-engine:
+    build: { <<: *py-build, args: { SERVICE: strategy-engine } }
+    <<: *py-env
+    command: ["python", "-m", "strategy_engine.main"]
+    networks: [mchpai]
+
+  ranking-engine:
+    build: { <<: *py-build, args: { SERVICE: ranking-engine } }
+    <<: *py-env
+    command: ["python", "-m", "ranking_engine.main"]
+    networks: [mchpai]
+
+  alert-engine:
+    build: { <<: *py-build, args: { SERVICE: alert-engine } }
+    <<: *py-env
+    command: ["python", "-m", "alert_engine.main"]
+    networks: [mchpai]
+
+  api-gateway:
+    build: { <<: *py-build, args: { SERVICE: api-gateway } }
+    <<: *py-env
+    command: ["uvicorn", "api_gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports: ["8080:8080"]
+    networks: [mchpai]
+
+  execution-engine:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/rust.Dockerfile
+    env_file: .env
+    depends_on:
+      nats: { condition: service_started }
+      redis: { condition: service_started }
+    networks: [mchpai]

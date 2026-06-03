@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: mchpai
+    orgId: 1
+    folder: MCHPAI
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,50 @@
+[package]
+name = "execution-engine"
+version = "0.1.0"
+edition = "2021"
+description = "MCHPAI execution-engine: lowest-latency ingest + Jito execution path"
+license = "MIT"
+
+[[bin]]
+name = "execution-engine"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
+futures = "0.3"
+
+# Redis (low-latency bus shared with Python tiers)
+redis = { version = "0.25", features = ["tokio-comp", "aio", "streams"] }
+
+# HTTP (Helius enrichment, Jito JSON-RPC submit)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# --- Deferred integration dependencies -------------------------------------
+# The Solana / Yellowstone / Jito client stack is added when the real
+# subscription + bundle-submit code lands (it pulls in the full Agave tree and
+# must be pinned as a matched set). The skeleton compiles without it so CI/dev
+# stay fast; enable when wiring `ingest::yellowstone` and `execution::jito`:
+#   solana-sdk            = "2"
+#   solana-client         = "2"
+#   yellowstone-grpc-client = "5"   # match against the provider's proto version
+#   yellowstone-grpc-proto  = "5"
+#   jito-protos / jito-sdk  = (per Jito block-engine release)
+
+# Metrics
+prometheus = "0.13"
+hyper = { version = "0.14", features = ["server", "http1", "tcp"] }
+
+# Config
+dotenvy = "0.15"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"

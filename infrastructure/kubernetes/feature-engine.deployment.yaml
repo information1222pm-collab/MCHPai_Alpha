@@ -1,0 +1,51 @@
+# Reference deployment manifest — every Python service follows this shape.
+# (Horizontal scaling via consumer groups on NATS JetStream; stateless pods.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-engine
+  namespace: mchpai
+  labels: { app: feature-engine, tier: service }
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: feature-engine }
+  template:
+    metadata:
+      labels: { app: feature-engine, tier: service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+    spec:
+      containers:
+        - name: feature-engine
+          image: ghcr.io/mchpai/feature-engine:latest
+          command: ["python", "-m", "feature_engine.main"]
+          envFrom:
+            - secretRef: { name: mchpai-secrets }
+            - configMapRef: { name: mchpai-config }
+          ports:
+            - { name: metrics, containerPort: 9000 }
+          resources:
+            requests: { cpu: "500m", memory: "512Mi" }
+            limits:   { cpu: "2",    memory: "2Gi" }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 9000 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: feature-engine
+  namespace: mchpai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: feature-engine
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }

@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strategy-engine"
+version = "0.1.0"
+description = "MCHPAI strategy-engine: adaptive position sizing + portfolio logic."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common", "numpy>=1.26"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["strategy_engine*"]

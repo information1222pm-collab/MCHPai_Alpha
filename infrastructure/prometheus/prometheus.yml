@@ -1,0 +1,40 @@
+# MCHPAI — Prometheus scrape configuration.
+# Every service exposes /metrics on its PROMETHEUS_PORT via mchpai_common.metrics.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 15s
+  external_labels:
+    platform: mchpai
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: mchpai-services
+    static_configs:
+      - targets:
+          - "token-ingestion:9000"
+          - "wallet-ingestion:9000"
+          - "feature-engine:9000"
+          - "graph-engine:9000"
+          - "prediction-engine:9000"
+          - "strategy-engine:9000"
+          - "ranking-engine:9000"
+          - "alert-engine:9000"
+          - "api-gateway:9000"
+        labels:
+          tier: service
+
+  - job_name: mchpai-execution-engine
+    static_configs:
+      - targets: ["execution-engine:9100"]
+        labels:
+          tier: execution
+          lang: rust
+
+  - job_name: infra
+    static_configs:
+      - targets: ["nats:8222"]
+        labels:
+          tier: infra
