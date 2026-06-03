@@ -98,6 +98,47 @@ ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(ts)
 ORDER BY (mint, window, ts);
 
+-- Immutable event log — every envelope, for replay & audit. Never lose reality.
+CREATE TABLE IF NOT EXISTS mchpai.event_log
+(
+    occurred_at  DateTime64(3),
+    event_type   LowCardinality(String),
+    event_id     String,
+    producer     LowCardinality(String),
+    partition_key String,
+    payload      String                    -- JSON envelope payload
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(occurred_at)
+ORDER BY (event_type, occurred_at);
+
+-- Temporal entity state — wallet_state(t), creator_state(t), graph(t).
+-- Append-only 'movies' for future wallet/creator transformers + temporal GNNs.
+CREATE TABLE IF NOT EXISTS mchpai.wallet_states
+(
+    ts DateTime64(3), address String, seq UInt64,
+    realized_pnl_sol Float64, unrealized_pnl_sol Float64, exposure_sol Float64,
+    open_positions UInt32, position_concentration Float64, conviction Float64,
+    scaling Float64, cumulative_volume_sol Float64, trade_count UInt32
+)
+ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (address, ts);
+
+CREATE TABLE IF NOT EXISTS mchpai.creator_states
+(
+    ts DateTime64(3), creator String, seq UInt64,
+    launches_so_far UInt32, rugs_so_far UInt32, rug_rate Float64,
+    best_multiple_so_far Float64, alive_count UInt32, cumulative_volume_sol Float64
+)
+ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY (creator, ts);
+
+CREATE TABLE IF NOT EXISTS mchpai.graph_states
+(
+    ts DateTime64(3), seq UInt64, wallets UInt64,
+    co_buy_edges UInt64, funded_edges UInt64, transfer_edges UInt64,
+    clusters UInt64, top_cluster_score Float64, density Float64, new_edges_delta Int64
+)
+ENGINE = MergeTree PARTITION BY toYYYYMMDD(ts) ORDER BY ts;
+
 -- Attention / contagion telemetry (epidemiology + astronomy libs).
 CREATE TABLE IF NOT EXISTS mchpai.attention
 (

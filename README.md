@@ -77,6 +77,8 @@ mchpai/
 | `snapshot-engine`    | Python | Multi-resolution token time-series (5/15/30/60s) → ordered life sequences |
 | `ground-truth`       | Python | Forward labels (achieved Nx / rugged / survived / viral)  |
 | `creator-intelligence` | Python | `creator_score` from launch track records               |
+| `persistence`        | Python | Sacred token births, immutable event log, progress counters |
+| `state-engine`       | Python | Temporal `wallet_state(t)` / `creator_state(t)` / `graph(t)` |
 | `graph-engine`       | Python | Wallet / funding / token / cluster graphs (Neo4j)         |
 | `prediction-engine`  | Python | XGBoost/LightGBM/CatBoost → (GNN/Transformers) predictions|
 | `execution-engine`   | Rust   | Jito + QUIC + Yellowstone + RPC rotation, lowest latency  |

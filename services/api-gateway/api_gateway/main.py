@@ -39,6 +39,25 @@ async def healthz() -> dict:
     return {"status": "ok", "service": SERVICE, "env": settings.mchpai_env}
 
 
+@app.get("/stats")
+async def stats() -> dict:
+    """Observatory progress — the march to 1M snapshots / 10k / 100k tokens."""
+    rds = app.state.redis
+    snapshots = int(await rds.get("stats:snapshots") or 0)
+    tokens = int(await rds.get("stats:tokens") or 0)
+    births = int(await rds.get("stats:births") or 0)
+    events = int(await rds.get("stats:events") or 0)
+    milestones = {
+        "snapshots_1M": {"target": 1_000_000, "progress": snapshots / 1_000_000},
+        "tokens_10k": {"target": 10_000, "progress": tokens / 10_000},
+        "tokens_100k": {"target": 100_000, "progress": tokens / 100_000},
+    }
+    return {
+        "events": events, "snapshots": snapshots, "tokens": tokens, "births": births,
+        "milestones": milestones,
+    }
+
+
 @app.get("/leaderboard")
 async def leaderboard(limit: int = 50) -> dict:
     rds = app.state.redis

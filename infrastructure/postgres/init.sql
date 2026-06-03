@@ -142,6 +142,23 @@ CREATE TABLE IF NOT EXISTS fills (
     created_at    TIMESTAMPTZ DEFAULT now()
 );
 
+-- --------------------------------------------------------- token births (sacred)
+-- Immutable, append-only, idempotent. A birth is recorded exactly once and is
+-- NEVER overwritten — it is the anchor of every token trajectory.
+CREATE TABLE IF NOT EXISTS token_births (
+    mint                    TEXT PRIMARY KEY,
+    birth_slot              BIGINT,
+    birth_timestamp         TIMESTAMPTZ NOT NULL,
+    creator                 TEXT,
+    launchpad               TEXT,
+    initial_liquidity_sol   DOUBLE PRECISION,
+    initial_market_cap_sol  DOUBLE PRECISION,
+    first_signature         TEXT,
+    recorded_at             TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_births_creator ON token_births(creator);
+CREATE INDEX IF NOT EXISTS idx_births_ts ON token_births(birth_timestamp DESC);
+
 -- ------------------------------------------------------------- ground truth
 -- Frozen labels per token: the foundation of all supervised learning.
 CREATE TABLE IF NOT EXISTS ground_truth (

@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "state-engine"
+version = "0.1.0"
+description = "MCHPAI state-engine: temporal wallet/creator/graph state(t) recording."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["state_engine*"]

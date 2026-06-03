@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "persistence"
+version = "0.1.0"
+description = "MCHPAI persistence: sacred token births, immutable event log, progress counters."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common", "orjson>=3.10"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["persistence*"]

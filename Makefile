@@ -4,8 +4,9 @@
 SHELL := /bin/bash
 COMPOSE := docker compose
 PY_SERVICES := token-ingestion wallet-ingestion feature-engine snapshot-engine \
-               ground-truth creator-intelligence graph-engine prediction-engine \
-               api-gateway alert-engine ranking-engine strategy-engine
+               ground-truth creator-intelligence persistence state-engine \
+               graph-engine prediction-engine api-gateway alert-engine \
+               ranking-engine strategy-engine
 INFRA := nats postgres clickhouse neo4j redis minio prometheus grafana
 
 .DEFAULT_GOAL := help

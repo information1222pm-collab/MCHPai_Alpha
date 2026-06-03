@@ -17,6 +17,7 @@
 
 pub mod endpoints;
 pub mod helius;
+pub mod reconcile;
 pub mod slot;
 pub mod yellowstone;
 
