@@ -123,6 +123,25 @@ See [`docs/event_pipeline.md`](docs/event_pipeline.md) and
 
 ---
 
+## Operations (Phase 3 — First Light)
+
+The observatory is built; the current mission is to **observe mainnet with
+integrity** — no models, no trading until the dataset milestones are met.
+
+- **[docs/runbook.md](docs/runbook.md)** — the sacred mission manual: infra,
+  secrets, startup order, health checks, failure modes, recovery.
+- **[docs/first_light.md](docs/first_light.md)** — the observation ladder
+  (1 → 10 → 100 → 1,000 births; 1M snapshots; 10k → 100k tokens) and go/no-go gates.
+- **[docs/dataset_validation.md](docs/dataset_validation.md)** — "does reality
+  agree?": integrity + quality checks.
+
+```
+curl :8080/stats        # observatory progress
+curl :8080/quality      # latest dataset-quality report
+python scripts/first_light.py        # milestone ladder status
+python scripts/validate_dataset.py   # run integrity checks → Redis + stdout
+```
+
 ## Quick start
 
 ```bash

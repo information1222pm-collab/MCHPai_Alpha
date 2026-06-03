@@ -65,6 +65,17 @@ async def leaderboard(limit: int = 50) -> dict:
     return {"wallets": [{"address": a, "alpha_score": s} for a, s in top]}
 
 
+@app.get("/quality")
+async def quality() -> dict:
+    """Latest dataset-quality report (written by scripts/validate_dataset.py)."""
+    import orjson
+
+    raw = await app.state.redis.get("quality:report")
+    if not raw:
+        return {"status": "UNKNOWN", "detail": "no report yet — run validate_dataset.py"}
+    return orjson.loads(raw)
+
+
 @app.post("/control/pause")
 async def pause() -> dict:
     await app.state.redis.set("exec:paused", "1")
