@@ -11,8 +11,11 @@ pub struct Config {
     pub redis_url: String,
 
     pub yellowstone_endpoint: String,
+    pub yellowstone_endpoints: Vec<String>, // failover pool (comma-separated env)
     pub yellowstone_x_token: String,
     pub helius_rpc_url: String,
+
+    pub ingest_channel_capacity: usize, // backpressure bound between stream→publisher
 
     pub jito_block_engine_url: String,
     pub jito_tip_lamports: u64,
@@ -32,13 +35,27 @@ fn get(key: &str, default: &str) -> String {
 impl Config {
     pub fn from_env() -> Self {
         let _ = dotenvy::dotenv();
+        let primary = get("YELLOWSTONE_ENDPOINT", "");
+        // YELLOWSTONE_ENDPOINTS (comma-separated) overrides/augments the single one.
+        let mut endpoints: Vec<String> = get("YELLOWSTONE_ENDPOINTS", "")
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if endpoints.is_empty() && !primary.is_empty() {
+            endpoints.push(primary.clone());
+        }
         Config {
             env: get("MCHPAI_ENV", "local"),
             execution_mode: get("EXECUTION_MODE", "paper"),
             redis_url: get("REDIS_URL", "redis://redis:6379/0"),
-            yellowstone_endpoint: get("YELLOWSTONE_ENDPOINT", ""),
+            yellowstone_endpoint: primary,
+            yellowstone_endpoints: endpoints,
             yellowstone_x_token: get("YELLOWSTONE_X_TOKEN", ""),
             helius_rpc_url: get("HELIUS_RPC_URL", ""),
+            ingest_channel_capacity: get("INGEST_CHANNEL_CAPACITY", "16384")
+                .parse()
+                .unwrap_or(16384),
             jito_block_engine_url: get(
                 "JITO_BLOCK_ENGINE_URL",
                 "https://mainnet.block-engine.jito.wtf",

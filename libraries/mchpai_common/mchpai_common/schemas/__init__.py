@@ -7,9 +7,13 @@ never repurpose meaning, bump ``SCHEMA_VERSION`` on breaking changes.
 """
 
 from .common import SCHEMA_VERSION, Side, TokenSource, WalletLabel
-from .token import Token, TokenSnapshot
+from .token import Token
+from .token import TokenSnapshot as TokenMarketSnapshot
 from .wallet import Wallet, WalletProfile
 from .trade import Trade
+from .swap import Dex, SwapEvent
+from .snapshot import LifecyclePhase, TokenSnapshot, Window
+from .ground_truth import GroundTruth, Outcome, HORIZONS, HORIZON_SECONDS, MULTIPLES
 from .cluster import Cluster
 from .scores import (
     WalletScore,
@@ -25,10 +29,20 @@ __all__ = [
     "TokenSource",
     "WalletLabel",
     "Token",
-    "TokenSnapshot",
+    "TokenMarketSnapshot",
     "Wallet",
     "WalletProfile",
     "Trade",
+    "Dex",
+    "SwapEvent",
+    "TokenSnapshot",
+    "Window",
+    "LifecyclePhase",
+    "GroundTruth",
+    "Outcome",
+    "HORIZONS",
+    "HORIZON_SECONDS",
+    "MULTIPLES",
     "Cluster",
     "WalletScore",
     "ClusterScore",

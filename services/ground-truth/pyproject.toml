@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ground-truth-engine"
+version = "0.1.0"
+description = "MCHPAI ground-truth: forward-looking token labels for supervised learning."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ground_truth_engine*"]

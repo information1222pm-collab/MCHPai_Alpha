@@ -6,5 +6,12 @@ round-trip matching so that *only realized* performance is measured.
 """
 
 from .profiling import profile_wallet, RoundTrip, match_round_trips
+from .advanced import AdvancedWalletProfile, profile_wallet_advanced
 
-__all__ = ["profile_wallet", "RoundTrip", "match_round_trips"]
+__all__ = [
+    "profile_wallet",
+    "RoundTrip",
+    "match_round_trips",
+    "AdvancedWalletProfile",
+    "profile_wallet_advanced",
+]

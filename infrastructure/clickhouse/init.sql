@@ -57,6 +57,47 @@ ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(ts)
 ORDER BY (entity_type, entity_id, ts);
 
+-- Multi-resolution token snapshots — the ordered life-sequence of every token.
+-- This is the Phase-1 "gold": 5s/15s/30s/60s steps with market + participation +
+-- intelligence + safety metrics, ordered by (mint, window, ts) for sequence pulls.
+CREATE TABLE IF NOT EXISTS mchpai.snapshots
+(
+    ts            DateTime64(3),
+    mint          String,
+    window        LowCardinality(String),   -- 5s | 15s | 30s | 60s
+    seq           UInt64,
+    age_seconds   Float64,
+    phase         LowCardinality(String),   -- birth|growth|viral|distribution|death
+    -- market
+    price_sol     Float64,
+    open_sol      Float64,
+    high_sol      Float64,
+    low_sol       Float64,
+    close_sol     Float64,
+    volume_sol    Float64,
+    liquidity_sol Float64,
+    market_cap_sol Float64,
+    -- participation
+    buyers        UInt32,
+    sellers       UInt32,
+    unique_traders UInt32,
+    holders       UInt32,
+    txns          UInt32,
+    -- intelligence
+    entropy            Float64,
+    r0                 Float64,
+    smart_money_ratio  Float64,
+    cluster_ratio      Float64,
+    net_flow_sol       Float64,
+    -- safety
+    top_holder_pct             Float64,
+    holder_concentration_gini  Float64,
+    lp_health                  Float64
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(ts)
+ORDER BY (mint, window, ts);
+
 -- Attention / contagion telemetry (epidemiology + astronomy libs).
 CREATE TABLE IF NOT EXISTS mchpai.attention
 (

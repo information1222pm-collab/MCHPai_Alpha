@@ -150,6 +150,35 @@ services:
     command: ["python", "-m", "feature_engine.main"]
     networks: [mchpai]
 
+  snapshot-engine:
+    build: { <<: *py-build, args: { SERVICE: snapshot-engine } }
+    <<: *py-env
+    depends_on:
+      nats: { condition: service_started }
+      redis: { condition: service_started }
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_started }
+    command: ["python", "-m", "snapshot_engine.main"]
+    networks: [mchpai]
+
+  ground-truth:
+    build: { <<: *py-build, args: { SERVICE: ground-truth } }
+    <<: *py-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_started }
+    command: ["python", "-m", "ground_truth_engine.main"]
+    networks: [mchpai]
+
+  creator-intelligence:
+    build: { <<: *py-build, args: { SERVICE: creator-intelligence } }
+    <<: *py-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_started }
+    command: ["python", "-m", "creator_intelligence.main"]
+    networks: [mchpai]
+
   graph-engine:
     build: { <<: *py-build, args: { SERVICE: graph-engine } }
     <<: *py-env

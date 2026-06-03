@@ -74,6 +74,9 @@ mchpai/
 | `token-ingestion`    | Python | Pump.fun/Raydium/Meteora/Birdeye/Jupiter/Helius/Yellowstone → `TokenCreated`, `TokenSnapshot` |
 | `wallet-ingestion`   | Python | Transactions → `WalletActivity`, `WalletBoughtToken`, …   |
 | `feature-engine`     | Python | Creator/liquidity/entropy/spread/attention features       |
+| `snapshot-engine`    | Python | Multi-resolution token time-series (5/15/30/60s) → ordered life sequences |
+| `ground-truth`       | Python | Forward labels (achieved Nx / rugged / survived / viral)  |
+| `creator-intelligence` | Python | `creator_score` from launch track records               |
 | `graph-engine`       | Python | Wallet / funding / token / cluster graphs (Neo4j)         |
 | `prediction-engine`  | Python | XGBoost/LightGBM/CatBoost → (GNN/Transformers) predictions|
 | `execution-engine`   | Rust   | Jito + QUIC + Yellowstone + RPC rotation, lowest latency  |

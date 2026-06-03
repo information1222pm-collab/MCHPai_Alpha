@@ -1,13 +1,16 @@
-"""XGBoost trainer for the ``buy_probability`` target.
+"""XGBoost trainers for the Phase-1 targets.
 
-Default production model for buy_probability. Reads engineered features from
-ClickHouse, labels them with realized forward outcomes, trains with early
-stopping under walk-forward splits, and publishes to the model registry.
+Default production models for ``buy_probability``, ``rug_probability``,
+``survival_probability`` and ``tenx_probability``. Features come from the feature
+store (point-in-time, no leakage); labels come from frozen ground truth. Trains
+with early stopping under walk-forward splits and publishes to the registry.
 """
 
 from __future__ import annotations
 
 from models.base import Dataset, Manifest, Model, Trainer
+from models.dataset import build_dataset
+from models.targets import TARGETS
 
 
 class XGBModel(Model):
@@ -48,16 +51,28 @@ class XGBTrainer(Trainer):
         return XGBModel(None, ds.feature_names)
 
 
-def main() -> None:
+def train_target(store, ground_truths, target: str, *, version: str = "v1") -> Manifest:
+    """Train and publish one target end-to-end from store + ground truth."""
     trainer = XGBTrainer()
-    ds = Dataset(X=[], y=[], feature_names=[])  # load_dataset() in production
+    ds = build_dataset(store, ground_truths, target)
     model = trainer.fit(ds)
     metrics = trainer.evaluate(model, ds)
-    trainer.publish(
-        model,
-        Manifest(name="buy_probability", family="xgboost", version="v1", metrics=metrics,
-                 feature_names=ds.feature_names),
-    )
+    manifest = Manifest(name=target, family="xgboost", version=version,
+                        metrics=metrics, feature_names=ds.feature_names)
+    trainer.publish(model, manifest)
+    return manifest
+
+
+def main() -> None:
+    # Production: load the finalized ground truth + a MinioFeatureStore, then
+    # train every target. Here we show the loop; data loaders are wired in prod.
+    from mchpai_common.feature_store import InMemoryFeatureStore
+
+    store = InMemoryFeatureStore()
+    ground_truths: list = []  # load_finalized_ground_truth() in production
+    for target in TARGETS:
+        manifest = train_target(store, ground_truths, target)
+        print(f"trained {target}: n={manifest.metrics.get('n', 0)}")
 
 
 if __name__ == "__main__":

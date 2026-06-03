@@ -142,6 +142,44 @@ CREATE TABLE IF NOT EXISTS fills (
     created_at    TIMESTAMPTZ DEFAULT now()
 );
 
+-- ------------------------------------------------------------- ground truth
+-- Frozen labels per token: the foundation of all supervised learning.
+CREATE TABLE IF NOT EXISTS ground_truth (
+    mint              TEXT PRIMARY KEY REFERENCES tokens(mint) ON DELETE CASCADE,
+    created_at        TIMESTAMPTZ,
+    reference_price   DOUBLE PRECISION,
+    max_multiple      DOUBLE PRECISION,
+    time_to_max_seconds DOUBLE PRECISION,
+    outcome           TEXT,                   -- pending | rugged | survived | viral
+    rugged_at         TIMESTAMPTZ,
+    survival_seconds  DOUBLE PRECISION,
+    holder_retention  DOUBLE PRECISION,
+    achieved          JSONB DEFAULT '{}'::jsonb,   -- {"10x":{"24h":true,...},...}
+    max_multiple_by_horizon JSONB DEFAULT '{}'::jsonb,
+    is_final          BOOLEAN DEFAULT false,
+    labeled_at        TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ground_truth_outcome ON ground_truth(outcome);
+CREATE INDEX IF NOT EXISTS idx_ground_truth_final ON ground_truth(is_final);
+
+-- ---------------------------------------------------------- creator profiles
+CREATE TABLE IF NOT EXISTS creator_profiles (
+    creator               TEXT PRIMARY KEY,
+    launch_count          INT DEFAULT 0,
+    rug_count             INT DEFAULT 0,
+    rug_rate              REAL,
+    best_multiple         DOUBLE PRECISION,
+    median_multiple       DOUBLE PRECISION,
+    median_survival_seconds DOUBLE PRECISION,
+    avg_holder_retention  REAL,
+    volume_generated_sol  DOUBLE PRECISION,
+    repeat_buyer_rate     REAL,
+    creator_score         REAL,                -- 0..100
+    components            JSONB DEFAULT '{}'::jsonb,
+    updated_at            TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_creator_score ON creator_profiles(creator_score DESC);
+
 -- ------------------------------------------------------------------ leaderboard
 CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
     id            BIGSERIAL PRIMARY KEY,
