@@ -1,0 +1,50 @@
+{
+ "signature": "jqxtxL9qaBWtJ25zwFhJR2rZhDvuFAc1AgcktxtZMMggLWjUumg6Xu3SeS4s7zexE6hLi5VLRfSEDiT1S6Gq2zk",
+ "timestamp": 1780181736,
+ "type": "SWAP",
+ "source": "JUPITER",
+ "feePayer": "gasTzr94Pmp4Gf8vknQnqxeYxdgwFjbgdJa4msYRpnB",
+ "events": {
+  "swap": {
+   "nativeInput": null,
+   "nativeOutput": null,
+   "tokenInputs": [],
+   "tokenOutputs": [],
+   "nativeFees": [],
+   "tokenFees": [],
+   "innerSwaps": []
+  }
+ },
+ "nativeTransfers": [
+  {
+   "fromUserAccount": "FHg8gnrvbhuDkg67cSLgRVnFm1Za8uXhmz53c2dVUCPy",
+   "toUserAccount": "FEkfosUj2yhyD2BmZ7z7Eh18NhmLdUMF1Z7V4P8tw9CQ",
+   "amount": 23028978
+  },
+  {
+   "fromUserAccount": "FHg8gnrvbhuDkg67cSLgRVnFm1Za8uXhmz53c2dVUCPy",
+   "toUserAccount": "gasTzr94Pmp4Gf8vknQnqxeYxdgwFjbgdJa4msYRpnB",
+   "amount": 2039280
+  },
+  {
+   "fromUserAccount": "gasTzr94Pmp4Gf8vknQnqxeYxdgwFjbgdJa4msYRpnB",
+   "toUserAccount": "FEkfosUj2yhyD2BmZ7z7Eh18NhmLdUMF1Z7V4P8tw9CQ",
+   "amount": 2039280
+  },
+  {
+   "fromUserAccount": "gasTzr94Pmp4Gf8vknQnqxeYxdgwFjbgdJa4msYRpnB",
+   "toUserAccount": "Ca5hH6g3RFEnLY4W8MHGzZw1WszVyjB5GxT76xjADi3K",
+   "amount": 1844400
+  },
+  {
+   "fromUserAccount": "FHg8gnrvbhuDkg67cSLgRVnFm1Za8uXhmz53c2dVUCPy",
+   "toUserAccount": "gasTzr94Pmp4Gf8vknQnqxeYxdgwFjbgdJa4msYRpnB",
+   "amount": 1844400
+  },
+  {
+   "fromUserAccount": "FEkfosUj2yhyD2BmZ7z7Eh18NhmLdUMF1Z7V4P8tw9CQ",
+   "toUserAccount": "FHg8gnrvbhuDkg67cSLgRVnFm1Za8uXhmz53c2dVUCPy",
+   "amount": 2039280
+  }
+ ]
+}

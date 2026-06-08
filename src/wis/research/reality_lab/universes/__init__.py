@@ -47,7 +47,7 @@ UNIVERSES: tuple[Universe, ...] = (
          "single session; not time-diversified"),
     ),
     Universe(
-        "B", "random_blocks", "Random recent blocks", "awaiting_first_light",
+        "B", "random_blocks", "Random recent blocks", "observed",
         "Sample recent confirmed blocks (RPC getBlock); take fee payers of non-vote transactions.",
         ("over-represents whatever is on-chain now (MEV/HFT bots)",
          "fee payers may be relayers/programs, not end users", "point-in-time snapshot"),
@@ -66,7 +66,7 @@ UNIVERSES: tuple[Universe, ...] = (
          "measures OUR PnL estimate, not ground truth"),
     ),
     Universe(
-        "E", "pumpfun", "Pump.fun participants", "awaiting_first_light",
+        "E", "pumpfun", "Pump.fun participants", "observed",
         "Fee payers of recent pump.fun program transactions.",
         ("memecoin-launch population: high churn, many one-shot wallets", "bot-heavy",
          "recent-activity survivorship"),
@@ -78,8 +78,8 @@ UNIVERSES: tuple[Universe, ...] = (
          "discovery still conditioned on some activity"),
     ),
     Universe(
-        "G", "large_wallets", "Large wallets", "requires_characterization",
-        "Two-stage: discover candidates, getBalance, keep top holders by SOL balance.",
+        "G", "large_wallets", "Large wallets", "observed",
+        "Two-stage: discover candidates, getBalance, keep top holders by SOL balance (>= 10 SOL).",
         ("SOL balance != trading size (custody/treasury/CEX)", "large holders may rarely trade",
          "ignores value held in tokens"),
     ),

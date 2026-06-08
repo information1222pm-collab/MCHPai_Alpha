@@ -53,8 +53,9 @@ def test_measure_computes_bug_distributions() -> None:
 def test_registry_is_honest_about_status() -> None:
     slugs = [u.slug for u in UNIVERSES]
     assert len(slugs) == len(set(slugs)) == 8
-    observed = [u for u in UNIVERSES if u.status == "observed"]
-    # Only the universe we actually have an archive for is marked observed.
-    assert [u.slug for u in observed] == ["active_traders"]
+    observed = {u.slug for u in UNIVERSES if u.status == "observed"}
+    # Exactly the universes we have actually observed (real First Light) are
+    # marked observed; the rest must NOT claim data (Rule 0).
+    assert observed == {"active_traders", "random_blocks", "pumpfun", "large_wallets"}
     # Every universe documents at least one bias — naming distortion is the science.
     assert all(u.biases for u in UNIVERSES)

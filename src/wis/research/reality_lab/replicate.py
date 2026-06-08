@@ -113,25 +113,33 @@ def render_markdown(key: str, title: str, method: str, biases: list[str], d: Uni
     def top(counter: Counter, total: int, k: int = 5) -> str:
         return ", ".join(f"{name} {100 * c / total:.1f}%" for name, c in counter.most_common(k)) if total else "—"
 
+    # Surface denominators so low-sample cells are self-evidently uncertain.
+    # A rate over fewer than this many events is flagged as low-confidence.
+    low_swap = " ⚠" if d.n_parsed_swaps < 100 else ""
+    low_nt = " ⚠" if d.n_native_transfers < 100 else ""
     lines = [
         f"### Universe {key} — {title}",
         "",
         f"* **Discovery**: {method}",
-        f"* **Sample**: {d.n_transactions} transactions",
+        f"* **Sample**: {d.n_transactions} transactions · "
+        f"{d.n_parsed_swaps} parsed swaps · {d.n_native_transfers} native transfers",
         f"* **Biases**: {'; '.join(biases)}",
         "",
-        "| quantity | value |",
-        "|----------|------:|",
-        f"| P(BUG-001 \\| swap) — token-to-token | **{d.p_bug_001:.1%}** |",
-        f"| P(no trade \\| swap) — swap ignorance | {d.p_swap_untranslated:.1%} |",
-        f"| P(BUG-002 mechanics \\| transfer) | **{d.p_bug_002_mechanics:.1%}** |",
-        f"| funding : trade event ratio | {d.funding_trade_ratio:.1f} : 1 |",
-        f"| multi-hop rate | {d.multi_hop_rate:.1%} |",
-        f"| zero-event transactions | {d.p_zero_event_tx:.1%} |",
+        "| quantity | value | denominator |",
+        "|----------|------:|:--|",
+        f"| P(BUG-001 \\| swap) — token-to-token | **{d.p_bug_001:.1%}**{low_swap} | {d.n_parsed_swaps} swaps |",
+        f"| P(no trade \\| swap) — swap ignorance | {d.p_swap_untranslated:.1%}{low_swap} | {d.n_parsed_swaps} swaps |",
+        f"| P(BUG-002 mechanics \\| transfer) | **{d.p_bug_002_mechanics:.1%}**{low_nt} | {d.n_native_transfers} transfers |",
+        f"| funding : trade event ratio | {d.funding_trade_ratio:.1f} : 1 | {d.trade_events} trades |",
+        f"| multi-hop rate | {d.multi_hop_rate:.1%}{low_swap} | {d.n_parsed_swaps} swaps |",
+        f"| zero-event transactions | {d.p_zero_event_tx:.1%} | {d.n_transactions} txs |",
         "",
         f"* **Top types**: {top(d.type_counts, d.n_transactions)}",
         f"* **Top swap shapes**: {top(d.swap_shape_counts, d.n_parsed_swaps)}",
         f"* **Top sources**: {top(d.swap_source_counts, d.n_parsed_swaps)}",
         "",
     ]
+    if low_swap or low_nt:
+        lines.append("(⚠ = rate computed over a small denominator — treat as low-confidence.)")
+        lines.append("")
     return "\n".join(lines)

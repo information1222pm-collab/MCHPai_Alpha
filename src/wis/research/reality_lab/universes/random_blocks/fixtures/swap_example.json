@@ -1,0 +1,50 @@
+{
+ "signature": "4UKUcp2FepACfpsAiMx886wspoPJM8Lkk1pHF2MSSyF18YQe4moFFn7Zyd7tqTW3UnnZg94dP8AsMEJzMAisRqRW",
+ "timestamp": 1780870468,
+ "type": "SWAP",
+ "source": "BYREAL",
+ "feePayer": "GviTvNkYMWM6n4g1SLa32zZpcbBhrT82ppXH6P6ZgCY4",
+ "events": {
+  "swap": {
+   "nativeInput": null,
+   "nativeOutput": null,
+   "tokenInputs": [
+    {
+     "userAccount": "6U91aKa8pmMxkJwBCfPTmUEfZi6dHe7DcFq2ALvB2tbB",
+     "tokenAccount": "59v2cSbCsnyaWymLnsq6TWzE6cEN5KJYNTBNrcP4smRH",
+     "rawTokenAmount": {
+      "tokenAmount": "167387594",
+      "decimals": 6
+     },
+     "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    }
+   ],
+   "tokenOutputs": [
+    {
+     "userAccount": "HrWp3QR3hNeVy6tEZtcpsjwEiGgKJuL1NDP84EaaU2Nh",
+     "tokenAccount": "5VAEWoYgDP1V7VhiqVXwifQHNDsg2XXHXfC7RqNENQG5",
+     "rawTokenAmount": {
+      "tokenAmount": "167428015",
+      "decimals": 6
+     },
+     "mint": "USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB"
+    }
+   ],
+   "nativeFees": [],
+   "tokenFees": [],
+   "innerSwaps": []
+  }
+ },
+ "nativeTransfers": [
+  {
+   "fromUserAccount": "GviTvNkYMWM6n4g1SLa32zZpcbBhrT82ppXH6P6ZgCY4",
+   "toUserAccount": "Bb23zZBPAc3qEGyPzEKUU91dywG6AMBbxNagGWDMRzav",
+   "amount": 2039280
+  },
+  {
+   "fromUserAccount": "Bb23zZBPAc3qEGyPzEKUU91dywG6AMBbxNagGWDMRzav",
+   "toUserAccount": "GviTvNkYMWM6n4g1SLa32zZpcbBhrT82ppXH6P6ZgCY4",
+   "amount": 2519294393
+  }
+ ]
+}
