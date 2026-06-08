@@ -40,14 +40,19 @@ Done:
   `YellowstoneSource` and `RPCSource` have verified pure translators with gated
   live transports. Proven: all sources reconstruct identical `wallet_state(t)`.
 
+* **Helius First Light** (`wis.sources.helius_live`) — the first live transport.
+  `HeliusLiveTransport` (pagination + oldest-first ordering) is verified against
+  a simulated API; `first_light()` proves the recording of a live session
+  replays to bit-identical `wallet_state(t)`. The real socket needs only a key.
+
 Next:
-* Run live conformance against the docker-compose stack; promote each adapter
-  from "implemented" to "verified".
-* Wire live source transports to real endpoints (Helius key, Yellowstone gRPC,
-  RPC node); capture feeds into archives for deterministic replay.
+* **Run First Light against a real wallet** (1 → 10 → 100): observe, archive,
+  replay, verify. The first real wallet movie.
+* Run live conformance against the docker-compose stack; promote each persistence
+  adapter from "implemented" to "verified".
 * Incremental projections (resume from a sequence cursor) and a backfill harness.
 * Construct and persist `WalletTrajectory` — the time-series of
-  `wallet_state(t)` frames — as the substrate for future ML.
+  `wallet_state(t)` frames — **from real, replayable data, never synthetic**.
 * **Rust** hot paths where latency demands it — only after correctness holds.
 
 ## Phase 2 — Richer observation

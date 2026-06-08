@@ -33,7 +33,7 @@ live edge is verified against reality when credentials/endpoints exist.
 | `ArchiveSource` | **deterministic laboratory** — replay JSONL/Parquet event archives | **Verified**: round-trips to bit-identical `wallet_state(t)`, preserves ingestion time |
 | `CSVSource` | raw tabular trade dumps / backfills | **Verified** translation |
 | `SyntheticSource` | chaos / fault injection / adversarial testing | **Verified**: deterministic by seed; faults flow through without crashing |
-| `HeliusSource` | live Enhanced Transactions | translation **verified vs sample payloads**; transport pending live key |
+| `HeliusSource` | live Enhanced Transactions | translation **verified vs sample payloads**; `HeliusLiveTransport` pagination/ordering **verified vs a simulated API**; real socket pending live key |
 | `YellowstoneSource` | high-performance Geyser/gRPC | translation **verified vs sample messages**; transport pending live endpoint |
 | `RPCSource` | universal JSON-RPC fallback (balance-delta inference) | translation **verified vs sample txns**; transport pending live node |
 
@@ -64,6 +64,36 @@ The proof (`tests/sources/test_interchangeability.py`): the same reality —
 CSV reconstructs the **identical** `wallet_state(t)` digest. Provenance (the
 `venue` tag) may differ; behavior does not. Sources are interchangeable; only the
 door differs.
+
+## Helius First Light — reality is replayable
+
+`wis.sources.helius_live` is the first live transport. Simplicity over
+performance: plain HTTPS against Helius Enhanced Transactions — no Geyser, no
+gRPC, no low-latency machinery. Truth, and Helius is enough.
+
+```
+Helius API → translate_helius() → Domain Events → Event Log → Replay → wallet_state(t)
+```
+
+The transport is **injectable** (it takes an `httpx` client), so its pagination
+and oldest-first ordering are verified in-process against a *simulated* Helius
+API (`httpx.MockTransport`); only the real socket needs a key. The
+`first_light()` runner then proves the headline guarantee:
+
+> live feed → JSONL archive → `ArchiveSource` → replay → digest
+> **equals** the live digest, **bit-identically**.
+
+A non-deterministic live session thus becomes a perfectly reproducible
+recording. Run it against a real wallet:
+
+```bash
+python -m wis.sources.helius_live --api-key $HELIUS_KEY \
+    --wallet <ADDRESS> --out first_light.jsonl
+# observe 1 wallet, then 10, then 100 — observation, not alpha
+```
+
+It prints only **facts** — closed trades, lifetime ROI, DNA, and whether the
+recording is replayable. No scores, no prediction: observation comes first.
 
 ## Capturing a live feed for replay
 

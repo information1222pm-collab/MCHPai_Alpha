@@ -83,15 +83,5 @@ class HeliusSource:
                 yield SourcedEvent(payload=payload, ingestion_time=ingestion)
 
 
-def live_helius_payloads(api_key: str, address: str, *, limit: int = 100) -> Iterator[dict]:
-    """Thin live transport: poll Helius enhanced transactions for an address.
-
-    Lazy ``httpx`` import; network access required. The result feeds straight
-    into :class:`HeliusSource`. Pending verification against a live key.
-    """
-    import httpx  # lazy
-
-    url = f"https://api.helius.xyz/v0/addresses/{address}/transactions"
-    resp = httpx.get(url, params={"api-key": api_key, "limit": limit}, timeout=30.0)
-    resp.raise_for_status()
-    yield from resp.json()
+# The live network transport lives in wis.sources.helius_live, kept separate so
+# the translation above stays pure and fully testable on its own.
