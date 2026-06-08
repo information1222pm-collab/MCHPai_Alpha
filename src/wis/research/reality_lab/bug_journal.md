@@ -58,12 +58,17 @@ dominate.
 (`nativeInput + tokenOutputs` → BUY, `tokenInputs + nativeOutput` → SELL). Real
 volume is overwhelmingly routed token-to-token, where both native legs are null.
 
-**Scale.** ~99% of observed `SWAP`s (816 / 822) have this shape. This is the
-single most important translator gap.
+**Scale (revised by measurement — see distributions.md, Reality-100).** The
+first single-wallet sample suggested ~99% (816/822); the 100-wallet sample of
+9,793 transactions corrects this to **59.1% of parsed swaps** are token-to-token,
+with ~73% of parsed swaps yielding no trade event and only 26.7% SOL-paired.
+Still the single largest translator gap, but materially smaller than the first
+sample implied — the correction is exactly why we measure before fixing.
 
-**Fix.** DEFERRED. Do not implement until ≥100 wallets are journaled and the
-distribution of router shapes (Jupiter `innerSwaps`, quote choice, stable vs SOL
-routes) is understood. Pre-solving risks modeling the wrong thing.
+**Fix.** DEFERRED. The 100-wallet distribution is in; before acting, re-run on a
+fresh sample to confirm stability, and resolve how to price a token-to-token leg
+(quote token vs SOL-equivalent). Multi-hop is negligible (1.3%) — do not build
+for it. Pre-solving risks modeling the wrong thing.
 
 **Regression test.** `tests/sources/test_reality_fixtures.py::test_token_to_token_currently_untranslated`
 pins the current `[]` behavior; flip it when BUG-001 is addressed.
@@ -97,12 +102,16 @@ the swap itself should instead inform the **trade** (BUY cost), per BUG-001.
 `nativeTransfers` entry, indiscriminately, with no notion of which transfers are
 swap mechanics vs genuine peer funding.
 
-**Impact.** Pollutes `graph(t)` with spurious funding edges (trader↔vault,
-rent round-trips), which would distort funding-tree and cluster intelligence.
+**Impact (quantified — Reality-100).** Severe. Across 9,793 transactions, funding
+events outnumber trade events **~13.4 : 1** (15,345 vs 1,149). Of native
+transfers, **51.6% are dust** (fees/tips) and **20.3% are exactly the ATA rent**
+(2,039,280 lamports) — ≥72% pure swap mechanics — and **100% of counterparties
+were non-peer** (vaults/programs, not observed wallets). `graph(t)` would be
+dominated by artifacts, not real lineage.
 
-**Fix.** DEFERRED. Needs a real understanding of which transfer counterparties
-are programs/vaults vs wallets (and whether a transfer is rent/fee/tip). Gather
-more samples first.
+**Fix.** DEFERRED. The data now suggests a tractable filter (drop dust + ata_rent
++ non-peer counterparties), but confirm on a fresh sample first. See the
+`NativeTransferClass` taxonomy. Gather more before acting.
 
 **Regression test.** `tests/sources/test_reality_fixtures.py::test_swap_native_transfers_currently_funding`
 pins the current behavior; revise when BUG-002 is addressed.
