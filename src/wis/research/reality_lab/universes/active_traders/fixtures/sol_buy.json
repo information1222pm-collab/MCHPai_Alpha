@@ -1,0 +1,43 @@
+{
+ "signature": "2gvvqE9YvhSFCu99sZRQekTpMQ3visKLJFGzV3ctCv1esuUX4QFfd4uRuXAeZXPUKrxeCbFvvQ91msB775fwUShS",
+ "timestamp": 1780941688,
+ "type": "SWAP",
+ "source": "JUPITER",
+ "feePayer": "AvezwwDZkYsnJMYb2gdifASvqz7TnEiuKG9r3DZbsPM5",
+ "events": {
+  "swap": {
+   "nativeInput": {
+    "account": "AvezwwDZkYsnJMYb2gdifASvqz7TnEiuKG9r3DZbsPM5",
+    "amount": "744401"
+   },
+   "nativeOutput": null,
+   "tokenInputs": [],
+   "tokenOutputs": [
+    {
+     "userAccount": "AvezwwDZkYsnJMYb2gdifASvqz7TnEiuKG9r3DZbsPM5",
+     "tokenAccount": "2hmLnDqViBX1g7upVPYbuS7cyN1FXL3ysyM8dL4MzFST",
+     "rawTokenAmount": {
+      "tokenAmount": "852319067587",
+      "decimals": 6
+     },
+     "mint": "E3gb7tyST4JCdsPk8v5D6htYeLup7UmAHTVfZrCRpump"
+    }
+   ],
+   "nativeFees": [],
+   "tokenFees": [],
+   "innerSwaps": []
+  }
+ },
+ "nativeTransfers": [
+  {
+   "fromUserAccount": "AvezwwDZkYsnJMYb2gdifASvqz7TnEiuKG9r3DZbsPM5",
+   "toUserAccount": "CDFG9eYnX6b5CU8NLnKPc1k9MXotbLxpwt8Tztyhau1q",
+   "amount": 164941194
+  },
+  {
+   "fromUserAccount": "CDFG9eYnX6b5CU8NLnKPc1k9MXotbLxpwt8Tztyhau1q",
+   "toUserAccount": "AvezwwDZkYsnJMYb2gdifASvqz7TnEiuKG9r3DZbsPM5",
+   "amount": 2039280
+  }
+ ]
+}
