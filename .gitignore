@@ -19,3 +19,7 @@ venv/
 # OS / editor
 .DS_Store
 *.swp
+
+# Live observation artifacts (real wallet data; reproducible, not source)
+sessions/
+*.helius.jsonl
