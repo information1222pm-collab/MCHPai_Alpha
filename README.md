@@ -116,6 +116,33 @@ make test-integration  # runs the conformance harness against whatever is config
 
 ---
 
+## Sources — reality enters through one door
+
+Every source — historical archive, Helius, Yellowstone, RPC, CSV, synthetic —
+turns observations into the **same domain events** and feeds the log. Sources are
+interchangeable; only the door differs.
+
+```
+Source → Domain Events → Event Log → Replay → wallet_state(t)
+```
+
+`ArchiveSource` is the **deterministic laboratory**: capture any feed and replay
+it forever to bit-identical state — the basis for regression tests, paper
+trading and simulation. Live sources split into a *verified pure translator* and
+a *gated network transport*. The crown property is proven: Helius, Yellowstone,
+RPC and CSV all reconstruct the identical `wallet_state(t)`. Details:
+[`docs/SOURCES.md`](docs/SOURCES.md).
+
+```python
+from wis.app.observatory import Observatory
+from wis.sources import ArchiveSource
+
+obs = Observatory()
+obs.ingest_source(ArchiveSource("day1.jsonl"))   # one door, any source
+```
+
+---
+
 ## Development
 
 ```bash

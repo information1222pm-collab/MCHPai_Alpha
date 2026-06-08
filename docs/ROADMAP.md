@@ -34,13 +34,20 @@ Done:
 * Pure projection→storage mapping (`projection_rows`), verified against the
   oracle in-process.
 
+* **Source abstraction — reality enters through one door** (see
+  [`SOURCES.md`](SOURCES.md)). `ArchiveSource` (the deterministic laboratory),
+  `CSVSource` and `SyntheticSource` are verified in-sandbox; `HeliusSource`,
+  `YellowstoneSource` and `RPCSource` have verified pure translators with gated
+  live transports. Proven: all sources reconstruct identical `wallet_state(t)`.
+
 Next:
 * Run live conformance against the docker-compose stack; promote each adapter
   from "implemented" to "verified".
+* Wire live source transports to real endpoints (Helius key, Yellowstone gRPC,
+  RPC node); capture feeds into archives for deterministic replay.
 * Incremental projections (resume from a sequence cursor) and a backfill harness.
-* **Real wallet ingestion**: a `Source` abstraction mapping on-chain
-  buys/sells/transfers into domain events; begin observing real wallets and
-  constructing `wallet_state(t)` sequences.
+* Construct and persist `WalletTrajectory` — the time-series of
+  `wallet_state(t)` frames — as the substrate for future ML.
 * **Rust** hot paths where latency demands it — only after correctness holds.
 
 ## Phase 2 — Richer observation

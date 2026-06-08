@@ -17,6 +17,7 @@ is deliberately none of either here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from wis.domain.events import (
     ClusterDetected,
@@ -38,6 +39,9 @@ from wis.features.compiler import FeatureCompiler, FeatureVector
 from wis.projections.graph_projector import GraphProjector, GraphWorld
 from wis.projections.wallet_projector import WalletProjector, WalletWorld
 from wis.scoring.scores import WalletScores, score_wallet
+
+if TYPE_CHECKING:
+    from wis.sources.base import Source
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +67,14 @@ class Observatory:
 
     def ingest(self, payload: DomainEvent, *, ingestion_time: Nanos | None = None) -> StoredEvent:
         return self._store.append(payload, ingestion_time=ingestion_time)
+
+    def ingest_source(self, source: Source, *, limit: int | None = None) -> int:
+        """Pump a reality source into the log — the one door. Any source
+        (archive, Helius, Yellowstone, RPC, CSV, synthetic) lands here as the
+        same domain events. Returns the number of events ingested."""
+        from wis.sources.base import pump
+
+        return pump(source, self._store, limit=limit)
 
     # -- point-in-time worlds ---------------------------------------------
 
