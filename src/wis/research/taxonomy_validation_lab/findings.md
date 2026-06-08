@@ -1,5 +1,9 @@
 # Taxonomy validation — do the candidate populations exist?
 
+**Phase status:** 8A (Internal Validation) ✓ complete · 8B (External Replication)
+— *not started; awaiting fresh sessions*. Internal stability is settled; external
+truth is not. See `docs/TAXONOMY.md` for the naming doctrine.
+
 Phase 7 found 6 candidate clusters. Phase 8 asks the prior question — **existence,
 not identity** — and refuses to name anything until reality reproduces it.
 Clusters keep anonymous ids. Analysis is over **captured raw sessions** (no new
