@@ -41,6 +41,21 @@ No execution. No copy trading. No position sizing. Those may emerge later, *from
 the intelligence — but they are not the point, and pretending otherwise would
 corrupt the data and the incentives. Understanding is the deliverable.
 
+## A confidence interval is humility, quantified
+
+We report estimates with their error, denominators with their rates, and "we do
+not know yet" when reality has not spoken. A point estimate that hides its
+uncertainty is a small lie; an interval is the truth about how much we actually
+know. See `docs/STATISTICS.md` and `docs/SCIENTIFIC_METHOD.md`.
+
+## Populations, not "the market"
+
+There is no single distribution to discover. `P(BUG-001)` measured 8.7%, 15.8%
+and 59.1% across populations — and decomposed further into latent behavioral
+classes within a single label. We do not impose human categories ("active
+trader") onto reality; we discover the categories reality already has, and
+condition every question on the *discovered* population: `P(X | population)`.
+
 ## Designed for decades
 
 Event types are versioned and appended, never renamed in place. Adapters depend

@@ -34,6 +34,8 @@ research = [
   "scipy>=1.14",
   "networkx>=3.4",            # graph algorithms incl. community detection
   "polars>=1.12",
+  "scikit-learn>=1.5",        # segmentation_lab: PCA, hierarchical, GMM, HDBSCAN
+  "matplotlib>=3.9",          # exploratory plots (PCA/UMAP projections)
 ]
 dev = [
   "pytest>=8.3",
