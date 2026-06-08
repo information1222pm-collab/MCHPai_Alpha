@@ -56,6 +56,14 @@ classes within a single label. We do not impose human categories ("active
 trader") onto reality; we discover the categories reality already has, and
 condition every question on the *discovered* population: `P(X | population)`.
 
+## Evidence suggests; it does not obligate
+
+Evidence may suggest directions. It does not obligate them. The variance hinted at
+latent populations; the populations hint at a behavioral embedding; the embedding
+hints at dynamics and, one day, probability. These are whispers, not mandates.
+Future maintainers inherit *questions*, not a prophecy — and the right response to
+a whisper reality has not yet repeated is to wait, not to build.
+
 ## Designed for decades
 
 Event types are versioned and appended, never renamed in place. Adapters depend
