@@ -12,35 +12,40 @@ is acceptable; invented is not (Rule 0, [`SCIENTIFIC_METHOD.md`](../../../../../
 
 | # | universe | status | P(BUG-001) | P(BUG-002 mech) | funding:trade | swaps (denom) |
 |---|----------|--------|-----------:|----------------:|--------------:|----:|
-| A | [active_traders](active_traders/observations.md) | observed | 59.1% | 72.0% | 13.4:1 | ~4275 |
-| B | [random_blocks](random_blocks/observations.md) | observed | 20.0% ⚠ | 53.7% | 1934:1 | 5 ⚠ |
+| A | [active_traders](active_traders/observations.md) | observed (×5) | **46% [21–71%]** | ~50% | 13.4:1 | 5 trials |
+| B | [random_blocks](random_blocks/observations.md) | observed (×1) | 20% ⚠ | 53.7% | 1934:1 | 1 session |
 | C | [random_wallets](random_wallets/observations.md) | awaiting First Light | — | — | — | — |
 | D | [high_pnl](high_pnl/observations.md) | requires characterization | — | — | — | — |
-| E | [pumpfun](pumpfun/observations.md) | observed | 15.8% | 34.4% | 177:1 | 158 |
+| E | [pumpfun](pumpfun/observations.md) | observed (×5) | **4% [0–10%]** | ~29% | 177:1 | 5 trials |
 | F | [old_wallets](old_wallets/observations.md) | requires characterization | — | — | — | — |
-| G | [large_wallets](large_wallets/observations.md) | observed | 8.7% | 53.9% | 8.2:1 | 1063 |
+| G | [large_wallets](large_wallets/observations.md) | observed (×2) | **33% [0–100%]** ⚠ | ~64% | 8.2:1 | 2 trials |
 | H | [dormant_wallets](dormant_wallets/observations.md) | requires characterization | — | — | — | — |
 
-⚠ = computed over a small denominator (low confidence). A `—` is not a
-placeholder for a number we will guess later — it is the honest record that **we
-have not observed this universe yet.**
+P(BUG-001) for observed universes is now the **across-trial mean with 95% CI**
+(see [`../reproducibility.md`](../reproducibility.md)); single-session figures are
+in each `observations.md`. `⚠` = small denominator or too few trials. A `—` is
+the honest record that **we have not observed this universe yet.**
 
-## Replication findings (as of 4 observed universes)
+## Findings — replication then reproducibility
 
-**`P(BUG-001)` is not a constant — it is a distribution over universes.** Measured
-token-to-token share of parsed swaps:
+**1. `P(BUG-001)` is a distribution over universes (replication, Phase 5).**
+Single sessions: large_wallets 8.7% · pump.fun 15.8% · active_traders 59.1%.
+There is no single `P(BUG-001)`; only `P(BUG-001 | universe)`.
 
-* large_wallets **8.7%** · pump.fun **15.8%** · random_blocks **~20% ⚠** ·
-  active_traders **59.1%**
+**2. Even within a universe, `P(BUG-001)` does not reproduce tightly
+(reproducibility, Phase 6).** Five fresh active-trader samples ranged **28%–75%**
+on solid denominators — real heterogeneity, not noise. The honest estimate is
+`46% [21–71%]`, not `59%`. Pump.fun is reproducibly **low** (`4% [0–10%]`);
+large_wallets is **uninformative** on 2 trials (`CI [0–100%]`).
 
-The original "59%" was the **high end** (active DEX traders), not a property of
-reality at large. This is the entire thesis of replication, confirmed: a single
-universe's number generalizes badly.
+**3. `P(BUG-002)` reproduces well and orders the universes** — pump.fun ~29% <
+active ~50% < large ~64%, with tight intervals on large denominators. The
+*ordering* is the robust, reproducible fact; "funding edges are mostly plumbing"
+holds everywhere (34–72%). The funding:trade ratio swings 8:1 → ~1900:1.
 
-**`P(BUG-002)` (transfer mechanics) is consistently high** (34%–72%) across every
-universe — funding edges are mostly swap plumbing everywhere we look. The
-funding:trade ratio, by contrast, swings enormously (8:1 for large traders →
-~1900:1 for the random population that barely trades).
+**Verdict:** some quantities reproduce (P(BUG-002), the universe ordering); the
+magnitude of P(BUG-001) does not, at this sample size. We report the wide
+interval rather than a false point.
 
 **What remains unknown.** C (random_wallets), D (high_pnl), F (old_wallets), H
 (dormant_wallets) have not been observed. C overlaps B by construction; D/F/H need
