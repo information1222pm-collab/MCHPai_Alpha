@@ -17,6 +17,11 @@ install:
 test:
 	PYTHONPATH=src python -m pytest -q
 
+# Live-service conformance. Bring infra up first (make infra-up) and export the
+# WIS_* connection vars; adapters not configured are skipped, not failed.
+test-integration:
+	PYTHONPATH=src python -m pytest -q -m integration -rs
+
 lint:
 	ruff check src tests
 

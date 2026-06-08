@@ -21,7 +21,7 @@ api = [
   "pydantic>=2.9",
 ]
 infra = [
-  "asyncpg>=0.30",            # PostgreSQL — system of record
+  "psycopg[binary]>=3.2",     # PostgreSQL — system-of-record event log (sync)
   "clickhouse-connect>=0.8",  # ClickHouse — analytical time-series store
   "redis>=5.2",               # Redis — online feature / hot state cache
   "neo4j>=5.26",              # Neo4j — wallet relationship graph
@@ -53,6 +53,9 @@ packages = ["src/wis"]
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["src"]
+markers = [
+  "integration: requires a live external service; skips unless one is configured",
+]
 
 [tool.ruff]
 line-length = 100

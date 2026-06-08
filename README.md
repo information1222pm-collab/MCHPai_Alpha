@@ -94,6 +94,28 @@ time.
 
 ---
 
+## Persistence & the correctness oracle
+
+Connecting the observatory to reality must not cost us determinism. The
+in-memory store is the **oracle**: an adapter is correct iff, given the same log,
+it reproduces **bit-identical** state. A lossless event **codec**, exact
+**world-digest** fingerprints, and a store-agnostic **conformance harness**
+(`wis.conformance`) enforce this.
+
+The durable **SQLite** EventStore is *verified in-sandbox* — it passes
+conformance and replays bit-identically from disk after a restart. Adapters for
+**PostgreSQL**, **NATS JetStream + MinIO**, **Redis**, **ClickHouse** and
+**Neo4j** are implemented and wired to the same harness via integration-gated
+tests that turn green the moment a live service is up. Details and verification
+status: [`docs/PERSISTENCE.md`](docs/PERSISTENCE.md).
+
+```bash
+make infra-up        # docker compose: postgres, clickhouse, redis, neo4j, nats, minio
+make test-integration  # runs the conformance harness against whatever is configured
+```
+
+---
+
 ## Development
 
 ```bash

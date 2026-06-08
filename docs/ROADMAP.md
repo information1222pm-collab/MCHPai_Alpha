@@ -15,15 +15,33 @@ nothing built later invalidates anything observed earlier.
 * Seven research labs (read-only). `Observatory` facade + read-only API.
 * In-memory reference store; full pure-Python test suite; runnable demo.
 
-## Phase 1 — Persist and scale out
+## Phase 1 — Persist and connect to reality (in progress)
 
-* Production `EventStore` on **NATS JetStream**, archived to **MinIO**, verified
-  against the in-memory oracle.
-* Projection checkpoints in **PostgreSQL**; analytical trade/feature tables in
-  **ClickHouse**; relationship graph mirrored to **Neo4j** (+ GDS).
-* Hot `wallet_state(t)` and online features in **Redis**.
+Connect the observatory to durable storage without surrendering replay
+determinism or point-in-time correctness. The in-memory store is the
+**correctness oracle**; every adapter must reproduce bit-identical state. See
+[`PERSISTENCE.md`](PERSISTENCE.md).
+
+Done:
+* Lossless, deterministic **event codec**; exact **world-digest** fingerprints;
+  the store-agnostic **oracle-conformance harness** (`wis.conformance`).
+* Durable **SQLite EventStore** — *verified in-sandbox*: passes conformance and
+  replays bit-identically from disk after a process restart.
+* **PostgreSQL** (system-of-record log) and **NATS JetStream + MinIO** (backbone
+  + archive) EventStore adapters, plus **Redis** / **ClickHouse** / **Neo4j**
+  derived-view sinks — implemented and wired to the same conformance harness via
+  integration-gated tests (green the moment a live service is up).
+* Pure projection→storage mapping (`projection_rows`), verified against the
+  oracle in-process.
+
+Next:
+* Run live conformance against the docker-compose stack; promote each adapter
+  from "implemented" to "verified".
 * Incremental projections (resume from a sequence cursor) and a backfill harness.
-* **Rust** hot paths where latency demands it (ledger fold, co-buy edge updates).
+* **Real wallet ingestion**: a `Source` abstraction mapping on-chain
+  buys/sells/transfers into domain events; begin observing real wallets and
+  constructing `wallet_state(t)` sequences.
+* **Rust** hot paths where latency demands it — only after correctness holds.
 
 ## Phase 2 — Richer observation
 
