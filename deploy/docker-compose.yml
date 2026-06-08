@@ -1,0 +1,74 @@
+# MCHPAI Advanced Wallet Intelligence System — local infrastructure.
+#
+# This composes the polyglot persistence the platform is designed around. The
+# intelligence *core* (wis.domain / eventsourcing / projections / features /
+# scoring) runs with NONE of this — it is pure Python and fully testable on its
+# own. These services are where the observatory is *deployed* at scale.
+#
+# Each store has one job (the right tool, not one tool):
+#   * postgres   — system of record: wallet registry, projection checkpoints.
+#   * clickhouse — analytical column store: billions of trade rows, features.
+#   * redis      — hot online cache: latest wallet_state(t) and online features.
+#   * neo4j      — relationship graph: funding trees, co-buy edges, clusters.
+#   * nats       — JetStream event backbone: the ordered, durable fact log.
+#   * minio      — object store: replay-log archive, model & feature snapshots.
+#
+# Bring up:  docker compose -f deploy/docker-compose.yml up -d
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${WIS_PG_USER:-wis}
+      POSTGRES_PASSWORD: ${WIS_PG_PASSWORD:-wis}
+      POSTGRES_DB: ${WIS_PG_DB:-wis}
+    ports: ["5432:5432"]
+    volumes: ["pg_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WIS_PG_USER:-wis}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports: ["8123:8123", "9000:9000"]
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes: ["ch_data:/var/lib/clickhouse"]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: ["redis_data:/data"]
+
+  neo4j:
+    image: neo4j:5.26
+    environment:
+      NEO4J_AUTH: ${WIS_NEO4J_AUTH:-neo4j/wisgraphpw}
+      NEO4J_PLUGINS: '["graph-data-science"]'  # GDS for community detection at scale
+    ports: ["7474:7474", "7687:7687"]
+    volumes: ["neo4j_data:/data"]
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data"]  # enable JetStream with durable store
+    ports: ["4222:4222", "8222:8222"]
+    volumes: ["nats_data:/data"]
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${WIS_MINIO_USER:-wis}
+      MINIO_ROOT_PASSWORD: ${WIS_MINIO_PASSWORD:-wisminiopw}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["minio_data:/data"]
+
+volumes:
+  pg_data:
+  ch_data:
+  redis_data:
+  neo4j_data:
+  nats_data:
+  minio_data:

@@ -1,0 +1,70 @@
+[project]
+name = "mchpai-wis"
+version = "0.1.0"
+description = "MCHPAI Advanced Wallet Intelligence System — the observatory. Transform anonymous addresses into understandable entities."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "MCHPAI" }]
+keywords = ["wallet-intelligence", "event-sourcing", "quantitative", "on-chain", "graph"]
+
+# Core has ZERO heavy runtime dependencies on purpose: the intelligence engine
+# (domain, event sourcing, projections, features, scoring) must be importable and
+# testable without any external infrastructure. Infrastructure adapters and the
+# API layer pull their dependencies via optional extras below.
+dependencies = []
+
+[project.optional-dependencies]
+api = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+]
+infra = [
+  "asyncpg>=0.30",            # PostgreSQL — system of record
+  "clickhouse-connect>=0.8",  # ClickHouse — analytical time-series store
+  "redis>=5.2",               # Redis — online feature / hot state cache
+  "neo4j>=5.26",              # Neo4j — wallet relationship graph
+  "nats-py>=2.9",             # NATS JetStream — event backbone
+  "minio>=7.2",               # MinIO — object store / replay log archive
+]
+research = [
+  "numpy>=2.1",
+  "pandas>=2.2",
+  "scipy>=1.14",
+  "networkx>=3.4",            # graph algorithms incl. community detection
+  "polars>=1.12",
+]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.7",
+  "mypy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wis"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["wis"]
+mypy_path = "src"
