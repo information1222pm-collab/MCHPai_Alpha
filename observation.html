@@ -74,7 +74,7 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
   <a href=#s-hero class=on>Overview</a><a href=#s-trade>Trading</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
-  <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-dist>Stats</a>
+  <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
 
@@ -137,6 +137,17 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
 <section id=s-opps><div class=h>⚡ Opportunity Watch <span class=muted style=font-weight:400>heuristic · not advice</span></div>
   <div class=list id=opps></div>
   <div class=row style=margin-top:14px><span class=muted>Market regime</span><span id=regime>—</span></div></section>
+
+<section id=s-data><div class=h>Data Vault <span class=muted style=font-weight:400>all gathered data preserved (10 GB target)</span></div>
+  <div id=stor_bar></div>
+  <div id=stor_info style=margin-top:8px><span class=muted>initializing storage…</span></div>
+  <div style=margin-top:12px><button class=mini id=stor_export onclick=exportData()>⬇ Export dataset (NDJSON)</button><button class=mini onclick=clearData()>🗑 Clear</button></div>
+  <div class=note>Every swap and trade is preserved in IndexedDB (up to a 10 GB target; the browser grants
+   quota from free disk, shown above). On reload, recent history is restored so Trends and strategies keep
+   context, and the full dataset stays on disk. <b>Export</b> downloads everything as NDJSON for offline
+   analysis / strategy backtesting. localStorage can't hold this (≈5 MB cap) — IndexedDB can. For best
+   durability, serve via <code>python3 -m http.server</code> and grant storage when prompted.</div>
+</section>
 
 <section id=s-dist style=border:none><div class=h>Distributions</div>
   <div class=h style=color:var(--dim);font-size:12px;margin:10px 0 6px>Peak multiple</div><div id=ch_multhist></div>
@@ -234,7 +245,7 @@ function parseSwapRPC(res){const meta=res.meta,msg=res.transaction&&res.transact
  let dex='';for(const ix of msg.instructions||[])if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;}
  if(!dex)for(const inr of meta.innerInstructions||[])for(const ix of inr.instructions||[])if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;}
  return {wallet:fp,mint,side,sol:Math.abs(solL)/1e9,tok:Math.abs(best),price:Math.abs(solL)/1e9/Math.abs(best),ts:res.blockTime||now(),dex};}
-function ingest(s){cnt.swaps++;if(!walletFirst.has(s.wallet))walletFirst.set(s.wallet,s.ts);
+function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.wallet,side:s.side,sol:s.sol,tok:s.tok,price:s.price,ts:s.ts,dex:s.dex});if(!walletFirst.has(s.wallet))walletFirst.set(s.wallet,s.ts);
  const T=tok(s.mint);T.lastSeen=s.ts;if(s.dex)T.dex=s.dex;
  // PRICE SANITIZATION: reject dust (<0.005◎) + >5x outliers vs rolling median (kills parsing artifacts/phantom spikes)
  if(s.price>0&&s.sol>=0.005){let ok=true;if(T.med.length>=3){const m=median(T.med);if(m>0&&(s.price/m>5||s.price/m<0.2)){ok=false;T.rejected++;}}
@@ -248,6 +259,28 @@ function category(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen;if(rec>600
 function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0?T.netSol/T.vol:0;
  let s=Math.min(40,T.buyers.size*5)+Math.max(0,fi)*30+Math.min(20,(T.maxMult-1)*15)+(rec<120?10:0)-(age>600?20:0);return Math.max(0,Math.min(100,s));}
 const tv=()=>[...tokens.values()];
+/* ===== PERSISTENT DATA VAULT (IndexedDB) — preserve ALL gathered data (10GB target) ===== */
+const TARGET_BYTES=10*1024*1024*1024,MAX_SWAPS=5000000,RESTORE_N=25000;
+let DB=null,replaying=false,swapBuf=[],tradeBuf=[];
+function idbOpen(){return new Promise((res,rej)=>{if(typeof indexedDB==='undefined')return rej('no idb');const r=indexedDB.open('mchpai',1);
+ r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('swaps')){const s=db.createObjectStore('swaps',{keyPath:'id',autoIncrement:true});s.createIndex('ts','ts');}if(!db.objectStoreNames.contains('trades')){const t=db.createObjectStore('trades',{keyPath:'id',autoIncrement:true});t.createIndex('ts','ts');}};
+ r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e);});}
+function idbAdd(store,items){return new Promise(res=>{if(!DB)return res();try{const tx=DB.transaction(store,'readwrite'),os=tx.objectStore(store);items.forEach(it=>{try{os.add(it);}catch(e){}});tx.oncomplete=()=>res();tx.onerror=()=>res();}catch(e){res();}});}
+function idbCount(store){return new Promise(res=>{if(!DB)return res(0);try{const rq=DB.transaction(store,'readonly').objectStore(store).count();rq.onsuccess=()=>res(rq.result);rq.onerror=()=>res(0);}catch(e){res(0);}});}
+function idbRecent(store,n){return new Promise(res=>{if(!DB)return res([]);try{const idx=DB.transaction(store,'readonly').objectStore(store).index('ts'),out=[];const rq=idx.openCursor(null,'prev');rq.onsuccess=e=>{const c=e.target.result;if(c&&out.length<n){out.push(c.value);c.continue();}else res(out.reverse());};rq.onerror=()=>res([]);}catch(e){res([]);}});}
+function idbDeleteOldest(store,k){return new Promise(res=>{if(!DB||k<=0)return res();try{const os=DB.transaction(store,'readwrite').objectStore(store);let d=0;const rq=os.openCursor();rq.onsuccess=e=>{const c=e.target.result;if(c&&d<k){c.delete();d++;c.continue();}else res();};rq.onerror=()=>res();}catch(e){res();}});}
+async function flushStore(){if(!DB)return;if(swapBuf.length){const b=swapBuf;swapBuf=[];await idbAdd('swaps',b);}if(tradeBuf.length){const t=tradeBuf;tradeBuf=[];await idbAdd('trades',t);}}
+async function storageEstimate(){let usage=0,quota=TARGET_BYTES;if(typeof navigator!=='undefined'&&navigator.storage&&navigator.storage.estimate){try{const e=await navigator.storage.estimate();usage=e.usage||0;quota=e.quota||quota;}catch(e){}}return {usage,quota};}
+async function maybePrune(){if(!DB)return;const c=await idbCount('swaps');const {usage,quota}=await storageEstimate();const cap=Math.min(TARGET_BYTES,quota);if(c>MAX_SWAPS||usage>0.92*cap)await idbDeleteOldest('swaps',Math.floor(c*0.1));}
+async function restoreData(){if(!DB)return;const recent=await idbRecent('swaps',RESTORE_N);if(!recent.length)return;replaying=true;recent.forEach(r=>{try{ingest(r);}catch(e){}});replaying=false;}
+async function initStorage(){try{DB=await idbOpen();}catch(e){DB=null;}if(typeof navigator!=='undefined'&&navigator.storage&&navigator.storage.persist){try{await navigator.storage.persist();}catch(e){}}await restoreData();updateStorageUI();}
+async function updateStorageUI(){const el=$('stor_info');if(!el)return;if(!DB){el.innerHTML='<span class=down>IndexedDB unavailable — data not persisted. Serve over http://localhost for storage.</span>';return;}
+ const sc=await idbCount('swaps'),tc=await idbCount('trades'),{usage,quota}=await storageEstimate();let persisted='best-effort';if(typeof navigator!=='undefined'&&navigator.storage&&navigator.storage.persisted){try{persisted=(await navigator.storage.persisted())?'persistent ✓':'best-effort';}catch(e){}}
+ el.innerHTML=`<div class=row><span class=muted>preserved swaps</span><span class=up>${sc.toLocaleString()}</span></div><div class=row><span class=muted>preserved trades</span><span>${tc.toLocaleString()}</span></div><div class=row><span class=muted>disk used / granted</span><span>${(usage/1048576).toFixed(0)} MB / ${(quota/1073741824).toFixed(1)} GB</span></div><div class=row><span class=muted>budget · durability</span><span>10 GB target · ${persisted}</span></div>`;
+ const sb=$('stor_bar');if(sb){const bar=Math.min(100,usage/Math.min(TARGET_BYTES,quota)*100);sb.innerHTML=`<div class=btrack style=height:8px><span class=bfill style="width:${bar.toFixed(2)}%;background:var(--up)"></span></div>`;}}
+async function exportData(){if(!DB)return;const b=$('stor_export');if(b)b.textContent='exporting…';const parts=[];await new Promise(r=>{try{const rq=DB.transaction('swaps','readonly').objectStore('swaps').openCursor();rq.onsuccess=e=>{const c=e.target.result;if(c){parts.push(JSON.stringify(c.value));c.continue();}else r();};rq.onerror=()=>r();}catch(e){r();}});
+ const blob=new Blob([parts.join('\n')],{type:'application/x-ndjson'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='mchpai_dataset_'+Date.now()+'.ndjson';a.click();URL.revokeObjectURL(u);if(b)b.textContent='⬇ Export dataset (NDJSON)';}
+async function clearData(){if(!DB||(typeof confirm!=='undefined'&&!confirm('Delete all preserved data?')))return;try{const tx=DB.transaction(['swaps','trades'],'readwrite');tx.objectStore('swaps').clear();tx.objectStore('trades').clear();tx.oncomplete=()=>updateStorageUI();}catch(e){}}
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
 /* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
@@ -280,7 +313,7 @@ function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.rati
 const sSize=(P,liq)=>P.liqFrac>0?Math.max(0.08,Math.min(1.0,P.liqFrac*liq)):P.size;
 const trailForP=(ret,base)=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:base;
 function sOpen(S,mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;S.book.cash-=size;S.book.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
-function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);}
+function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying)tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);}
 function sExit(S,mint,ts){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;const P=S.params;
  const price=T.lastPrice||pos.entry;pos.peak=Math.max(pos.peak,price);const ret=price/pos.entry-1;
  if(S.exitMode==='firstSell'){if(T.sells>pos.sellsAtEntry){sClose(S,mint,price,'first sell',false);return;}if(ret<=P.sl){sClose(S,mint,price,'stop loss',true);return;}if((ts-pos.openTs)>=P.holdMax){sClose(S,mint,price,'timeout',ret<0);return;}return;}
@@ -416,11 +449,12 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
+ flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';refreshSolUsd();poll();setInterval(poll,7000);}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();refreshSolUsd();poll();setInterval(poll,7000);}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
