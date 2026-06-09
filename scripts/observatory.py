@@ -35,6 +35,7 @@ from mchpai_common.wallets import profile_wallet, profile_wallet_advanced
 ACQ_DB = os.environ.get("ACQUIRE_DB", "data/acquisition.db")
 ANALYSIS_DB = os.environ.get("ANALYSIS_DB", "data/analysis.db")
 ML_DB = os.environ.get("ML_DB", "data/ml.db")
+RL_DB = os.environ.get("RL_DB", "data/rl.db")
 PATTERNS_PATH = "data/analysis/patterns.json"
 PORT = int(os.environ.get("OBSERVATORY_PORT", "8888"))
 
@@ -195,9 +196,23 @@ def api_ml() -> list:
              "auc": r[5], "cv_auc": r[6], "beats": bool(r[7])} for r in rows]
 
 
+def api_rl() -> dict:
+    db = ro(RL_DB)
+    if not db:
+        return {}
+    rows = q(db, "SELECT ts,n,agent,always_buy,oracle,token_win_rate,buy_win_rate,"
+                 "beats_buy,status FROM runs ORDER BY ts DESC LIMIT 20")
+    db.close()
+    runs = [{"ts": r[0], "n": r[1], "agent": r[2], "always_buy": r[3], "oracle": r[4],
+             "token_win_rate": r[5], "buy_win_rate": r[6], "beats": bool(r[7]),
+             "status": r[8]} for r in rows]
+    return {"latest": runs[0] if runs else None, "history": runs}
+
+
 ROUTES = {
     "/api/stats": api_stats, "/api/births": api_births, "/api/top": api_top,
     "/api/patterns": api_patterns, "/api/ml": api_ml, "/api/wallets": api_wallets,
+    "/api/rl": api_rl,
 }
 
 # ----------------------------------------------------------------------- html
@@ -253,6 +268,9 @@ a{color:var(--accent);text-decoration:none}.tag{font-size:10px;color:var(--dim)}
     <table><thead><tr><th>time</th><th>N</th><th>win</th><th>base</th><th>acc</th>
     <th>AUC</th><th>CV-AUC</th><th>edge?</th></tr></thead><tbody id=ml></tbody></table>
     <div class=note id=ml_note></div></div>
+
+  <div class="card half"><h2>RL Agent — self-improving policy (gated)</h2>
+    <div id=rl></div><div class=note id=rl_note></div></div>
 
   <div class="card half"><h2>Top Movers (peak multiple)</h2>
     <table><thead><tr><th>token</th><th>×</th><th>vol◎</th><th>buyers</th><th>outcome</th>
@@ -323,6 +341,18 @@ async function tick(){
    `<div class=row><span class=muted>${k}</span><span>${typeof v=='object'?JSON.stringify(v):v}</span></div>`).join('');}
   if(p.hypotheses)$('hyp').innerHTML=(p.caveat?('⚠ '+p.caveat+'<br>'):'')+p.hypotheses.map(h=>'• '+h).join('<br>');
   else if(p.note)$('hyp').textContent=p.note;
+ }
+ const rl=await j('/api/rl');
+ if(rl&&rl.latest){const r=rl.latest;const rw=(l,v,g)=>`<div class=row><span class=muted>${l}</span>
+  <span class="${g===undefined?'':(g?'good':'bad')}">${v}</span></div>`;
+  $('rl').innerHTML=rw('episodes',r.n)+rw('agent reward',r.agent.toFixed(2),r.agent>0)+
+   rw('always-buy baseline',r.always_buy.toFixed(2),r.always_buy>0)+
+   rw('oracle (hindsight max)',r.oracle.toFixed(2))+
+   rw('token win-rate',(r.token_win_rate*100).toFixed(0)+'%')+
+   rw('agent buy win-rate',(r.buy_win_rate*100).toFixed(0)+'%',r.buy_win_rate>=r.token_win_rate)+
+   `<div class=row><span class=muted>status</span><span class="${r.status=='PAPER'?'warn':'good'}">${r.status}</span></div>`;
+  $('rl_note').textContent=(r.agent<=Math.max(0,r.always_buy))?
+   'No edge yet — agent loses vs baseline; correctly held in PAPER (gating saved capital).':'';
  }
  const ws=await j('/api/wallets');
  if(ws){$('wallets_top').innerHTML=ws.map(w=>`<tr style=cursor:pointer onclick="loadWallet('${w.wallet}')">
