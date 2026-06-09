@@ -156,7 +156,7 @@ const median=a=>{if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y);return s[
 const fmtPct=p=>(p>=0?'+':'')+p.toFixed(1)+'%';
 const COL=['#00c805','#5aa9ff','#f5a623','#ff5000','#a78bfa','#8b9197'];
 
-let KEY=localStorage.getItem('helius_key')||'',busy=false;
+let KEY=localStorage.getItem('helius_key')||'',busy=false,pollN=0;
 let heroMetric='volume',heroWin=0;
 const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map();
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
@@ -203,6 +203,10 @@ const diff=a=>a.map((v,i)=>i?Math.max(0,v-a[i-1]):0).slice(1);
 /* ---- data ---- */
 async function rpc(m,p){const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})});
  if(!r.ok)throw new Error('HTTP '+r.status+(r.status===401?' (bad key)':''));const j=await r.json();if(j.error)throw new Error(j.error.message||'rpc error');return j.result;}
+/* AUTHORITATIVE price from Helius (getAsset price_info, USDC) -> SOL, for marking held positions */
+let solUsd=200;
+async function refreshSolUsd(){try{const r=await rpc('getAsset',{id:WSOL});const p=r&&r.token_info&&r.token_info.price_info&&r.token_info.price_info.price_per_token;if(p>0)solUsd=p;}catch(e){}}
+async function authPriceSol(mint){try{const r=await rpc('getAsset',{id:mint});const p=r&&r.token_info&&r.token_info.price_info&&r.token_info.price_info.price_per_token;return p>0&&solUsd>0?p/solUsd:null;}catch(e){return null;}}
 function parseSwapRPC(res){const meta=res.meta,msg=res.transaction&&res.transaction.message;if(!meta||meta.err||!msg)return null;
  const keys=(msg.accountKeys||[]).map(k=>k.pubkey||k),fp=keys[0];if(!fp)return null;let solL=(meta.postBalances[0]-meta.preBalances[0])+(meta.fee||0);const pre={},post={};
  for(const b of meta.preTokenBalances||[])if(b.owner===fp){const a=(b.uiTokenAmount&&b.uiTokenAmount.uiAmount)||0;pre[b.mint]=(pre[b.mint]||0)+a;}
@@ -272,7 +276,9 @@ function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)ret
    if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0});}
   }else if(a===0){bUpdate(brain,0,ctx,0);}}}                                         // learn the skip baseline
 /* CRITICAL: manage every open position each cycle, even tokens that went quiet */
-function manageOpenPositions(){const ts=now();[...bot.pos.keys()].forEach(m=>tryExit(m,ts));}
+async function manageOpenPositions(){const ts=now();for(const m of [...bot.pos.keys()]){
+  const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}   // mark at Helius authoritative price
+  tryExit(m,ts);}}
 function botEquity(){let o=0;bot.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return bot.cash+o;}
 
 /* ---- render ---- */
@@ -342,14 +348,15 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
   for(const s of sigs||[])if(s&&s.signature&&!s.err&&!seen.has(s.signature))pend.push(s.signature);}catch(e){$('status').textContent='⚠ '+e.message;busy=false;return;}}
  pend=pend.slice(0,18);let parsed=0;
  for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);botTick(s.mint);parsed++;}}}catch(e){}await sleep(35);}
- manageOpenPositions();                                                              // close exits even for quiet tokens
+ if(pollN++%40===0)refreshSolUsd();                                                  // keep SOL/USD fresh for marks
+ await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  bot.eqHist.push(botEquity());if(bot.eqHist.length>150)bot.eqHist.shift();
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';poll();setInterval(poll,7000);}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';refreshSolUsd();poll();setInterval(poll,7000);}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
