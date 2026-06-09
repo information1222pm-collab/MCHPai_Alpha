@@ -233,7 +233,7 @@ function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0
 const tv=()=>[...tokens.values()];
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
-const STRAT={size:0.5,liqFrac:0.05,minTicket:0.08,maxTicket:1.0,maxPos:6,tpHard:3.0,sl:-0.35,trail:0.4,spikeJump:0.35,spikeLevel:0.8,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:420,minBuyers:3,minVol:1,minLiq:8,minAge:8,maxAge:1200,smartMin:2,runner:true};
+const STRAT={size:0.5,liqFrac:0.05,minTicket:0.08,maxTicket:1.0,maxPos:6,tpHard:3.0,sl:-0.35,trail:0.4,spikeJump:0.35,spikeLevel:0.8,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:420,minBuyers:3,minVol:1,minLiq:8,minAge:8,maxAge:1200,smartMin:2,runner:true,newbornBuyers:15,newbornWindow:60};
 const botSize=liq=>STRAT.liqFrac>0?Math.max(STRAT.minTicket,Math.min(STRAT.maxTicket,STRAT.liqFrac*liq)):STRAT.size;
 const COST={baseSlip:80,impactK:0.9,liqFloor:5,feeBps:100,fixed:0.0018,failP:0.12,exitGap:150};
 const bot={cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],enabled:true,missed:0};
@@ -253,28 +253,36 @@ const brain=makeBandit(8,2);
 function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.ratio,10)/10,Math.tanh(f.mom*5),Math.min(f.smart,5)/5,Math.log1p(f.liq)/5,Math.min(f.buyers,20)/20,Math.min(f.age,600)/600,Math.tanh(imb),1];}
 /* ratcheting trailing stop — tightens as profit grows so winners lock in gains */
 const trailFor=ret=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:STRAT.trail;
+function openPos(mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;bot.cash-=size;bot.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
+function closePos(mint,price,reason,adv){const pos=bot.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;bot.cash+=proc;bot.realized+=pnl;bUpdate(brain,1,pos.ctx,pnl/pos.cost);bot.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}
 function tryExit(mint,ts){const pos=bot.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;
  const price=T.lastPrice||pos.entry;pos.peak=Math.max(pos.peak,price);const ret=price/pos.entry-1;
- const jump=ret-(pos.lastRet||0);pos.lastRet=ret;                                    // change in PnL this update
- const tr=ret>0?trailFor(ret):STRAT.trail;let ex=null,adv=false;
- if(ret<=STRAT.sl){ex='stop loss';adv=true;}
- else if(ret>0&&(jump>=STRAT.spikeJump||ret>=STRAT.spikeLevel))ex='spike take-profit';  // drastic spike -> grab it NOW
- else if(price<=pos.peak*(1-tr)){ex=ret>0?'take profit':'trail stop';adv=ret<0;}
- else if(ret>=STRAT.tpHard)ex='take profit';
- else if((ts-pos.openTs)>=STRAT.holdMax){ex='timeout';adv=ret<0;}
- if(ex){let slip=COST.baseSlip+impactBps(pos.tokens*price,T.vol);if(adv)slip+=COST.exitGap;
-  const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;
-  bot.cash+=proc;bot.realized+=pnl;bUpdate(brain,1,pos.ctx,pnl/pos.cost);            // RL learns from realized PnL
-  bot.closed.unshift({mint,pnl,ret,reason:ex,ts});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}}
-async function botTick(mint){if(!bot.enabled||bot.pos.has(mint))return;const T=tokens.get(mint);if(!T)return;const f=feat(T),ts=now();
- if(!(f.price>0&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers))return;
- const ctx=ctxOf(f),a=bSelect(brain,ctx);                                            // RL decides BUY vs SKIP
- if(a===0){bUpdate(brain,0,ctx,0);return;}
- if(bot.pos.size>=STRAT.maxPos||bot.cash<botSize(f.liq))return;const size=botSize(f.liq);
+ if(pos.mode==='firstSell'){                                                          // RULE: exit on first sell; stop/timeout = safety
+  if(T.sells>pos.sellsAtEntry){closePos(mint,price,'first sell',false);return;}
+  if(ret<=STRAT.sl){closePos(mint,price,'stop loss',true);return;}
+  if((ts-pos.openTs)>=STRAT.holdMax){closePos(mint,price,'timeout',ret<0);return;}
+  return;}
+ const jump=ret-(pos.lastRet||0);pos.lastRet=ret;const tr=ret>0?trailFor(ret):STRAT.trail;
+ if(ret<=STRAT.sl)closePos(mint,price,'stop loss',true);
+ else if(ret>0&&(jump>=STRAT.spikeJump||ret>=STRAT.spikeLevel))closePos(mint,price,'spike take-profit',false);
+ else if(price<=pos.peak*(1-tr))closePos(mint,price,ret>0?'take profit':'trail stop',ret<0);
+ else if(ret>=STRAT.tpHard)closePos(mint,price,'take profit',false);
+ else if((ts-pos.openTs)>=STRAT.holdMax)closePos(mint,price,'timeout',ret<0);}
+async function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const ts=now(),pos=bot.pos.get(mint);
+ if(pos){if(pos.mode==='firstSell'&&T.sells>pos.sellsAtEntry)closePos(mint,T.lastPrice||pos.entry,'first sell',false);return;}  // INSTANT first-sell exit
+ const f=feat(T);if(f.price<=0)return;
+ // RULE: newborn one-sided pressure — >15 buyers, 0 sells, first minute -> buy; exit on first sell
+ if(f.age<STRAT.newbornWindow&&T.buyers.size>STRAT.newbornBuyers&&T.sells===0&&bot.pos.size<STRAT.maxPos&&bot.cash>=botSize(f.liq)){
+  if(Math.random()<COST.failP){bot.missed++;return;}
+  const ep=(await authPriceSol(mint))||f.price;if(ep>0)openPos(mint,ep,ts,botSize(f.liq),ctxOf(f),{mode:'firstSell',sellsAtEntry:0});
+  return;}
+ // RL entry (Helius-priced only)
+ if(!(f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers))return;
+ const ctx=ctxOf(f),a=bSelect(brain,ctx);if(a===0){bUpdate(brain,0,ctx,0);return;}
+ if(bot.pos.size>=STRAT.maxPos||bot.cash<botSize(f.liq))return;
  const ep=await authPriceSol(mint);if(!ep){bot.skippedNoPrice=(bot.skippedNoPrice||0)+1;return;}  // PURE: no Helius price -> no trade
  if(Math.random()<COST.failP){bot.missed++;return;}
- const slip=COST.baseSlip+impactBps(size,f.liq),fill=ep*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;
- if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0});}}                                         // learn the skip baseline
+ openPos(mint,ep,ts,botSize(f.liq),ctx);}
 /* CRITICAL: manage every open position each cycle, even tokens that went quiet */
 async function manageOpenPositions(){const ts=now();for(const m of [...bot.pos.keys()]){
   const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}   // mark at Helius authoritative price
