@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>MCHPAI — Live Observation Center</title>
+<!--
+  Self-contained, server-less live observation center.
+  Talks DIRECTLY to Helius from your browser and refreshes continuously.
+  Your API key is NOT stored in this file — you paste it once and it is kept in
+  this browser's localStorage. Safe to commit / share.
+
+  Observes everything measurable in real time: token births, prices, volume,
+  buyers/sellers, flow; wallet activity, cross-token "snipers", net flow;
+  categorizes tokens; surfaces co-buy patterns and heuristic opportunities.
+  (Heuristic "watch" flags are research signals, NOT financial advice.)
+-->
+<style>
+:root{--bg:#0a0e14;--panel:#121821;--line:#1e2733;--txt:#c9d4e0;--dim:#6b7a8d;
+--accent:#37e8b4;--warn:#f5a623;--bad:#ff5c5c;--good:#37e8b4;--blue:#5aa9ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
+font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line);
+background:#0c121b;position:sticky;top:0;z-index:9;flex-wrap:wrap}
+header h1{font-size:14px;margin:0;letter-spacing:1px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.status{margin-left:auto;color:var(--dim);font-size:11px}
+input{background:#0c121b;border:1px solid var(--line);color:var(--txt);padding:5px 8px;border-radius:5px;font-family:inherit;font-size:12px}
+button{background:#16202c;border:1px solid var(--line);color:var(--accent);padding:5px 10px;border-radius:5px;cursor:pointer;font-family:inherit}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:13px}
+.card.full{grid-column:1/-1}.card.half{grid-column:span 2}
+.k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+.big{font-size:28px;font-weight:600;margin-top:3px}.big.accent{color:var(--accent)}
+h2{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;border-bottom:1px solid var(--line);padding-bottom:7px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{color:var(--dim);text-align:left;font-weight:500;padding:3px 7px;border-bottom:1px solid var(--line)}
+td{padding:3px 7px;border-bottom:1px solid #161d27}td.mono{color:var(--dim)}
+.mult{color:var(--good);font-weight:600}.good{color:var(--good)}.bad{color:var(--bad)}.warn{color:var(--warn)}.blue{color:var(--blue)}.muted{color:var(--dim)}
+.feed{max-height:360px;overflow:auto}
+.tag{display:inline-block;padding:0 6px;border-radius:9px;font-size:10px;background:#16202c;color:var(--dim)}
+.tag.fresh{color:var(--blue);border:1px solid #25405f}.tag.heating{color:var(--good);border:1px solid #1f5c47}
+.tag.dumping{color:var(--bad);border:1px solid #5c2525}.tag.sniper{color:var(--warn);border:1px solid #5c4a1f}
+.row{display:flex;justify-content:space-between;gap:8px}.note{color:var(--warn);font-size:11px;margin-top:8px}
+#overlay{position:fixed;inset:0;background:rgba(6,9,14,.94);display:flex;align-items:center;justify-content:center;z-index:99}
+#overlay .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px;max-width:520px}
+#overlay h3{margin:0 0 10px;color:var(--accent)}#overlay p{color:var(--dim);font-size:12px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <span class=dot></span><h1>MCHPAI · LIVE OBSERVATION CENTER</h1>
+  <input id=keyfield placeholder="Helius API key" size=22 style="margin-left:14px">
+  <button onclick="saveKey()">connect</button>
+  <span class=status id=status>idle</span>
+</header>
+
+<div class=grid>
+  <div class=card><div class=k>Tokens (session)</div><div class="big accent" id=c_tok>0</div></div>
+  <div class=card><div class=k>Swaps parsed</div><div class=big id=c_swap>0</div></div>
+  <div class=card><div class=k>Wallets seen</div><div class=big id=c_wal>0</div></div>
+  <div class=card><div class=k>Births</div><div class=big id=c_birth>0</div></div>
+
+  <div class="card half"><h2>Live Token Feed — newest activity</h2>
+    <div class=feed><table><thead><tr><th>token</th><th>dex</th><th>age</th><th>price◎</th>
+    <th>×</th><th>b/s</th><th>buyers</th><th>cat</th></tr></thead><tbody id=tokens></tbody></table></div></div>
+
+  <div class="card half"><h2>Live Wallet Activity — who is trading now</h2>
+    <div class=feed><table><thead><tr><th>wallet</th><th>tokens</th><th>swaps</th><th>b/s</th>
+    <th>net◎</th><th>tag</th></tr></thead><tbody id=wallets></tbody></table></div></div>
+
+  <div class="card half"><h2>Top Movers (session peak ×)</h2>
+    <table><thead><tr><th>token</th><th>×</th><th>vol◎</th><th>buyers</th><th>flow</th></tr></thead>
+    <tbody id=movers></tbody></table></div>
+
+  <div class="card half"><h2>⚡ Opportunity Watch <span class=muted style=text-transform:none>(heuristic — research signal, not advice)</span></h2>
+    <table><thead><tr><th>token</th><th>×</th><th>buyers</th><th>flow</th><th>age</th></tr></thead>
+    <tbody id=ops></tbody></table><div class=note id=ops_note></div></div>
+
+  <div class="card full"><h2>Market Flow (rolling session)</h2>
+    <div class=row style=flex-wrap:wrap;gap:24px>
+      <span>buys: <b class=good id=f_buys>0</b></span>
+      <span>sells: <b class=bad id=f_sells>0</b></span>
+      <span>buy/sell: <b id=f_ratio>—</b></span>
+      <span>buy vol: <b class=good id=f_bvol>0</b>◎</span>
+      <span>sell vol: <b class=bad id=f_svol>0</b>◎</span>
+      <span>net flow: <b id=f_net>0</b>◎</span>
+      <span class=muted id=f_dex></span>
+    </div></div>
+</div>
+
+<div id=overlay style=display:none>
+  <div class=box>
+    <h3>Connect to the chain</h3>
+    <p>Paste your <b>Helius API key</b> to start the live feed. It is stored only in
+    this browser (localStorage) and never sent anywhere except Helius. This page then
+    streams pump.fun / pump.swap activity directly and updates every few seconds.</p>
+    <input id=keyfield2 placeholder="Helius API key" size=40>
+    <button onclick="saveKey2()">start observing</button>
+    <p style=margin-top:14px>No key? Get one free at <a href="https://helius.dev" target=_blank>helius.dev</a>.
+    If your browser blocks the request (CORS), run the server version instead:
+    <code>python scripts/observatory.py</code>.</p>
+  </div>
+</div>
+
+<script>
+const PROGRAMS={
+ '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P':'pumpfun',
+ 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA':'pumpswap'};
+const DEXMAP={
+ '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P':'pumpfun',
+ 'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA':'pumpswap',
+ '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8':'raydium',
+ 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo':'meteora'};
+const WSOL='So11111111111111111111111111111111111111112';
+const $=id=>document.getElementById(id);
+const now=()=>Math.floor(Date.now()/1000);
+const short=s=>s?s.slice(0,4)+'…'+s.slice(-4):'—';
+const ageStr=s=>{s=Math.max(0,s);return s<60?s+'s':s<3600?(s/60|0)+'m':(s/3600|0)+'h'};
+
+let KEY=localStorage.getItem('helius_key')||'';
+const seen=new Set();
+const tokens=new Map();   // mint -> token record
+const wallets=new Map();  // addr -> wallet record
+let cnt={swaps:0,births:0};
+let flow={buys:0,sells:0,bvol:0,svol:0};
+const dexCount={};
+
+function tok(mint){
+ if(!tokens.has(mint)) tokens.set(mint,{mint,dex:'',firstSeen:now(),lastSeen:now(),
+  firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),netSol:0,birth:false});
+ return tokens.get(mint);
+}
+function wal(a){
+ if(!wallets.has(a)) wallets.set(a,{addr:a,swaps:0,buys:0,sells:0,netSol:0,tokens:new Set(),lastMint:'',lastTs:0});
+ return wallets.get(a);
+}
+
+function parseSwap(tx){
+ const fp=tx.feePayer; if(!fp) return null;
+ let solL=0, td={};
+ for(const ad of tx.accountData||[]){
+  if(ad.account===fp) solL+=(ad.nativeBalanceChange||0);
+  for(const tb of ad.tokenBalanceChanges||[]){
+   if(tb.userAccount===fp){
+    const r=tb.rawTokenAmount||{}; const amt=Number(r.tokenAmount||0)/Math.pow(10,Number(r.decimals||0));
+    td[tb.mint]=(td[tb.mint]||0)+amt;
+   }
+  }
+ }
+ solL+=(tx.fee||0);                       // exclude gas
+ if(td[WSOL]){ solL+=td[WSOL]*1e9; delete td[WSOL]; }  // wrapped SOL counts as SOL
+ let mint=null,best=0;
+ for(const m in td){ if(Math.abs(td[m])>Math.abs(best)){best=td[m];mint=m;} }
+ if(!mint||best===0) return null;
+ let side=null;
+ if(best>0&&solL<0)side='buy'; else if(best<0&&solL>0)side='sell'; else return null;
+ const sol=Math.abs(solL)/1e9, t=Math.abs(best);
+ let dex=''; for(const ix of tx.instructions||[]){ if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;} }
+ return {sig:tx.signature,wallet:fp,mint,side,sol,tok:t,price:t?sol/t:0,ts:tx.timestamp||now(),dex};
+}
+
+function handleTx(tx){
+ if(!tx||!tx.signature||seen.has(tx.signature))return; seen.add(tx.signature);
+ if(seen.size>120000) seen.clear();
+ if(tx.type==='CREATE'){
+  let mint=null;
+  for(const ad of tx.accountData||[]) for(const tb of ad.tokenBalanceChanges||[]) if(tb.mint){mint=tb.mint;break;}
+  if(!mint) for(const tt of tx.tokenTransfers||[]) if(tt.mint){mint=tt.mint;break;}
+  if(mint){const T=tok(mint);T.birth=true;T.firstSeen=tx.timestamp||now();cnt.births++;}
+ }
+ const s=parseSwap(tx); if(!s)return;
+ cnt.swaps++;
+ const T=tok(s.mint); T.lastSeen=s.ts; if(s.dex)T.dex=s.dex;
+ if(!T.firstPrice&&s.price)T.firstPrice=s.price;
+ if(s.price){T.lastPrice=s.price; if(T.firstPrice)T.maxMult=Math.max(T.maxMult,s.price/T.firstPrice);}
+ T.vol+=s.sol;
+ if(s.side==='buy'){T.buys++;T.buyers.add(s.wallet);T.netSol+=s.sol;flow.buys++;flow.bvol+=s.sol;}
+ else{T.sells++;T.netSol-=s.sol;flow.sells++;flow.svol+=s.sol;}
+ if(s.dex)dexCount[s.dex]=(dexCount[s.dex]||0)+1;
+ const W=wal(s.wallet); W.swaps++; W.tokens.add(s.mint); W.lastMint=s.mint; W.lastTs=s.ts;
+ if(s.side==='buy'){W.buys++;W.netSol-=s.sol;} else {W.sells++;W.netSol+=s.sol;}
+}
+
+function category(T){
+ const age=now()-T.firstSeen, recent=now()-T.lastSeen;
+ if(recent>600) return ['quiet','muted'];
+ if(age<60) return ['fresh','fresh'];
+ if(T.buyers.size>=3 && T.netSol>0 && T.buys>=T.sells) return ['heating','heating'];
+ if(T.sells>T.buys && T.netSol<0) return ['dumping','dumping'];
+ return ['active','muted'];
+}
+function opportunity(T){
+ const age=now()-T.firstSeen, recent=now()-T.lastSeen;
+ const flowImb=(T.vol>0)?((T.netSol)/T.vol):0;
+ return recent<180 && age<600 && T.buyers.size>=4 && flowImb>0.3 && T.maxMult>=1.3;
+}
+
+function render(){
+ $('c_tok').textContent=tokens.size; $('c_swap').textContent=cnt.swaps;
+ $('c_wal').textContent=wallets.size; $('c_birth').textContent=cnt.births;
+
+ const tl=[...tokens.values()].sort((a,b)=>b.lastSeen-a.lastSeen).slice(0,40);
+ $('tokens').innerHTML=tl.map(T=>{const [c,cls]=category(T);return `<tr>
+  <td class=mono>${short(T.mint)}</td><td class=muted>${T.dex||'—'}</td>
+  <td>${ageStr(now()-T.firstSeen)}</td><td>${T.lastPrice?T.lastPrice.toExponential(2):'—'}</td>
+  <td class=mult>${T.maxMult.toFixed(2)}×</td><td>${T.buys}/${T.sells}</td>
+  <td>${T.buyers.size}</td><td><span class="tag ${cls}">${c}</span></td></tr>`;}).join('')||'<tr><td class=muted>waiting…</td></tr>';
+
+ const wl=[...wallets.values()].sort((a,b)=>b.lastTs-a.lastTs).slice(0,40);
+ $('wallets').innerHTML=wl.map(W=>`<tr>
+  <td class=mono>${short(W.addr)}</td><td>${W.tokens.size}</td><td>${W.swaps}</td>
+  <td>${W.buys}/${W.sells}</td><td class="${W.netSol>=0?'good':'bad'}">${W.netSol.toFixed(2)}</td>
+  <td>${W.tokens.size>=3?'<span class="tag sniper">sniper</span>':(W.swaps>=5?'<span class=tag>active</span>':'')}</td></tr>`).join('')||'<tr><td class=muted>waiting…</td></tr>';
+
+ const mv=[...tokens.values()].filter(T=>T.buys+T.sells>=2).sort((a,b)=>b.maxMult-a.maxMult).slice(0,12);
+ $('movers').innerHTML=mv.map(T=>`<tr><td class=mono>${short(T.mint)}</td>
+  <td class=mult>${T.maxMult.toFixed(2)}×</td><td>${T.vol.toFixed(2)}</td>
+  <td>${T.buyers.size}</td><td class="${T.netSol>=0?'good':'bad'}">${T.netSol>=0?'+':''}${T.netSol.toFixed(2)}</td></tr>`).join('')||'<tr><td class=muted>—</td></tr>';
+
+ const ops=[...tokens.values()].filter(opportunity).sort((a,b)=>b.buyers.size-a.buyers.size).slice(0,10);
+ $('ops').innerHTML=ops.map(T=>`<tr><td class=mono>${short(T.mint)}</td>
+  <td class=mult>${T.maxMult.toFixed(2)}×</td><td class=good>${T.buyers.size}</td>
+  <td class=good>+${((T.netSol)/Math.max(T.vol,1e-9)).toFixed(2)}</td>
+  <td>${ageStr(now()-T.firstSeen)}</td></tr>`).join('')||'<tr><td class=muted>scanning for setups…</td></tr>';
+ $('ops_note').textContent=ops.length?'Heuristic watch: young + rising flow + multiple fresh buyers. Validate before acting.':'';
+
+ $('f_buys').textContent=flow.buys; $('f_sells').textContent=flow.sells;
+ $('f_ratio').textContent=flow.sells?(flow.buys/flow.sells).toFixed(2):flow.buys;
+ $('f_bvol').textContent=flow.bvol.toFixed(1); $('f_svol').textContent=flow.svol.toFixed(1);
+ const net=flow.bvol-flow.svol; const fn=$('f_net'); fn.textContent=(net>=0?'+':'')+net.toFixed(1); fn.className=net>=0?'good':'bad';
+ $('f_dex').textContent=Object.entries(dexCount).map(([k,v])=>`${k}:${v}`).join('  ');
+
+ // bound memory
+ if(tokens.size>4000){const old=[...tokens.values()].sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000);old.forEach(T=>tokens.delete(T.mint));}
+ if(wallets.size>8000){const old=[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000);old.forEach(W=>wallets.delete(W.addr));}
+}
+
+async function poll(){
+ if(!KEY){return;}
+ let ok=0,errs=0;
+ for(const pid of Object.keys(PROGRAMS)){
+  try{
+   const r=await fetch(`https://api-mainnet.helius-rpc.com/v0/addresses/${pid}/transactions/?api-key=${KEY}&limit=100`);
+   if(!r.ok){errs++; $('status').textContent='⚠ HTTP '+r.status+(r.status===401?' (bad key)':''); continue;}
+   const data=await r.json(); for(const tx of data) handleTx(tx); ok++;
+  }catch(e){errs++; $('status').textContent='⚠ '+e.message+' — if CORS, use python scripts/observatory.py';}
+ }
+ render();
+ if(ok&&!errs) $('status').textContent='live · '+new Date().toLocaleTimeString()+' · swaps '+cnt.swaps;
+}
+
+function start(){ $('overlay').style.display='none'; $('keyfield').value=KEY; poll(); setInterval(poll,6000); }
+function saveKey(){ const k=$('keyfield').value.trim(); if(k){KEY=k;localStorage.setItem('helius_key',k);start();} }
+function saveKey2(){ const k=$('keyfield2').value.trim(); if(k){KEY=k;localStorage.setItem('helius_key',k);start();} }
+
+if(KEY){ start(); } else { $('overlay').style.display='flex'; }
+</script>
+</body>
+</html>
