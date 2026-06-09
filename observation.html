@@ -157,7 +157,15 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
    tuned to the current winner profile — then refine it in the Trading tab.</div>
 </section>
 
-<section id=s-opps><div class=h>⚡ Opportunity Watch <span class=muted style=font-weight:400>heuristic · not advice</span></div>
+<section id=s-opps><div class=h>🎯 Alpha Signals <span class=muted style=font-weight:400>confluence score · high-conviction</span> <button class=mini id=alpha_btn onclick=toggleAlpha()>🎯 Auto-buy</button></div>
+  <div id=alpha_stat></div>
+  <div class=list id=alpha_list style=margin-top:8px></div>
+  <div class=note>The <b>Alpha Engine</b> scores every live token 0–100 by <b>confluence</b>: proven-wallet buying (each
+   wallet auto-graded by the realized forward-return of what it buys), buy <b>acceleration</b>, net-flow, liquidity
+   growth, organic-buyer ratio (anti-wash), and momentum. It only auto-buys above the bar (default 68), sizes
+   <b>bigger on higher conviction</b>, then <b>scales out</b> partial profit and lets a runner ride to capture the
+   fat tail. Tune the score bar and scale-out in Trading. Paper by default; 🔴 LIVE routes on-chain. Not advice.</div>
+  <div class=h style=margin:18px 0 8px>⚡ Opportunity Watch <span class=muted style=font-weight:400>heuristic · not advice</span></div>
   <div class=list id=opps></div>
   <div class=row style=margin-top:14px><span class=muted>Market regime</span><span id=regime>—</span></div></section>
 
@@ -205,6 +213,7 @@ const COL=['#00c805','#5aa9ff','#f5a623','#ff5000','#a78bfa','#8b9197'];
 let KEY=localStorage.getItem('helius_key')||'',busy=false,pollN=0;
 let heroMetric='volume',heroWin=0;
 const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map(),junk=new Set(),priceCache=new Map();
+const walletAlpha=new Map();let gradeQ=[];   // ALPHA: per-wallet forward-return grade + pending grade queue
 let apiStats={q:0,cache:0,skipped:0};
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
 
@@ -214,7 +223,7 @@ const METRICS={volume:{l:'Volume',u:'◎',f:v=>v.toFixed(2),s:x=>x.bvol+x.svol},
  tokens:{l:'Tokens',u:'',f:v=>(v|0).toLocaleString(),s:x=>x.tokens}};
 const WINS=[['2m',17],['5m',43],['10m',86],['ALL',0]];
 
-function tok(m){if(!tokens.has(m))tokens.set(m,{mint:m,dex:'',firstSeen:now(),lastSeen:now(),firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),smart:new Set(),netSol:0,prices:[],med:[],rejected:0});return tokens.get(m);}
+function tok(m){if(!tokens.has(m))tokens.set(m,{mint:m,dex:'',firstSeen:now(),lastSeen:now(),firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),smart:new Set(),netSol:0,prices:[],med:[],rejected:0,bSamp:[]});return tokens.get(m);}
 function wal(a){if(!wallets.has(a))wallets.set(a,{addr:a,swaps:0,buys:0,sells:0,netSol:0,tokens:new Set(),lastMint:'',lastTs:0});return wallets.get(a);}
 function pct(T){return T.firstPrice&&T.lastPrice?(T.lastPrice/T.firstPrice-1)*100:0;}
 
@@ -280,6 +289,9 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
  if(s.dex)dexCount[s.dex]=(dexCount[s.dex]||0)+1;const W=wal(s.wallet);W.swaps++;W.tokens.add(s.mint);W.lastMint=s.mint;W.lastTs=s.ts;
  if(s.side==='buy'){W.buys++;W.netSol-=s.sol;}else{W.sells++;W.netSol+=s.sol;}
  if(follows.has(s.wallet)){followStats.hits++;if(!T.follow)T.follow=new Set();if(s.side==='buy'){T.follow.add(s.wallet);T.followBuyTs=s.ts;followStats.buys++;followStats.lastBuy.unshift({mint:s.mint,wallet:s.wallet,sol:s.sol,ts:s.ts});if(followStats.lastBuy.length>20)followStats.lastBuy.pop();}else{T.followSellTs=s.ts;followStats.sells++;}}
+ // ALPHA: time-series sample (for buy-acceleration / liquidity-growth) + wallet-grading queue (forward-return attribution)
+ const ls=T.bSamp[T.bSamp.length-1];if(!ls||s.ts-ls.ts>=4){T.bSamp.push({ts:s.ts,b:T.buyers.size,v:T.vol});if(T.bSamp.length>16)T.bSamp.shift();}
+ if(s.side==='buy'&&s.price>0)gradeQ.push({wallet:s.wallet,mint:s.mint,entry:s.price,ts:s.ts});
  maybeBlocklist(T);}
 function category(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen;if(rec>600)return 'quiet';if(age<60)return 'fresh';
  if(T.buyers.size>=3&&T.netSol>0&&T.buys>=T.sells)return 'heating';if(T.sells>T.buys&&T.netSol<0)return 'dumping';return 'active';}
@@ -311,8 +323,8 @@ async function clearData(){if(!DB||(typeof confirm!=='undefined'&&!confirm('Dele
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
 /* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
-const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25],['trendRate','Trending buyers/min ≥',8]];
-const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending'],EXIT_MODES=['risk','firstSell'];
+const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25],['trendRate','Trending buyers/min ≥',8],['alphaMin','Alpha score ≥',68],['scaleAt','Scale-out at +ret',0.4],['scaleFrac','Scale-out fraction',0.5]];
+const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending','alpha'],EXIT_MODES=['risk','firstSell'];
 function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
 function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0,peakEq:10};}
 function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',live:false,retired:false,params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
@@ -326,6 +338,26 @@ const impactBps=(sz,liq)=>COST.impactK*(sz/Math.max(liq,COST.liqFloor))*1e4;
 function feat(T){const bv=(T.vol+T.netSol)/2,sv=(T.vol-T.netSol)/2,p=T.prices,
  mom=p.length>=2?(p[p.length-1]/p[Math.max(0,p.length-6)]-1):0;
  return {price:T.lastPrice,ratio:bv/(sv+1e-9),mom,buyers:T.buyers.size,smart:T.smart.size,age:now()-T.firstSeen,vol:bv+sv,liq:T.vol,bv,sv};}
+/* ===== ALPHA ENGINE — wallet-quality grading + composite confluence score + conviction sizing ===== */
+/* grade wallets by the REALIZED forward-return (150s) of what they buy — self-updating from real data */
+function gradeWallets(){const cut=now(),keep=[];for(const p of gradeQ){if(cut-p.ts<150){keep.push(p);continue;}
+  const T=tokens.get(p.mint);if(T&&p.entry>0&&T.lastPrice>0){const fwd=Math.max(-1,Math.min(20,T.lastPrice/p.entry-1));
+   const wa=walletAlpha.get(p.wallet)||{a:0,n:0};wa.a=wa.a+(fwd-wa.a)/Math.min(wa.n+1,30);wa.n++;walletAlpha.set(p.wallet,wa);}}
+ gradeQ=keep;if(gradeQ.length>8000)gradeQ=gradeQ.slice(-8000);
+ if(walletAlpha.size>20000)for(const[k,v]of walletAlpha)if(v.n<3)walletAlpha.delete(k);}
+function walletQ(addr){const wa=walletAlpha.get(addr);return wa&&wa.n>=2?wa.a:0;}   // proven forward-return, else neutral 0
+/* composite Alpha Score (0..100): confluence of independent signals — needs SEVERAL to clear a high bar */
+function alphaScore(T,f){let smartW=0;T.buyers.forEach(a=>{const q=walletQ(a);if(q>0)smartW+=Math.min(2,q);});
+ const follow=(T.follow?T.follow.size:0),s=T.bSamp;let accel=0,liqG=0;
+ if(s.length>=4){const h=s.length>>1,e=s[0],m=s[h],l=s[s.length-1];
+  const r1=(m.b-e.b)/Math.max(m.ts-e.ts,1),r2=(l.b-m.b)/Math.max(l.ts-m.ts,1);accel=r2-r1;liqG=(l.v-m.v)/Math.max(m.v,1);}
+ const netflow=(f.bv-f.sv)/(f.bv+f.sv+1e-9),organic=Math.min(1,T.buyers.size/Math.max(T.buys,1)),recency=now()-T.lastSeen<90?1:0;
+ const cSmart=Math.min(1,(smartW+follow*1.5)/4),cAccel=Math.max(0,Math.min(1,accel*60/8)),cFlow=Math.max(0,Math.min(1,netflow)),
+  cLiq=Math.max(0,Math.min(1,liqG*4)),cOrg=organic,cMom=Math.max(0,Math.min(1,f.mom*5));
+ const score=100*(0.30*cSmart+0.20*cAccel+0.18*cFlow+0.12*cLiq+0.10*cOrg+0.10*cMom)*recency;
+ return {score,cSmart,cAccel,cFlow,cLiq,cOrg,cMom};}
+/* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
+function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
 function makeBandit(dim,k){return {dim,k,w:Array.from({length:k},()=>new Float64Array(dim)),lr:0.05,eps:0.25,epsMin:0.02,epsMax:0.45,l2:1e-3,recent:[],updates:0,mean:new Float64Array(dim),M2:new Float64Array(dim).fill(1),n:0};}
 function bObs(b,x){b.n++;for(let i=0;i<b.dim;i++){const d=x[i]-b.mean[i];b.mean[i]+=d/b.n;b.M2[i]+=d*(x[i]-b.mean[i]);}}
@@ -341,10 +373,20 @@ const sSize=(P,liq)=>P.liqFrac>0?Math.max(0.08,Math.min(1.0,P.liqFrac*liq)):P.si
 const trailForP=(ret,base)=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:base;
 function sOpen(S,mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;S.book.cash-=size;S.book.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
 function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying)tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);if(S.live&&liveArmed&&!replaying)liveExecute('sell',mint,0,S);}
+/* scale-out: sell a fraction, bank partial profit, ratchet stop to breakeven — captures the fat tail */
+function sScale(S,mint,price,frac){const pos=S.book.pos.get(mint);if(!pos||pos.scaled)return;const T=tokens.get(mint);
+ const sellTok=pos.tokens*frac;let slip=COST.baseSlip+impactBps(sellTok*price,T?T.vol:1);const fill=price*(1-slip/1e4);
+ const gross=sellTok*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),costPart=pos.cost*frac,pnl=proc-costPart;
+ S.book.cash+=proc;S.book.realized+=pnl;pos.tokens-=sellTok;pos.cost-=costPart;pos.scaled=true;pos.stopFloor=pos.entry;   // breakeven floor on runner
+ if(!replaying)tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason:'scale-out',ts:now()});
+ if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/Math.max(costPart,1e-9));
+ S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason:'scale-out',ts:now()});if(S.book.closed.length>40)S.book.closed.pop();}
 function sExit(S,mint,ts){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;const P=S.params;
  const price=T.lastPrice||pos.entry;pos.peak=Math.max(pos.peak,price);const ret=price/pos.entry-1;
  if(S.entry==='copywallet'&&T.followSellTs&&T.followSellTs>pos.openTs){sClose(S,mint,price,'follow sell',ret<0);return;}  // mirror their exit
  if(S.exitMode==='firstSell'){if(T.sells>pos.sellsAtEntry){sClose(S,mint,price,'first sell',false);return;}if(ret<=P.sl){sClose(S,mint,price,'stop loss',true);return;}if((ts-pos.openTs)>=P.holdMax){sClose(S,mint,price,'timeout',ret<0);return;}return;}
+ if(pos.scaleOut&&!pos.scaled&&ret>=P.scaleAt){sScale(S,mint,price,P.scaleFrac);}   // bank partial, runner rides on
+ if(pos.scaled&&price<=pos.stopFloor){sClose(S,mint,price,'breakeven stop',false);return;}
  const jump=ret-(pos.lastRet||0);pos.lastRet=ret;const tr=ret>0?trailForP(ret,P.trail):P.trail;
  if(ret<=P.sl)sClose(S,mint,price,'stop loss',true);
  else if(ret>0&&(jump>=P.spikeJump||ret>=P.spikeLevel))sClose(S,mint,price,'spike take-profit',false);
@@ -357,13 +399,15 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  if(b.pos.size>=P.maxPos||f.price<=0)return;const size=sSize(P,f.liq);if(b.cash<size)return;
  if(S.entry==='tiered'){if(tieredQ(P,f,T)){if(Math.random()<COST.failP){b.missed++;return;}sOpen(S,mint,f.price,ts,size,ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});}return;}
  if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers))return;
+ let convSize=size,extra;
  if(S.entry==='copywallet'){const need=Math.max(1,P.smartMin),have=follows.size?((T.follow&&T.follow.size)||0):T.smart.size;if(have<need)return;}  // mirror followed wallets (or experienced money if no list)
  else if(S.entry==='momentum'){if(!(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin))return;}
  else if(S.entry==='trending'){const rate=f.buyers/Math.max(f.age,1)*60;if(!(now()-T.lastSeen<120&&rate>=P.trendRate&&f.ratio>=1))return;}  // fastest buyer-growth, still net-buying
+ else if(S.entry==='alpha'){const A=alphaScore(T,f);if(A.score<P.alphaMin)return;convSize=alphaSize(P,f.liq,A.score);if(b.cash<convSize)return;extra={scaleOut:true,alpha:+A.score.toFixed(1)};}  // confluence gate + conviction size + scale-out
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
  let ep=f.price;if(S.requireHelius){ep=await authPriceSol(mint);if(!ep)return;}
  if(Math.random()<COST.failP){b.missed++;return;}
- sOpen(S,mint,ep,ts,size,ctxOf(f));if(S.live&&liveArmed)liveExecute('buy',mint,size,S);}
+ sOpen(S,mint,ep,ts,convSize,ctxOf(f),extra);if(S.live&&liveArmed)liveExecute('buy',mint,convSize,S);}
 async function botTick(mint){if(junk.has(mint)){apiStats.skipped++;return;}const T=tokens.get(mint);if(!T)return;const f=feat(T);for(const S of strategies)if(S.on)await sTick(S,mint,T,f);}
 async function manageOpenPositions(){const ts=now();const held=new Set();strategies.forEach(S=>S.book.pos.forEach((_,m)=>held.add(m)));for(const m of held){const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}}for(const S of strategies)if(S.on)for(const m of [...S.book.pos.keys()])sExit(S,m,ts);}
 const bookEquity=b=>{let o=0;b.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return b.cash+o;};
@@ -431,6 +475,11 @@ function findTrendStrat(){return strategies.find(s=>s.entry==='trending');}
 function ensureTrendStrat(){if(findTrendStrat())return findTrendStrat();
  const S=newStrategy('Trending Auto-Buy','trending');Object.assign(S.params,{minBuyers:5,minAge:8,maxAge:600,minLiq:2,trendRate:8,sl:-0.35,trail:0.3,tpHard:2,spikeJump:0.3,spikeLevel:0.6,holdMax:600,size:0.5});strategies.push(S);saveStrats();return S;}
 function toggleTrendAutobuy(){const S=ensureTrendStrat();S.on=!S.on;saveStrats();renderTrade();renderTrends();}
+/* integrated Alpha engine strategy — high-conviction by default */
+function findAlphaStrat(){return strategies.find(s=>s.entry==='alpha');}
+function ensureAlphaStrat(){if(findAlphaStrat())return findAlphaStrat();
+ const S=newStrategy('Alpha Engine','alpha');Object.assign(S.params,{alphaMin:68,minBuyers:6,minLiq:4,minAge:10,maxAge:900,size:0.5,maxPos:5,sl:-0.3,trail:0.3,tpHard:5,spikeJump:0.35,spikeLevel:0.9,holdMax:900,scaleAt:0.4,scaleFrac:0.5});strategies.push(S);saveStrats();return S;}
+function toggleAlpha(){const S=ensureAlphaStrat();S.on=!S.on;saveStrats();renderTrade();renderAlpha();}
 /* rotating direct poll of followed wallets — catches their swaps even if not in the DEX sample */
 async function pollFollows(){if(!KEY||!follows.size||fbusy)return;fbusy=true;try{
  const list=[...follows],n=Math.min(followBatch,list.length),batch=[];
@@ -483,6 +532,15 @@ function renderFlow(){const tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;
  const net=flow.bvol-flow.svol;$('f_net').innerHTML=`<span class="${net>=0?'up':'down'}">${net>=0?'+':''}${net.toFixed(2)}◎</span>`;
  $('f_bvol').textContent=flow.bvol.toFixed(2);$('f_svol').textContent=flow.svol.toFixed(2);
  $('ch_netflow').innerHTML=rhChart(hist.map(s=>s.bvol-s.svol),150);$('ch_dex').innerHTML=donut(dexCount);}
+function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlphaStrat(),thr=(AS&&AS.params.alphaMin)||68,on=AS&&AS.on;
+ const btn=$('alpha_btn');if(btn){btn.textContent=on?'🎯 Auto-buy ON':'🎯 Auto-buy';btn.className='mini'+(on?' on':'');}
+ const scored=tv().filter(T=>now()-T.lastSeen<90&&T.buyers.size>=4&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,A:alphaScore(T,feat(T))})).filter(x=>x.A.score>=Math.max(30,thr-25)).sort((a,b)=>b.A.score-a.A.score).slice(0,8);
+ const graded=[...walletAlpha.values()].filter(w=>w.n>=2);const proven=graded.filter(w=>w.a>0).length;
+ const st=$('alpha_stat');if(st)st.innerHTML=`<div class=row><span class=muted>graded wallets · proven (+ROI)</span><span>${graded.length} · <span class=up>${proven}</span></span></div><div class=row><span class=muted>entry bar · firing now</span><span>alpha ≥ ${thr} · <span class="${scored.filter(x=>x.A.score>=thr).length?'up':''}">${scored.filter(x=>x.A.score>=thr).length}</span></span></div>`;
+ el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class=item>
+  <div><div class=nm>${short(T.mint)} <span class=tag style=color:${fire?'var(--up)':'#f5a623'}>${A.score.toFixed(0)}</span>${fire?' <span class="tag" style=color:var(--up)>🎯 buy</span>':''}</div>
+   <div class=sub>smart ${(A.cSmart*100|0)} · accel ${(A.cAccel*100|0)} · flow ${(A.cFlow*100|0)} · liq ${(A.cLiq*100|0)} · org ${(A.cOrg*100|0)}</div></div>
+  <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';}
 function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35&&now()-x.T.lastSeen<300).sort((a,b)=>b.s-a.s).slice(0,10);
  $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class=item>
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=50?'#f5a623':'#8b9197'}>${s.toFixed(0)}</span></div>
@@ -542,6 +600,7 @@ function backtestStrategy(S,all,wfirst){const P=S.params;let cash=10;const start
   if(S.entry==='tiered'){const b=st.buyers.size;go=(st.sv<=Math.max(2,b*P.maxSellRatio))&&((f.age<=60&&b>=P.tier1Buyers)||(f.age<=120&&b>=P.tier2Buyers)||(f.age<=180&&b>=P.tier3Buyers));}
   else if(S.entry==='copywallet'){go=st.smart.size>=Math.max(1,P.smartMin)&&s.side==='buy'&&(wfirst.get(s.wallet)||st.birth)<st.birth;}
   else if(S.entry==='trending'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers){const rate=st.buyers.size/Math.max(f.age,1)*60;go=rate>=P.trendRate&&f.ratio>=1;}}
+  else if(S.entry==='alpha'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers){const conf=(st.smart.size>=1?1:0)+(f.ratio>=1.5?1:0)+(f.mom>0.02?1:0)+(f.buyers>=P.minBuyers*1.5?1:0)+(st.bv>st.sv*1.3?1:0);go=conf>=Math.max(3,Math.round((P.alphaMin-40)/12));}}  // approx confluence (no wallet-grades in replay)
   else{if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers)){}else go=(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin);}
   if(go){if(rand()<0.12)continue;open(s.mint,f.price,ts,size,S.exitMode==='firstSell'?{mode:'firstSell'}:null);}}
  pos.forEach((p,m)=>{const st=states.get(m);close(m,st.last||p.entry,true);});
@@ -586,7 +645,7 @@ function genStrategy(){const w=trends().winners;
  if((w.peak||2)>=4){S.params.spikeJump=0.3;S.params.spikeLevel=0.6;}else{S.params.trail=0.35;}
  strategies.push(S);saveStrats();renderTrade();
  $('tr_edge').innerHTML=`<div class=note style=color:var(--up)>✓ Created “${S.name}” → minBuyers ${S.params.minBuyers}, smart ≥${S.params.smartMin}, liq ≥${S.params.minLiq}◎, ratio ≥${S.params.ratioIn}. Tune/toggle it in the Trading tab.</div>`+$('tr_edge').innerHTML;}
-function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderTrends();renderOpps();renderDist();renderCopy();
+function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderTrends();renderAlpha();renderOpps();renderDist();renderCopy();
  if(tokens.size>4000)tv().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
  if(seen.size>120000)seen.clear();}
@@ -602,12 +661,12 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();   // auto-retire blowups, breed winners
+ gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();   // grade wallet alpha, persist, auto-evolve
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){pollFollows();setInterval(pollFollows,6000);}}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){pollFollows();setInterval(pollFollows,6000);}}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
