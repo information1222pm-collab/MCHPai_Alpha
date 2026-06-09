@@ -1,0 +1,9 @@
+# Engine + parser (already in the monorepo): mchpai_common, pydantic, numpy
+# Server / transport (deploy-only — lazy-imported so tests don't need them):
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12.0
+aiohttp>=3.9
+# Optional, for the Yellowstone gRPC firehose upgrade:
+# grpcio>=1.62
+# grpcio-tools>=1.62

@@ -185,6 +185,12 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <div style=margin-top:12px><button class=mini id=stor_export onclick=exportData()>⬇ Export dataset (NDJSON)</button><button class=mini onclick=clearData()>🗑 Clear</button></div>
   <div class=h style=margin:18px 0 8px>Backtest <button class=mini id=bt_btn onclick=runBacktest()>▶ Backtest saved data</button></div>
   <div id=bt_out><div class=ctr>replay your saved swaps through every strategy to rank them</div></div>
+  <div class=h style=margin:18px 0 8px>🛰 Server feed <span class=muted style=font-weight:400>full-coverage firehose-ingestor</span></div>
+  <div class=row style=border:none><input id=srv_url class=pin style=width:58% placeholder="ws://host:8787/stream"><button class=mini id=srv_btn onclick=toggleServer()>▶ Connect</button></div>
+  <div id=srv_info style=margin-top:6px><span class=muted>not connected — browser polls Helius directly</span></div>
+  <div class=note>Run <code>services/firehose-ingestor</code> and paste its <code>ws://…/stream</code> URL to ingest the
+   <b>full DEX firehose</b> (every swap on the watched programs) instead of the browser poll sample — zero browser
+   API usage, far faster wallet grading and Alpha scoring. Leave blank to keep the browser's own polling.</div>
   <div class=note>Every swap and trade is preserved in IndexedDB (up to a 10 GB target; the browser grants
    quota from free disk, shown above). On reload, recent history is restored so Trends and strategies keep
    context, and the full dataset stays on disk. <b>Export</b> downloads everything as NDJSON for offline
@@ -544,6 +550,18 @@ function connectRealtime(){if(typeof WebSocket==='undefined'||!KEY||!follows.siz
  ws.onerror=()=>{try{ws.close();}catch(e){}};}
 function reconnectRealtime(){if(typeof WebSocket==='undefined')return;try{if(ws&&ws.readyState<=1){ws.close();return;}}catch(e){}connectRealtime();}
 async function rtIngest(sig){try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const sw=parseSwapRPC(res);if(sw){ingest(sw);await botTick(sw.mint);followStats.rt=(followStats.rt||0)+1;}}}catch(e){}}
+/* ===== SERVER FEED — consume firehose-ingestor /stream for full-coverage ingestion ===== */
+let srvWs=null,srvState='off',srvCount=0;
+function connectServer(){const f=$('srv_url'),u=(f&&f.value||'').trim();if(!u||typeof WebSocket==='undefined')return;localStorage.setItem('mchpai_server',u);
+ try{srvWs=new WebSocket(u);}catch(e){srvState='bad url';renderServer();return;}srvState='connecting';renderServer();
+ srvWs.onopen=()=>{srvState='live';renderServer();};
+ srvWs.onmessage=async ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+  if(m.t==='swap'&&m.swap){const sw=m.swap;if(sw.signature&&seen.has(sw.signature))return;if(sw.signature)seen.add(sw.signature);srvCount++;ingest(sw);await botTick(sw.mint);}};
+ srvWs.onclose=()=>{if(srvState!=='off')srvState='reconnecting';renderServer();};
+ srvWs.onerror=()=>{try{srvWs.close();}catch(e){}};}
+function disconnectServer(){srvState='off';try{if(srvWs)srvWs.close();}catch(e){}srvWs=null;localStorage.removeItem('mchpai_server');renderServer();}
+function toggleServer(){if(srvState==='live'||srvState==='connecting')disconnectServer();else connectServer();}
+function renderServer(){const el=$('srv_info');if(!el)return;const on=srvState==='live';el.innerHTML=`<span class="${on?'up':'down'}">${srvState}</span> · ${srvCount.toLocaleString()} swaps via server`;const b=$('srv_btn');if(b)b.textContent=on||srvState==='connecting'?'■ Disconnect':'▶ Connect';}
 
 /* ---- render ---- */
 function renderHero(){const ser=hist.map(METRICS[heroMetric].s);let w=ser;if(heroWin>0)w=ser.slice(-heroWin);
@@ -716,7 +734,8 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}
+ const sv=localStorage.getItem('mchpai_server');if(sv){const f=$('srv_url');if(f)f.value=sv;connectServer();}}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
