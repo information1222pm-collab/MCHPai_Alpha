@@ -27,6 +27,8 @@ data/
 models/saved_models/*.bin
 models/saved_models/*.txt
 models/saved_models/*.pt
+models/saved_models/*.json
+data/ml.db
 !models/saved_models/.gitkeep
 
 # OS / editor
