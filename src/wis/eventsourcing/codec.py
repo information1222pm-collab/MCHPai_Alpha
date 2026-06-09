@@ -134,7 +134,13 @@ def decode_payload(data: dict[str, Any]) -> DomainEvent:
         raise KeyError(f"unknown event type {data['type']!r}")
     hints = _hints(cls)
     body = data["body"]
-    kwargs = {f.name: _decode_value(hints[f.name], body[f.name]) for f in fields(cls)}
+    # Forward/backward compatible: a field absent from older serialized events
+    # falls back to its dataclass default, so the schema can grow over decades
+    # without breaking historical replay.
+    kwargs = {}
+    for f in fields(cls):
+        if f.name in body:
+            kwargs[f.name] = _decode_value(hints[f.name], body[f.name])
     return cls(**kwargs)  # type: ignore[return-value]
 
 

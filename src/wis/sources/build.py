@@ -56,7 +56,8 @@ def price(token: str, price_quote_per_base: Amount, at: int) -> TokenPriceObserv
     )
 
 
-def buy(wallet: str, token: str, base: Amount, quote: Amount, at: int, venue: str | None = None) -> WalletBoughtToken:
+def buy(wallet: str, token: str, base: Amount, quote: Amount, at: int,
+        venue: str | None = None, quote_mint: str = "SOL") -> WalletBoughtToken:
     return WalletBoughtToken(
         occurred_at=Nanos(at),
         wallet=WalletAddress(wallet),
@@ -64,10 +65,12 @@ def buy(wallet: str, token: str, base: Amount, quote: Amount, at: int, venue: st
         base=base,
         quote=quote,
         venue=venue,
+        quote_mint=quote_mint,
     )
 
 
-def sell(wallet: str, token: str, base: Amount, quote: Amount, at: int, venue: str | None = None) -> WalletSoldToken:
+def sell(wallet: str, token: str, base: Amount, quote: Amount, at: int,
+         venue: str | None = None, quote_mint: str = "SOL") -> WalletSoldToken:
     return WalletSoldToken(
         occurred_at=Nanos(at),
         wallet=WalletAddress(wallet),
@@ -75,4 +78,5 @@ def sell(wallet: str, token: str, base: Amount, quote: Amount, at: int, venue: s
         base=base,
         quote=quote,
         venue=venue,
+        quote_mint=quote_mint,
     )

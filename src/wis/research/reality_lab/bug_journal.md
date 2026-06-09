@@ -65,10 +65,15 @@ with ~73% of parsed swaps yielding no trade event and only 26.7% SOL-paired.
 Still the single largest translator gap, but materially smaller than the first
 sample implied — the correction is exactly why we measure before fixing.
 
-**Fix.** DEFERRED. The 100-wallet distribution is in; before acting, re-run on a
-fresh sample to confirm stability, and resolve how to price a token-to-token leg
-(quote token vs SOL-equivalent). Multi-hop is negligible (1.3%) — do not build
-for it. Pre-solving risks modeling the wrong thing.
+**Fix.** **ADDRESSED** (behind a regression test built from the real payload).
+Grounded in the fresh-data measurement: of token-to-token swaps, ~34% have
+exactly one *known quote leg* (USDC/USDT/wrapped-SOL), 65% are quote↔quote
+*conversions* (not speculative trades), 1% are token↔token *unpriceable*.
+`translate_helius` now emits a BUY/SELL for the one-quote-leg case, tagged with
+`quote_mint`, and the ledger is quote-aware so SOL and USDC are never mixed.
+Conversions and unpriceable pairs are deliberately *not* emitted. Multi-hop
+(1.3%) still ignored. Residual: token↔token-volatile (~1%) remains unpriced —
+journaled, not faked. Regression: `tests/sources/test_reality_fixtures.py::test_token_to_token_quote_leg_now_priced`.
 
 **Regression test.** `tests/sources/test_reality_fixtures.py::test_token_to_token_currently_untranslated`
 pins the current `[]` behavior; flip it when BUG-001 is addressed.
@@ -109,9 +114,14 @@ transfers, **51.6% are dust** (fees/tips) and **20.3% are exactly the ATA rent**
 were non-peer** (vaults/programs, not observed wallets). `graph(t)` would be
 dominated by artifacts, not real lineage.
 
-**Fix.** DEFERRED. The data now suggests a tractable filter (drop dust + ata_rent
-+ non-peer counterparties), but confirm on a fresh sample first. See the
-`NativeTransferClass` taxonomy. Gather more before acting.
+**Fix.** **ADDRESSED** (partial, behind a regression test). `translate_helius`
+now emits funding **only from non-swap transactions** (native moves inside a swap
+are trade mechanics), and even then drops dust (<0.0001 SOL), the exact ATA-rent
+constant, and self-transfers. This removes the ~72% mechanics + all swap-internal
+transfers. **Residual:** a large native payment inside a swap that Helius did
+*not* parse as `events.swap` still leaks as funding (we cannot tell it is
+mechanics without the swap event). Journaled, not hidden. Regression:
+`tests/sources/test_reality_fixtures.py::test_swap_mechanics_transfers_now_filtered`.
 
 **Regression test.** `tests/sources/test_reality_fixtures.py::test_swap_native_transfers_currently_funding`
 pins the current behavior; revise when BUG-002 is addressed.

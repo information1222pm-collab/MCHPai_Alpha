@@ -57,13 +57,19 @@ class WalletProjector:
 
         elif isinstance(payload, WalletBoughtToken):
             ws = self._ensure(state, payload.wallet, event)
-            ws.ledger.buy(payload.token, payload.base, payload.quote, payload.occurred_at, event.sequence)
+            ws.ledger.buy(
+                payload.token, payload.base, payload.quote, payload.occurred_at,
+                event.sequence, quote_mint=payload.quote_mint,
+            )
             ws.buy_count += 1
             self._touch(ws, event)
 
         elif isinstance(payload, WalletSoldToken):
             ws = self._ensure(state, payload.wallet, event)
-            ws.ledger.sell(payload.token, payload.base, payload.quote, payload.occurred_at, event.sequence)
+            ws.ledger.sell(
+                payload.token, payload.base, payload.quote, payload.occurred_at,
+                event.sequence, quote_mint=payload.quote_mint,
+            )
             ws.sell_count += 1
             self._touch(ws, event)
 

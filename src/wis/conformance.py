@@ -106,6 +106,7 @@ def wallet_world_digest(world: WalletWorld) -> str:
                 "closed": [
                     {
                         "token": t.token.value,
+                        "quote": t.quote,
                         "qty": _frac(t.qty),
                         "cost": _frac(t.cost),
                         "proceeds": _frac(t.proceeds),
@@ -119,12 +120,13 @@ def wallet_world_digest(world: WalletWorld) -> str:
                 "open": [
                     {
                         "token": p.token.value,
+                        "quote": p.quote,
                         "qty": _frac(p.qty),
                         "cost": _frac(p.cost),
                         "first_entry": int(p.first_entry_time),
                         "last_entry": int(p.last_entry_time),
                     }
-                    for p in sorted(ws.open_positions(), key=lambda p: p.token.value)
+                    for p in sorted(ws.open_positions(), key=lambda p: (p.token.value, p.quote))
                 ],
             }
         )

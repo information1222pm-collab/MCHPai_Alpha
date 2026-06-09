@@ -20,8 +20,9 @@ _T2T = {"type": "SWAP", "timestamp": _TS, "feePayer": "alpha", "events": {"swap"
     "tokenInputs": [{"mint": "USDC", "rawTokenAmount": {"tokenAmount": "5", "decimals": 6}}],
     "tokenOutputs": [{"mint": "GEM", "rawTokenAmount": {"tokenAmount": "9", "decimals": 6}}]}}}
 _TRANSFER = {"type": "TRANSFER", "timestamp": _TS, "feePayer": "bravo", "nativeTransfers": [
-    {"fromUserAccount": "bravo", "toUserAccount": "vault", "amount": 50_000},      # dust
-    {"fromUserAccount": "vault", "toUserAccount": "bravo", "amount": 2_039_280}]}   # ata_rent
+    {"fromUserAccount": "bravo", "toUserAccount": "vault", "amount": 50_000},        # dust (mechanics)
+    {"fromUserAccount": "vault", "toUserAccount": "bravo", "amount": 2_039_280},     # ata_rent (mechanics)
+    {"fromUserAccount": "bravo", "toUserAccount": "carol", "amount": 500_000_000}]}  # 0.5 SOL real funding
 
 
 def test_fee_payers_from_enhanced_dedupes_in_order() -> None:
@@ -44,10 +45,11 @@ def test_measure_computes_bug_distributions() -> None:
     assert d.n_parsed_swaps == 2
     assert d.p_bug_001 == 0.5            # 1 of 2 parsed swaps is token-to-token
     assert d.p_swap_untranslated == 0.5  # only the buy yields a trade
-    assert d.n_native_transfers == 2
-    assert d.p_bug_002_mechanics == 1.0  # dust + ata_rent are both mechanics
-    assert d.trade_events == 1 and d.funding_events == 2
-    assert d.funding_trade_ratio == 2.0
+    assert d.n_native_transfers == 3
+    assert d.p_bug_002_mechanics == 2 / 3  # dust + ata_rent of 3 transfers
+    # BUG-002 fixed: mechanics dropped, only the real 0.5 SOL transfer funds.
+    assert d.trade_events == 1 and d.funding_events == 1
+    assert d.funding_trade_ratio == 1.0
 
 
 def test_registry_is_honest_about_status() -> None:

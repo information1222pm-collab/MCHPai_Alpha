@@ -79,16 +79,19 @@ class WalletBoughtToken(DomainEvent):
     """A wallet acquired ``base`` units of ``token`` by spending ``quote``.
 
     The implied entry price is ``quote / base`` (computed exactly downstream).
-    ``quote`` is denominated in the common quote asset (e.g. SOL in lamports).
+    ``quote`` is denominated in ``quote_mint`` (e.g. "SOL", "USDC"); trades in
+    different quote assets are never mixed in the ledger.
     """
 
     EVENT_TYPE: ClassVar[str] = "WalletBoughtToken"
+    event_version: ClassVar[int] = 2
 
     wallet: WalletAddress
     token: TokenMint
     base: Amount  # token units received
     quote: Amount  # quote units spent
     venue: str | None = None
+    quote_mint: str = "SOL"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,12 +99,14 @@ class WalletSoldToken(DomainEvent):
     """A wallet disposed of ``base`` units of ``token`` for ``quote``."""
 
     EVENT_TYPE: ClassVar[str] = "WalletSoldToken"
+    event_version: ClassVar[int] = 2
 
     wallet: WalletAddress
     token: TokenMint
     base: Amount  # token units sold
     quote: Amount  # quote units received
     venue: str | None = None
+    quote_mint: str = "SOL"
 
 
 @dataclass(frozen=True, slots=True)

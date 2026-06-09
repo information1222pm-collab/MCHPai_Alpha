@@ -19,7 +19,7 @@ from wis.projections.wallet_projector import WalletWorld
 _TABLE = "wis_closed_trades"
 
 _COLUMNS = [
-    "wallet", "token",
+    "wallet", "token", "quote",
     "qty_num", "qty_den",
     "cost_num", "cost_den",
     "proceeds_num", "proceeds_den",
@@ -40,7 +40,7 @@ class ClickHouseTradeSink:
         self._client.command(
             f"""
             CREATE TABLE IF NOT EXISTS {_TABLE} (
-                wallet String, token String,
+                wallet String, token String, quote String,
                 qty_num Int64, qty_den Int64,
                 cost_num Int64, cost_den Int64,
                 proceeds_num Int64, proceeds_den Int64,
@@ -56,7 +56,7 @@ class ClickHouseTradeSink:
         if rows:
             data = [
                 [
-                    r.wallet, r.token,
+                    r.wallet, r.token, r.quote,
                     r.qty_num, r.qty_den,
                     r.cost_num, r.cost_den,
                     r.proceeds_num, r.proceeds_den,

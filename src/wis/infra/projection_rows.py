@@ -62,6 +62,7 @@ def wallet_state_blobs(world: WalletWorld) -> dict[str, str]:
 class TradeRow:
     wallet: str
     token: str
+    quote: str
     qty_num: int
     qty_den: int
     cost_num: int
@@ -88,6 +89,7 @@ def closed_trade_rows(world: WalletWorld) -> list[TradeRow]:
                 TradeRow(
                     wallet=address.value,
                     token=t.token.value,
+                    quote=t.quote,
                     qty_num=qn,
                     qty_den=qd,
                     cost_num=cn,
