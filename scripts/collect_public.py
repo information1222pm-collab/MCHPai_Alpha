@@ -30,17 +30,23 @@ PROGRAMS = {
 }
 
 
-def rpc(method, params, tries=4):
+PACE = float(os.environ.get("RPC_PACE", "0.12"))   # sleep between requests (be gentle on public RPC)
+
+
+def rpc(method, params, tries=3):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
     for a in range(tries):
         try:
             req = urllib.request.Request(RPC, data=body, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=15) as r:
                 j = json.load(r)
+                time.sleep(PACE)
                 if "result" in j:
                     return j["result"]
+        except urllib.error.HTTPError as e:
+            time.sleep(1.5 * (a + 1) if e.code == 429 else 0.5)   # back off hard on rate-limit
         except Exception:
-            time.sleep(0.6 * (a + 1))
+            time.sleep(0.5 * (a + 1))
     return None
 
 
