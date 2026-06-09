@@ -101,6 +101,7 @@ a{color:var(--up)}.kf{display:none}
   </div>
   <div class=row style=margin-top:12px><span class=muted>🧠 policy</span><span id=bot_brain>learning…</span></div>
   <div id=bot_learn></div>
+  <div class=row style=margin-top:8px><span class=muted>📡 data filter</span><span id=bot_api>—</span></div>
   <div class=h style=margin:16px 0 8px>Open Positions</div><div class=list id=bot_pos></div>
   <div class=h style=margin:16px 0 8px>Recent Trades</div><div class=list id=bot_log></div>
   <div class=note><b>Every trade is priced from Helius</b> (getAsset) — entry and exit. Tokens Helius can't
@@ -158,7 +159,8 @@ const COL=['#00c805','#5aa9ff','#f5a623','#ff5000','#a78bfa','#8b9197'];
 
 let KEY=localStorage.getItem('helius_key')||'',busy=false,pollN=0;
 let heroMetric='volume',heroWin=0;
-const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map();
+const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map(),junk=new Set(),priceCache=new Map();
+let apiStats={q:0,cache:0,skipped:0};
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
 
 const METRICS={volume:{l:'Volume',u:'◎',f:v=>v.toFixed(2),s:x=>x.bvol+x.svol},
@@ -206,7 +208,13 @@ async function rpc(m,p){const r=await fetch(`https://mainnet.helius-rpc.com/?api
 /* AUTHORITATIVE price from Helius (getAsset price_info, USDC) -> SOL, for marking held positions */
 let solUsd=200;
 async function refreshSolUsd(){try{const r=await rpc('getAsset',{id:WSOL});const p=r&&r.token_info&&r.token_info.price_info&&r.token_info.price_info.price_per_token;if(p>0)solUsd=p;}catch(e){}}
-async function authPriceSol(mint){try{const r=await rpc('getAsset',{id:mint});const p=r&&r.token_info&&r.token_info.price_info&&r.token_info.price_info.price_per_token;return p>0&&solUsd>0?p/solUsd:null;}catch(e){return null;}}
+async function authPriceSol(mint){const c=priceCache.get(mint);if(c&&now()-c.ts<12){apiStats.cache++;return c.p;}  // cache: don't re-query same token within 12s
+ try{const r=await rpc('getAsset',{id:mint});apiStats.q++;const p=r&&r.token_info&&r.token_info.price_info&&r.token_info.price_info.price_per_token;const ps=p>0&&solUsd>0?p/solUsd:null;priceCache.set(mint,{p:ps,ts:now()});return ps;}catch(e){return null;}}
+/* FILTER: blocklist unprofitable tokens so we never waste price queries on them (cheap, no API) */
+function maybeBlocklist(T){if(junk.has(T.mint))return;const age=now()-T.firstSeen,txns=T.buys+T.sells;if(txns<6)return;
+ const dumping=T.sells>T.buys&&T.netSol<0, dead=age>240&&T.buyers.size<8, thinLiq=T.vol<2&&age>120,
+  crashed=T.maxMult>1.5&&T.lastPrice>0&&T.firstPrice>0&&T.lastPrice<=T.firstPrice*0.5;
+ if(dumping||dead||thinLiq||crashed){junk.add(T.mint);}}
 function parseSwapRPC(res){const meta=res.meta,msg=res.transaction&&res.transaction.message;if(!meta||meta.err||!msg)return null;
  const keys=(msg.accountKeys||[]).map(k=>k.pubkey||k),fp=keys[0];if(!fp)return null;let solL=(meta.postBalances[0]-meta.preBalances[0])+(meta.fee||0);const pre={},post={};
  for(const b of meta.preTokenBalances||[])if(b.owner===fp){const a=(b.uiTokenAmount&&b.uiTokenAmount.uiAmount)||0;pre[b.mint]=(pre[b.mint]||0)+a;}
@@ -225,7 +233,7 @@ function ingest(s){cnt.swaps++;if(!walletFirst.has(s.wallet))walletFirst.set(s.w
    T.med.push(s.price);if(T.med.length>12)T.med.shift();if(T.firstPrice)T.maxMult=Math.max(T.maxMult,s.price/T.firstPrice);}}
  T.vol+=s.sol;if(s.side==='buy'){T.buys++;T.buyers.add(s.wallet);if((walletFirst.get(s.wallet)||s.ts)<T.firstSeen)T.smart.add(s.wallet);T.netSol+=s.sol;flow.buys++;flow.bvol+=s.sol;}else{T.sells++;T.netSol-=s.sol;flow.sells++;flow.svol+=s.sol;}
  if(s.dex)dexCount[s.dex]=(dexCount[s.dex]||0)+1;const W=wal(s.wallet);W.swaps++;W.tokens.add(s.mint);W.lastMint=s.mint;W.lastTs=s.ts;
- if(s.side==='buy'){W.buys++;W.netSol-=s.sol;}else{W.sells++;W.netSol+=s.sol;}}
+ if(s.side==='buy'){W.buys++;W.netSol-=s.sol;}else{W.sells++;W.netSol+=s.sol;}maybeBlocklist(T);}
 function category(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen;if(rec>600)return 'quiet';if(age<60)return 'fresh';
  if(T.buyers.size>=3&&T.netSol>0&&T.buys>=T.sells)return 'heating';if(T.sells>T.buys&&T.netSol<0)return 'dumping';return 'active';}
 function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0?T.netSol/T.vol:0;
@@ -277,11 +285,12 @@ function newbornQualifies(f,T){const b=T.buyers.size,s=T.sells,age=f.age;
  return false;}
 async function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const ts=now(),pos=bot.pos.get(mint);
  if(pos){if(pos.mode==='firstSell'&&T.sells>pos.sellsAtEntry)closePos(mint,T.lastPrice||pos.entry,'first sell',false);return;}  // INSTANT first-sell exit
+ if(junk.has(mint)){apiStats.skipped++;return;}                                       // FILTER: never spend API on blocklisted junk
  const f=feat(T);if(f.price<=0)return;
  // RULE: tiered buyer adoption (10/1m · 25/2m · 100/3m, buy-dominant) -> buy; exit on first new sell
  if(newbornQualifies(f,T)&&bot.pos.size<STRAT.maxPos&&bot.cash>=botSize(f.liq)){
   if(Math.random()<COST.failP){bot.missed++;return;}
-  const ep=(await authPriceSol(mint))||f.price;if(ep>0)openPos(mint,ep,ts,botSize(f.liq),ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});
+  openPos(mint,f.price,ts,botSize(f.liq),ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});  // fresh token: clean print price, no wasted getAsset
   return;}
  // RL entry (Helius-priced only)
  if(!(f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers))return;
@@ -344,6 +353,7 @@ function renderTrade(){const eq=botEquity(),chg=eq-bot.start,p=chg/bot.start*100
  $('bot_open').textContent=bot.pos.size;$('bot_tr').textContent=n;$('bot_win').textContent=(n?(wins/n*100).toFixed(0):0)+'%';
  const rr=bRecent(brain);$('bot_brain').innerHTML=`${brain.updates} updates · explore <b>${(brain.eps*100).toFixed(0)}%</b> · recent reward <span class="${rr>=0?'up':'down'}">${(rr*100).toFixed(1)}%</span>`;
  let cum=0;const curve=brain.recent.map(v=>cum+=v);$('bot_learn').innerHTML=curve.length>1?spark(curve,rr>=0,620,40):'<span class=muted style=font-size:11px>policy warming up — decisions + rewards accruing</span>';
+ const tot=apiStats.q+apiStats.cache+apiStats.skipped;$('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
  const pos=[...bot.pos.entries()].map(([m,po])=>{const T=tokens.get(m),cur=(T&&T.lastPrice)||po.entry,ret=(cur/po.entry-1)*100,up2=ret>=0;
   return `<div class=item><div><div class=nm>${short(m)}</div><div class=sub>entry ${po.entry.toExponential(2)} · ${ageStr(now()-po.openTs)}</div></div>
   <div class=rt><div class=px>${cur.toExponential(2)}</div><div class="badge ${up2?'up':'down'}">${fmtPct(ret)}</div></div></div>`;}).join('');
