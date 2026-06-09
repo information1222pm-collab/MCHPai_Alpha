@@ -129,10 +129,32 @@ input[type=checkbox]{accent-color:var(--mint);width:15px;height:15px}
 textarea{border-radius:12px!important}textarea:focus{outline:none;border-color:var(--line2)!important}
 select{background:rgba(0,0,0,.32);border:1px solid var(--hair);color:var(--ice);padding:4px 8px;font:inherit;font-family:var(--mono);font-size:11px;border-radius:8px}
 .heroval,.chip .v,.badge,.appbar h1{font-variant-numeric:tabular-nums}
+/* interactive charts */
+.ichart{position:relative;width:100%;touch-action:pan-y;cursor:crosshair}
+.chcross{position:absolute;top:0;bottom:0;width:1px;background:linear-gradient(var(--mint),transparent);display:none;pointer-events:none;opacity:.7;z-index:3}
+.chdot{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 14px currentColor;border:1.5px solid #052;display:none;pointer-events:none;z-index:4}
+.chtip{position:absolute;display:none;pointer-events:none;background:rgba(8,14,17,.94);border:1px solid var(--line2);color:var(--txt);font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:8px;white-space:nowrap;z-index:5;backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+.clickable{cursor:pointer}.clickable:active{transform:scale(.99)}
+.barrow.clickable:hover .blab{color:var(--mint)}
+/* drill-down detail sheet */
+#detailbg{position:fixed;inset:0;background:rgba(2,5,7,.55);backdrop-filter:blur(3px);z-index:55;opacity:0;pointer-events:none;transition:opacity .35s var(--ease)}
+#detailbg.open{opacity:1;pointer-events:auto}
+#detail{position:fixed;left:0;right:0;bottom:0;max-height:88vh;overflow-y:auto;z-index:60;transform:translateY(101%);transition:transform .42s var(--ease);
+ background:linear-gradient(180deg,rgba(13,20,24,.96),rgba(8,12,15,.98));border-top:1px solid var(--line2);border-radius:22px 22px 0 0;
+ box-shadow:0 -20px 60px -20px rgba(0,0,0,.8),0 -1px 0 rgba(86,240,192,.2) inset;backdrop-filter:blur(24px) saturate(150%);padding:8px 18px 30px}
+#detail.open{transform:translateY(0)}
+#detail .grab{width:42px;height:4px;border-radius:3px;background:var(--hair2);margin:8px auto 14px}
+#detail .dh{font-family:var(--mono);font-size:18px;letter-spacing:.5px;display:flex;align-items:center;gap:10px;margin-bottom:2px}
+#detail .dclose{margin-left:auto;background:rgba(255,255,255,.05);border:1px solid var(--hair);color:var(--dim);width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;line-height:1}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:14px 0}
+.dstat{background:var(--glass);border:1px solid var(--hair);border-radius:12px;padding:9px 11px}
+.dstat .l{color:var(--dim);font-family:var(--mono);font-size:9px;letter-spacing:.6px;text-transform:uppercase}
+.dstat .v{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:3px}
 </style>
 </head>
 <body>
 <canvas id=bg></canvas><div id=scan></div>
+<div id=detailbg onclick=closeDetail()></div><div id=detail></div>
 <script>
 /* ===== live background: subtle numerical/crypto data-stream (self-contained) ===== */
 (function(){var c=document.getElementById('bg');if(!c||!c.getContext)return;var x=c.getContext('2d');
@@ -409,13 +431,54 @@ function smooth(p){if(p.length<2)return '';let d=`M${p[0][0]} ${p[0][1]}`;
  for(let i=0;i<p.length-1;i++){const a=p[Math.max(0,i-1)],b=p[i],c=p[i+1],e=p[Math.min(p.length-1,i+2)];
  const c1x=b[0]+(c[0]-a[0])/6,c1y=b[1]+(c[1]-a[1])/6,c2x=c[0]-(e[0]-b[0])/6,c2y=c[1]-(e[1]-b[1])/6;
  d+=` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${c[0].toFixed(1)} ${c[1].toFixed(1)}`;}return d;}
-function rhChart(v,h=190,upOverride){if(!v||v.length<2)return '<div class=ctr>collecting…</div>';
- const mn=Math.min(...v),mx=Math.max(...v),r=(mx-mn)||1,w=620,X=i=>i/(v.length-1)*w,Y=x=>h-(x-mn)/r*(h-22)-11;
- const up=upOverride!=null?upOverride:v[v.length-1]>=v[0],c=up?'#00c805':'#ff5000',p=v.map((x,i)=>[X(i),Y(x)]),d=smooth(p),id='g'+Math.random().toString(36).slice(2,7),L=p[p.length-1];
- return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h} preserveAspectRatio=none>
-  <defs><linearGradient id=${id} x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="${c}" stop-opacity=.22/><stop offset=1 stop-color="${c}" stop-opacity=0/></linearGradient></defs>
-  <path d="${d} L ${w} ${h} L 0 ${h} Z" fill="url(#${id})"/><path d="${d}" fill=none stroke="${c}" stroke-width=2/>
-  <circle cx="${L[0].toFixed(1)}" cy="${L[1].toFixed(1)}" r=3 fill="${c}"/></svg>`;}
+/* interactive 3D line/area chart — extruded ribbon + touch/scrub crosshair. Registry keyed per render. */
+const CHARTS={};let _cid=0;
+function chReg(o){const id='c'+(++_cid);CHARTS[id]=o;const ks=Object.keys(CHARTS);if(ks.length>80)for(const k of ks.slice(0,40))delete CHARTS[k];return id;}
+function rhChart(v,h=190,upOverride,opts){if(!v||v.length<2)return '<div class=ctr>collecting…</div>';opts=opts||{};
+ const mn=Math.min(...v),mx=Math.max(...v),r=(mx-mn)||1,w=620,dx=11,dy=15,X=i=>i/(v.length-1)*w,Y=x=>h-(x-mn)/r*(h-26)-13;
+ const up=upOverride!=null?upOverride:v[v.length-1]>=v[0],c=up?'#34ecaa':'#ff6a52',c2=up?'#8fd8ff':'#f3c352';
+ const p=v.map((x,i)=>[X(i),Y(x)]),pb=p.map(([x,y])=>[x+dx,y-dy]),d=smooth(p),db=smooth(pb),L=p[p.length-1];
+ const band=`M${p.map(q=>q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' L')} L${pb.slice().reverse().map(q=>q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' L')} Z`;
+ const id='g'+_cid+'_'+(_cid+1),ig='i'+_cid+'_'+(_cid+1);
+ const svg=`<svg viewBox="0 0 ${w} ${h}" width=100% height=${h} preserveAspectRatio=none>
+  <defs><linearGradient id=${id} x1=0 y1=0 x2=0 y2=1><stop offset=0 stop-color="${c}" stop-opacity=.28/><stop offset=1 stop-color="${c}" stop-opacity=0/></linearGradient>
+  <linearGradient id=${ig} x1=0 y1=0 x2=1 y2=1><stop offset=0 stop-color="${c2}" stop-opacity=.55/><stop offset=1 stop-color="${c}" stop-opacity=.16/></linearGradient></defs>
+  <path d="${d} L ${w} ${h} L 0 ${h} Z" fill="url(#${id})"/>
+  <path d="${band}" fill="url(#${ig})" opacity=.5/>
+  <path d="${db}" fill=none stroke="${c2}" stroke-width=1 opacity=.4/>
+  <path d="${d}" fill=none stroke="${c}" stroke-width=2.4 stroke-linecap=round style="filter:drop-shadow(0 0 5px ${c}aa)"/>
+  <circle cx="${L[0].toFixed(1)}" cy="${L[1].toFixed(1)}" r=3.4 fill="${c}" stroke="#061" stroke-width=1/></svg>`;
+ const cid=chReg({v,h,mn,mx,color:c,fmt:opts.fmt||(x=>(+x).toFixed(2)),labels:opts.labels||null});
+ return `<div class=ichart data-cid=${cid} style="height:${h}px" onpointermove="chMove(event)" onpointerleave="chLeave(event)" onpointerdown="chMove(event)"><div class=chcross></div><div class=chdot></div><div class=chtip></div>${svg}</div>`;}
+function chMove(e){const wrap=e.currentTarget,C=CHARTS[wrap.getAttribute('data-cid')];if(!C)return;
+ const r=wrap.getBoundingClientRect();if(!r.width)return;const px=Math.max(0,Math.min(r.width,e.clientX-r.left));
+ const i=Math.max(0,Math.min(C.v.length-1,Math.round(px/r.width*(C.v.length-1)))),x=i/(C.v.length-1)*r.width;
+ const yf=(C.v[i]-C.mn)/((C.mx-C.mn)||1),y=C.h-yf*(C.h-26)-13;
+ const cr=wrap.querySelector('.chcross'),dt=wrap.querySelector('.chdot'),tp=wrap.querySelector('.chtip');
+ if(cr)cr.style.cssText='display:block;left:'+x.toFixed(1)+'px';
+ if(dt)dt.style.cssText='display:block;left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;color:'+C.color+';background:'+C.color;
+ if(tp){tp.style.display='block';tp.textContent=(C.labels&&C.labels[i]?C.labels[i]+' · ':'')+C.fmt(C.v[i]);tp.style.left=Math.min(r.width-tp.offsetWidth-4,Math.max(2,x+9)).toFixed(0)+'px';tp.style.top=Math.max(2,y-26).toFixed(0)+'px';}}
+function chLeave(e){const w=e.currentTarget;['.chcross','.chdot','.chtip'].forEach(s=>{const el=w.querySelector(s);if(el)el.style.display='none';});}
+/* ===== DRILL-DOWN: token detail sheet — click any token to open deeper dimensions ===== */
+function openToken(mint){const T=tokens.get(mint);if(!T||!$('detail'))return;const f=feat(T),A=alphaScore(T,f),N=now(),up=pct(T)>=0;
+ const held=[];strategies.forEach(S=>{const p=S.book.pos.get(mint);if(p){const px=T.lastPrice||p.entry;held.push({s:S.name,ret:px/p.entry-1,upnl:p.tokens*px-p.cost});}});
+ const trades=[];strategies.forEach(S=>S.book.closed.forEach(c=>{if(c.mint===mint)trades.push({strat:S.name,pnl:c.pnl,reason:c.reason});}));
+ const sigs=signalFeed.filter(s=>s.mint===mint).slice(0,8);
+ const comp=[['smart',A.cSmart],['accel',A.cAccel],['flow',A.cFlow],['liq',A.cLiq],['organic',A.cOrg],['mom',A.cMom]];
+ const st=(l,v,cl)=>`<div class=dstat><div class=l>${l}</div><div class="v ${cl||''}">${v}</div></div>`;
+ $('detail').innerHTML=`<div class=grab></div>
+  <div class=dh><span style=color:var(--ice)>${short(mint)}</span><span class=tag>${DEXSHORT(T.dex)}</span>${T.follow&&T.follow.size?'<span class="tag" style=color:var(--up)>followed</span>':''}${held.length?'<span class="tag" style=color:var(--mint)>held</span>':''}<button class=dclose onclick=closeDetail()>×</button></div>
+  <div class=sub style=word-break:break-all>${mint}</div>
+  <div class=dgrid>${st('Peak ×',T.maxMult.toFixed(2)+'×','up')}${st('Change',fmtPct(pct(T)),up?'up':'down')}${st('Age',ageStr(N-T.firstSeen))}${st('Buyers',T.buyers.size)}${st('Smart',T.smart.size,T.smart.size?'up':'')}${st('Liquidity',T.vol.toFixed(1)+'◎')}${st('Net flow',(T.netSol>=0?'+':'')+T.netSol.toFixed(2)+'◎',T.netSol>=0?'up':'down')}${st('Buys/Sells',T.buys+'/'+T.sells)}${st('Alpha',A.score.toFixed(0))}</div>
+  <div class=h style=margin:10px 0 6px>Price trajectory <span class=muted style=font-weight:400>scrub to inspect</span></div>${rhChart(T.prices,150,up,{fmt:x=>(+x).toExponential(2)})}
+  <div class=h style=margin:14px 0 8px>Alpha breakdown</div>${bars(comp.map(([k,vv])=>({label:k,value:+(vv*100).toFixed(0),disp:(vv*100|0)+'%',color:vv>=0.5?'#34ecaa':vv>=0.25?'#f3c352':'#5f7d76'})))}
+  ${T.bSamp&&T.bSamp.length>2?'<div class=h style=margin:14px 0 8px>Buyer growth</div>'+rhChart(T.bSamp.map(s=>s.b),100,true,{fmt:x=>Math.round(x)+' buyers'}):''}
+  ${held.length?'<div class=h style=margin:14px 0 8px>Open positions</div>'+held.map(h=>'<div class=row><span>'+h.s+'</span><span class="'+(h.upnl>=0?'up':'down')+'">'+(h.upnl>=0?'+':'')+h.upnl.toFixed(3)+'◎ · '+fmtPct(h.ret*100)+'</span></div>').join(''):''}
+  ${trades.length?'<div class=h style=margin:14px 0 8px>Your trades here</div>'+trades.slice(0,8).map(c=>'<div class=row><span>'+c.strat+' · '+c.reason+'</span><span class="'+(c.pnl>=0?'up':'down')+'">'+(c.pnl>=0?'+':'')+c.pnl.toFixed(3)+'◎</span></div>').join(''):''}
+  ${sigs.length?'<div class=h style=margin:14px 0 8px>Signals fired</div>'+sigs.map(s=>'<div class=row><span>'+(SIG_ICON[s.type]||'')+' '+s.type+'</span><span class=muted>'+new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')+'</span></div>').join(''):''}
+  <div class=note>Live snapshot — updates as data flows. Tap outside or × to close.</div>`;
+ $('detail').classList.add('open');$('detailbg').classList.add('open');}
+function closeDetail(){if($('detail'))$('detail').classList.remove('open');if($('detailbg'))$('detailbg').classList.remove('open');}
 function spark(v,up,w=72,h=24){if(!v||v.length<2)return '<span class=muted>·</span>';const mn=Math.min(...v),mx=Math.max(...v),r=(mx-mn)||1,
  c=(up==null?v[v.length-1]>=v[0]:up)?'#00c805':'#ff5000',p=v.map((x,i)=>`${(i/(v.length-1)*w).toFixed(1)},${(h-(x-mn)/r*(h-5)-2.5).toFixed(1)}`).join(' ');
  return `<svg width=${w} height=${h} viewBox="0 0 ${w} ${h}"><polyline points="${p}" fill=none stroke="${c}" stroke-width=1.6/></svg>`;}
@@ -425,8 +488,9 @@ function donut(map,size=120){const e=Object.entries(map).filter(([,v])=>v>0),tot
   xi1=cx+ir*Math.cos(a1),yi1=cy+ir*Math.sin(a1),xi0=cx+ir*Math.cos(a0),yi0=cy+ir*Math.sin(a0),lg=a1-a0>Math.PI?1:0;
   seg+=`<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 ${lg} 1 ${x1.toFixed(1)} ${y1.toFixed(1)} L${xi1.toFixed(1)} ${yi1.toFixed(1)} A${ir} ${ir} 0 ${lg} 0 ${xi0.toFixed(1)} ${yi0.toFixed(1)} Z" fill="${COL[i%COL.length]}"/>`;a0=a1;});
  return `<div style=display:flex;gap:16px;align-items:center><svg width=${size} height=${size}>${seg}</svg><div style=flex:1>${e.map(([k,v],i)=>`<div class=row><span><span class=sw style=background:${COL[i%COL.length]}></span>${k}</span><span>${(v/tot*100).toFixed(0)}%</span></div>`).join('')}</div></div>`;}
+const isMint=s=>typeof s==='string'&&/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 function bars(items){if(!items.length)return '<div class=ctr>—</div>';const mx=Math.max(...items.map(i=>i.value),1);
- return '<div class=bars>'+items.map(i=>`<div class=barrow><span class=blab title="${i.full||i.label}">${i.label}</span><span class=btrack><span class=bfill style="width:${(i.value/mx*100).toFixed(1)}%;background:${i.color||'#5aa9ff'}"></span></span><span class=bval>${i.disp!=null?i.disp:i.value}</span></div>`).join('')+'</div>';}
+ return '<div class=bars>'+items.map(i=>{const clk=isMint(i.full)?` clickable" onclick="openToken('${i.full}')`:'';return `<div class="barrow${clk}"><span class=blab title="${i.full||i.label}">${i.label}</span><span class=btrack><span class=bfill style="width:${(Math.max(0,i.value)/mx*100).toFixed(1)}%;background:${i.color||'#56f0c0'}"></span></span><span class=bval>${i.disp!=null?i.disp:i.value}</span></div>`;}).join('')+'</div>';}
 function histogram(v,c='#5aa9ff',h=150){if(!v||v.length<3)return '<div class=ctr>collecting…</div>';const bins=12,mn=Math.min(...v),mx=Math.max(...v),r=(mx-mn)||1,cnts=new Array(bins).fill(0);
  v.forEach(x=>cnts[Math.min(bins-1,Math.floor((x-mn)/r*bins))]++);const mc=Math.max(...cnts,1),w=620,bw=w/bins;
  return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}>${cnts.map((c2,i)=>`<rect x="${(i*bw+1).toFixed(1)}" y="${(h-c2/mc*(h-6)).toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${(c2/mc*(h-6)).toFixed(1)}" rx=2 fill="${c}" opacity=.8/>`).join('')}</svg>
@@ -864,7 +928,7 @@ function renderHero(){const ser=hist.map(METRICS[heroMetric].s);let w=ser;if(her
  $('periodpills').innerHTML=WINS.map(([l,n])=>`<button class="pill ${n===heroWin?'on':''}" onclick="setWin(${n})">${l}</button>`).join('');}
 function renderChips(){const intf=v=>Math.round(v).toLocaleString();animNum($('c_swap'),cnt.swaps,intf);animNum($('c_tok'),tokens.size,intf);animNum($('c_wal'),wallets.size,intf);
  const d=diff(hist.slice(-9).map(s=>s.swaps));animNum($('c_spm'),Math.round(d.reduce((a,b)=>a+b,0)/Math.max(d.length*7/60,1/60)),intf);}
-function tokRow(T){const p=pct(T),up=p>=0,c=category(T);return `<div class=item>
+function tokRow(T){const p=pct(T),up=p>=0,c=category(T);return `<div class="item clickable" onclick="openToken('${T.mint}')">
  <div><div class=nm>${short(T.mint)} ${c==='fresh'?'<span class="tag fresh">new</span>':''}</div><div class=sub>${T.dex||'—'} · ${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)}</div></div>
  <div class=mid>${spark(T.prices,up)}</div>
  <div class=rt><div class=px>${T.lastPrice?T.lastPrice.toExponential(2):'—'}</div><div class="badge ${up?'up':'down'}">${T.maxMult>=2?T.maxMult.toFixed(1)+'×':fmtPct(p)}</div></div></div>`;}
@@ -891,7 +955,7 @@ function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlpha
  const scored=tv().filter(T=>now()-T.lastSeen<90&&T.buyers.size>=4&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,A:alphaCached(T)})).filter(x=>x.A.score>=Math.max(30,thr-25)).sort((a,b)=>b.A.score-a.A.score).slice(0,8);
  const graded=[...walletAlpha.values()].filter(w=>w.n>=2);const proven=graded.filter(w=>w.a>0).length;
  const st=$('alpha_stat');if(st)st.innerHTML=`<div class=row><span class=muted>graded wallets · proven (+ROI)</span><span>${graded.length} · <span class=up>${proven}</span></span></div><div class=row><span class=muted>entry bar · firing now</span><span>alpha ≥ ${thr} · <span class="${scored.filter(x=>x.A.score>=thr).length?'up':''}">${scored.filter(x=>x.A.score>=thr).length}</span></span></div>`;
- el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class=item>
+ el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class="item clickable" onclick="openToken('${T.mint}')">
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${fire?'var(--up)':'#f5a623'}>${A.score.toFixed(0)}</span>${fire?' <span class="tag" style=color:var(--up)>🎯 buy</span>':''}</div>
    <div class=sub>smart ${(A.cSmart*100|0)} · accel ${(A.cAccel*100|0)} · flow ${(A.cFlow*100|0)} · liq ${(A.cLiq*100|0)} · org ${(A.cOrg*100|0)}</div></div>
   <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';}
@@ -904,9 +968,9 @@ function renderPulse(){const el=$('p_tape');if(!el)return;
  $('p_whale').textContent=bigBuys+'/'+bigSells;
  const ser=hist.slice(-60).map((s,i,a)=>i?{b:Math.max(0,s.buys-a[i-1].buys),s:Math.max(0,s.sells-a[i-1].sells)}:{b:0,s:0}).slice(1);
  $('p_flowstrip').innerHTML=flowStrip(ser);
- $('p_whaletape').innerHTML=tape.filter(t=>t.sol>=2).slice(0,10).map(t=>`<div class=item><div><div class=nm>${t.side==='buy'?'🟢':'🔴'} ${short(t.mint)}</div><div class=sub>${DEXSHORT(t.dex)} · ${new Date(t.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${t.side==='buy'?'up':'down'}">${t.sol.toFixed(2)}◎</div></div></div>`).join('')||'<div class=ctr>watching for size…</div>';
+ $('p_whaletape').innerHTML=tape.filter(t=>t.sol>=2).slice(0,10).map(t=>`<div class="item clickable" onclick="openToken('${t.mint}')"><div><div class=nm>${t.side==='buy'?'🟢':'🔴'} ${short(t.mint)}</div><div class=sub>${DEXSHORT(t.dex)} · ${new Date(t.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${t.side==='buy'?'up':'down'}">${t.sol.toFixed(2)}◎</div></div></div>`).join('')||'<div class=ctr>watching for size…</div>';
  $('p_vol').innerHTML=bars(tv().sort((a,b)=>b.vol-a.vol).slice(0,8).map(T=>({label:short(T.mint),value:+T.vol.toFixed(1),disp:T.vol.toFixed(1)+'◎',color:T.netSol>=0?'#00c805':'#ff5000',full:T.mint})));
- $('p_tape').innerHTML=tape.slice(0,50).map(t=>`<div class=row style=border-bottom:1px solid #15181b;padding:3px 0><span><span class="${t.side==='buy'?'up':'down'}">${t.side==='buy'?'▲':'▼'}</span> ${short(t.mint)} <span class=muted style=font-size:10px>${DEXSHORT(t.dex)}</span></span><span class="${t.side==='buy'?'up':'down'}">${t.sol.toFixed(3)}◎</span></div>`).join('')||'<div class=ctr>waiting for swaps…</div>';
+ $('p_tape').innerHTML=tape.slice(0,50).map(t=>`<div class="row clickable" onclick="openToken('${t.mint}')" style=border-bottom:1px solid var(--hair);padding:3px 4px><span><span class="${t.side==='buy'?'up':'down'}">${t.side==='buy'?'▲':'▼'}</span> ${short(t.mint)} <span class=muted style=font-size:10px>${DEXSHORT(t.dex)}</span></span><span class="${t.side==='buy'?'up':'down'}">${t.sol.toFixed(3)}◎</span></div>`).join('')||'<div class=ctr>waiting for swaps…</div>';
  $('p_dex').innerHTML=donut(dexCount);}
 function med(a){if(!a||!a.length)return 0;const s=a.slice().sort((x,y)=>x-y);return s[s.length>>1];}
 function renderIntel(){if(!$('i_funnel'))return;const A=tv(),N=now();
@@ -939,7 +1003,7 @@ function renderSignals(){const el=$('sig_feed');if(!el)return;
  const cc=$('sig_counts');if(cc)cc.innerHTML=Object.keys(SIG_ICON).filter(k=>sigCounts[k]).map(k=>`<span class=tag>${SIG_ICON[k]} ${k} <b>${sigCounts[k]}</b></span>`).join(' ')||'<span class=muted>warming up… signals appear as the stream flows</span>';
  el.innerHTML=signalFeed.slice(0,40).map(s=>{const T=tokens.get(s.mint),mult=T?T.maxMult.toFixed(1)+'×':'',up=T&&pct(T)>=0;
   const meta=[s.sol?('buy '+s.sol+'◎'):'',s.q?('walletQ '+s.q):'',s.score?('alpha '+(s.score|0)):'',s.x?(s.x+'× breakout'):''].filter(Boolean).join(' · ');
-  return `<div class=item><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';}
+  return `<div class="item clickable" onclick="openToken('${s.mint}')"><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';}
 function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findDiscStrat();
  const sc=$('disc_scatter');if(sc){const pts=tv().filter(T=>(now()-T.firstSeen)>60&&T.maxMult>1&&T.firstPrice>0).slice(-400).map(T=>({x:alphaCached(T).score,y:T.maxMult,up:T.maxMult>=1.5}));sc.innerHTML=scatter(pts,'alpha score →','peak × (log)',160,true);}   // always: validates score→outcome
  const ab=$('disc_auto');if(ab){ab.textContent=autoDiscover?'auto ●':'auto ○';ab.className='mini'+(autoDiscover?' on':'');}
@@ -955,9 +1019,9 @@ function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findD
  $('disc_lift').innerHTML=order.map(([i,wv])=>{const L=disc.lift[i];return `<div class=row><span class=muted>${DISC_FEATS[i]}</span><span><span class="${wv>0?'up':'down'}">w ${wv>=0?'+':''}${wv.toFixed(2)}</span> · lift ${L.lift.toFixed(2)}× (${(L.ph*100|0)}/${(L.pl*100|0)})</span></div>`;}).join('');
  const cand=tv().filter(T=>now()-T.lastSeen<90&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,p:discScore(T)})).filter(x=>x.p>0.3).sort((a,b)=>b.p-a.p).slice(0,8);
  const thr=(DS&&DS.params.discMin)||55;
- $('disc_live').innerHTML=pred?(cand.map(({T,p})=>`<div class=item><div><div class=nm>${short(T.mint)} <span class=tag style=color:${p*100>=thr?'var(--up)':'#f5a623'}>${(p*100|0)}%</span>${p*100>=thr?' <span class="tag" style=color:var(--up)>🧬 buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)}</div></div><div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div></div></div>`).join('')||'<div class=ctr>no live matches…</div>'):'<div class=ctr>model not predictive yet — gathering data</div>';}
+ $('disc_live').innerHTML=pred?(cand.map(({T,p})=>`<div class="item clickable" onclick="openToken('${T.mint}')"><div><div class=nm>${short(T.mint)} <span class=tag style=color:${p*100>=thr?'var(--up)':'#f5a623'}>${(p*100|0)}%</span>${p*100>=thr?' <span class="tag" style=color:var(--up)>🧬 buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)}</div></div><div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div></div></div>`).join('')||'<div class=ctr>no live matches…</div>'):'<div class=ctr>model not predictive yet — gathering data</div>';}
 function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35&&now()-x.T.lastSeen<300).sort((a,b)=>b.s-a.s).slice(0,10);
- $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class=item>
+ $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class="item clickable" onclick="openToken('${T.mint}')">
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=50?'#f5a623':'#8b9197'}>${s.toFixed(0)}</span></div>
   <div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div>
   <div class=mid>${spark(T.prices,up)}</div>
@@ -1064,7 +1128,7 @@ function renderTrends(){const t=trends();
  const btn=$('tr_autobtn');if(btn){btn.textContent=on?'⚡ Auto-buy ON':'⚡ Auto-buy';btn.className='mini'+(on?' on':'');}
  const qualifying=lead.filter(({rate})=>rate*60>=thr).length;
  const ast=$('tr_autostat');if(ast)ast.innerHTML=on?`<div class=note style=color:var(--up)>⚡ Auto-buying trending tokens ≥ ${thr}/min buyers (${qualifying} qualifying now). Paper · "${TS.name}" book — tune size/stop/threshold in Trading. Flip its 🔴 LIVE switch for on-chain.</div>`:`<div class=note>Tap <b>Auto-buy</b> to open paper positions automatically on the fastest-growing tokens (≥ ${thr}/min buyers). Tune it in the Trading tab.</div>`;
- $('tr_lead').innerHTML=lead.map(({T,rate})=>{const hot=rate*60>=thr&&on;return `<div class=item><div><div class=nm>${short(T.mint)} ${hot?'<span class="tag" style=color:var(--up)>⚡buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning…</div>';}
+ $('tr_lead').innerHTML=lead.map(({T,rate})=>{const hot=rate*60>=thr&&on;return `<div class="item clickable" onclick="openToken('${T.mint}')"><div><div class=nm>${short(T.mint)} ${hot?'<span class="tag" style=color:var(--up)>⚡buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning…</div>';}
 function genStrategy(){const w=trends().winners;
  if(w.n<6){$('tr_edge').innerHTML='<div class=note>Not enough mature winners yet to synthesize — keep it running and try again.</div>';return;}
  const S=newStrategy('Trend '+new Date().toLocaleTimeString(),'momentum');
