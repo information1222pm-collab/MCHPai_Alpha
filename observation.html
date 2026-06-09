@@ -6,14 +6,15 @@
 <title>MCHPAI — Live Observation Center</title>
 <!--
   Self-contained, server-less live observation center.
-  Talks DIRECTLY to Helius from your browser and refreshes continuously.
-  Your API key is NOT stored in this file — you paste it once and it is kept in
-  this browser's localStorage. Safe to commit / share.
+  Talks DIRECTLY to the Helius Solana JSON-RPC from your browser (CORS-safe,
+  works from a local file) and refreshes continuously. No backend required.
 
-  Observes everything measurable in real time: token births, prices, volume,
-  buyers/sellers, flow; wallet activity, cross-token "snipers", net flow;
-  categorizes tokens; surfaces co-buy patterns and heuristic opportunities.
-  (Heuristic "watch" flags are research signals, NOT financial advice.)
+  Your API key is NOT stored in this file — paste it once and it is kept in this
+  browser's localStorage. Safe to commit / share.
+
+  Observes everything measurable in real time: tokens (price, volume, buyers,
+  flow, peak multiple, category) and wallets (activity, cross-token snipers, net
+  flow), plus heuristic opportunity flags (research signals, NOT advice).
 -->
 <style>
 :root{--bg:#0a0e14;--panel:#121821;--line:#1e2733;--txt:#c9d4e0;--dim:#6b7a8d;
@@ -25,14 +26,14 @@ background:#0c121b;position:sticky;top:0;z-index:9;flex-wrap:wrap}
 header h1{font-size:14px;margin:0;letter-spacing:1px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 1.6s infinite}
 @keyframes pulse{50%{opacity:.3}}
-.status{margin-left:auto;color:var(--dim);font-size:11px}
+.status{margin-left:auto;color:var(--dim);font-size:11px;max-width:46%;text-align:right}
 input{background:#0c121b;border:1px solid var(--line);color:var(--txt);padding:5px 8px;border-radius:5px;font-family:inherit;font-size:12px}
 button{background:#16202c;border:1px solid var(--line);color:var(--accent);padding:5px 10px;border-radius:5px;cursor:pointer;font-family:inherit}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 18px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:13px}
 .card.full{grid-column:1/-1}.card.half{grid-column:span 2}
 .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
-.big{font-size:28px;font-weight:600;margin-top:3px}.big.accent{color:var(--accent)}
+.big{font-size:28px;font-weight:600;margin-top:3px}.big.accent{color:var(--accent)}.big.blue{color:var(--blue)}
 h2{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;border-bottom:1px solid var(--line);padding-bottom:7px}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th{color:var(--dim);text-align:left;font-weight:500;padding:3px 7px;border-bottom:1px solid var(--line)}
@@ -44,9 +45,9 @@ td{padding:3px 7px;border-bottom:1px solid #161d27}td.mono{color:var(--dim)}
 .tag.dumping{color:var(--bad);border:1px solid #5c2525}.tag.sniper{color:var(--warn);border:1px solid #5c4a1f}
 .row{display:flex;justify-content:space-between;gap:8px}.note{color:var(--warn);font-size:11px;margin-top:8px}
 #overlay{position:fixed;inset:0;background:rgba(6,9,14,.94);display:flex;align-items:center;justify-content:center;z-index:99}
-#overlay .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px;max-width:520px}
+#overlay .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px;max-width:540px}
 #overlay h3{margin:0 0 10px;color:var(--accent)}#overlay p{color:var(--dim);font-size:12px}
-a{color:var(--accent)}
+a{color:var(--accent)}code{color:var(--blue)}
 </style>
 </head>
 <body>
@@ -54,14 +55,14 @@ a{color:var(--accent)}
   <span class=dot></span><h1>MCHPAI · LIVE OBSERVATION CENTER</h1>
   <input id=keyfield placeholder="Helius API key" size=22 style="margin-left:14px">
   <button onclick="saveKey()">connect</button>
-  <span class=status id=status>idle</span>
+  <span class=status id=status>idle — paste your Helius key</span>
 </header>
 
 <div class=grid>
   <div class=card><div class=k>Tokens (session)</div><div class="big accent" id=c_tok>0</div></div>
   <div class=card><div class=k>Swaps parsed</div><div class=big id=c_swap>0</div></div>
   <div class=card><div class=k>Wallets seen</div><div class=big id=c_wal>0</div></div>
-  <div class=card><div class=k>Births</div><div class=big id=c_birth>0</div></div>
+  <div class=card><div class=k>Fresh &lt;60s</div><div class="big blue" id=c_birth>0</div></div>
 
   <div class="card half"><h2>Live Token Feed — newest activity</h2>
     <div class=feed><table><thead><tr><th>token</th><th>dex</th><th>age</th><th>price◎</th>
@@ -95,13 +96,15 @@ a{color:var(--accent)}
   <div class=box>
     <h3>Connect to the chain</h3>
     <p>Paste your <b>Helius API key</b> to start the live feed. It is stored only in
-    this browser (localStorage) and never sent anywhere except Helius. This page then
-    streams pump.fun / pump.swap activity directly and updates every few seconds.</p>
-    <input id=keyfield2 placeholder="Helius API key" size=40>
+    this browser (localStorage) and is sent only to Helius. This page then streams
+    pump.fun / pump.swap activity directly via the Solana JSON-RPC and updates every
+    few seconds.</p>
+    <input id=keyfield2 placeholder="Helius API key" size=44>
     <button onclick="saveKey2()">start observing</button>
     <p style=margin-top:14px>No key? Get one free at <a href="https://helius.dev" target=_blank>helius.dev</a>.
-    If your browser blocks the request (CORS), run the server version instead:
-    <code>python scripts/observatory.py</code>.</p>
+    Tip: opening straight from the file works, but if anything is blocked, serve it
+    locally with <code>python3 -m http.server</code> and open
+    <code>http://localhost:8000/observation.html</code>.</p>
   </div>
 </div>
 
@@ -119,18 +122,20 @@ const $=id=>document.getElementById(id);
 const now=()=>Math.floor(Date.now()/1000);
 const short=s=>s?s.slice(0,4)+'…'+s.slice(-4):'—';
 const ageStr=s=>{s=Math.max(0,s);return s<60?s+'s':s<3600?(s/60|0)+'m':(s/3600|0)+'h'};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 let KEY=localStorage.getItem('helius_key')||'';
+let busy=false;
 const seen=new Set();
-const tokens=new Map();   // mint -> token record
-const wallets=new Map();  // addr -> wallet record
-let cnt={swaps:0,births:0};
+const tokens=new Map();
+const wallets=new Map();
+let cnt={swaps:0};
 let flow={buys:0,sells:0,bvol:0,svol:0};
 const dexCount={};
 
 function tok(mint){
  if(!tokens.has(mint)) tokens.set(mint,{mint,dex:'',firstSeen:now(),lastSeen:now(),
-  firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),netSol:0,birth:false});
+  firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),netSol:0});
  return tokens.get(mint);
 }
 function wal(a){
@@ -138,40 +143,37 @@ function wal(a){
  return wallets.get(a);
 }
 
-function parseSwap(tx){
- const fp=tx.feePayer; if(!fp) return null;
- let solL=0, td={};
- for(const ad of tx.accountData||[]){
-  if(ad.account===fp) solL+=(ad.nativeBalanceChange||0);
-  for(const tb of ad.tokenBalanceChanges||[]){
-   if(tb.userAccount===fp){
-    const r=tb.rawTokenAmount||{}; const amt=Number(r.tokenAmount||0)/Math.pow(10,Number(r.decimals||0));
-    td[tb.mint]=(td[tb.mint]||0)+amt;
-   }
-  }
- }
- solL+=(tx.fee||0);                       // exclude gas
- if(td[WSOL]){ solL+=td[WSOL]*1e9; delete td[WSOL]; }  // wrapped SOL counts as SOL
- let mint=null,best=0;
- for(const m in td){ if(Math.abs(td[m])>Math.abs(best)){best=td[m];mint=m;} }
- if(!mint||best===0) return null;
- let side=null;
- if(best>0&&solL<0)side='buy'; else if(best<0&&solL>0)side='sell'; else return null;
- const sol=Math.abs(solL)/1e9, t=Math.abs(best);
- let dex=''; for(const ix of tx.instructions||[]){ if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;} }
- return {sig:tx.signature,wallet:fp,mint,side,sol,tok:t,price:t?sol/t:0,ts:tx.timestamp||now(),dex};
+async function rpc(method,params){
+ const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${KEY}`,{
+  method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
+ if(!r.ok) throw new Error('HTTP '+r.status+(r.status===401?' (bad key)':''));
+ const j=await r.json(); if(j.error) throw new Error(j.error.message||'rpc error');
+ return j.result;
 }
 
-function handleTx(tx){
- if(!tx||!tx.signature||seen.has(tx.signature))return; seen.add(tx.signature);
- if(seen.size>120000) seen.clear();
- if(tx.type==='CREATE'){
-  let mint=null;
-  for(const ad of tx.accountData||[]) for(const tb of ad.tokenBalanceChanges||[]) if(tb.mint){mint=tb.mint;break;}
-  if(!mint) for(const tt of tx.tokenTransfers||[]) if(tt.mint){mint=tt.mint;break;}
-  if(mint){const T=tok(mint);T.birth=true;T.firstSeen=tx.timestamp||now();cnt.births++;}
- }
- const s=parseSwap(tx); if(!s)return;
+// Parse a swap from a raw getTransaction (jsonParsed) result using balance deltas.
+function parseSwapRPC(res){
+ const meta=res.meta, msg=res.transaction&&res.transaction.message;
+ if(!meta||meta.err||!msg) return null;
+ const keys=(msg.accountKeys||[]).map(k=>k.pubkey||k);
+ const fp=keys[0]; if(!fp) return null;
+ let solL=(meta.postBalances[0]-meta.preBalances[0])+(meta.fee||0);   // feePayer native, ex-gas
+ const pre={},post={};
+ for(const b of meta.preTokenBalances||[]) if(b.owner===fp){const a=(b.uiTokenAmount&&b.uiTokenAmount.uiAmount)||0; pre[b.mint]=(pre[b.mint]||0)+a;}
+ for(const b of meta.postTokenBalances||[]) if(b.owner===fp){const a=(b.uiTokenAmount&&b.uiTokenAmount.uiAmount)||0; post[b.mint]=(post[b.mint]||0)+a;}
+ const td={}; for(const m of new Set([...Object.keys(pre),...Object.keys(post)])) td[m]=(post[m]||0)-(pre[m]||0);
+ if(td[WSOL]){ solL+=td[WSOL]*1e9; delete td[WSOL]; }                 // wrapped SOL counts as SOL
+ let mint=null,best=0; for(const m in td){ if(Math.abs(td[m])>Math.abs(best)){best=td[m];mint=m;} }
+ if(!mint||best===0) return null;
+ let side; if(best>0&&solL<0)side='buy'; else if(best<0&&solL>0)side='sell'; else return null;
+ let dex=''; for(const ix of msg.instructions||[]){ if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;} }
+ if(!dex) for(const inr of meta.innerInstructions||[]) for(const ix of inr.instructions||[]){ if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;} }
+ const sol=Math.abs(solL)/1e9, t=Math.abs(best);
+ return {sig:res.transaction.signatures[0],wallet:fp,mint,side,sol,tok:t,price:t?sol/t:0,ts:res.blockTime||now(),dex};
+}
+
+function ingest(s){
  cnt.swaps++;
  const T=tok(s.mint); T.lastSeen=s.ts; if(s.dex)T.dex=s.dex;
  if(!T.firstPrice&&s.price)T.firstPrice=s.price;
@@ -194,13 +196,14 @@ function category(T){
 }
 function opportunity(T){
  const age=now()-T.firstSeen, recent=now()-T.lastSeen;
- const flowImb=(T.vol>0)?((T.netSol)/T.vol):0;
+ const flowImb=(T.vol>0)?(T.netSol/T.vol):0;
  return recent<180 && age<600 && T.buyers.size>=4 && flowImb>0.3 && T.maxMult>=1.3;
 }
 
 function render(){
  $('c_tok').textContent=tokens.size; $('c_swap').textContent=cnt.swaps;
- $('c_wal').textContent=wallets.size; $('c_birth').textContent=cnt.births;
+ $('c_wal').textContent=wallets.size;
+ $('c_birth').textContent=[...tokens.values()].filter(T=>now()-T.firstSeen<60).length;
 
  const tl=[...tokens.values()].sort((a,b)=>b.lastSeen-a.lastSeen).slice(0,40);
  $('tokens').innerHTML=tl.map(T=>{const [c,cls]=category(T);return `<tr>
@@ -223,7 +226,7 @@ function render(){
  const ops=[...tokens.values()].filter(opportunity).sort((a,b)=>b.buyers.size-a.buyers.size).slice(0,10);
  $('ops').innerHTML=ops.map(T=>`<tr><td class=mono>${short(T.mint)}</td>
   <td class=mult>${T.maxMult.toFixed(2)}×</td><td class=good>${T.buyers.size}</td>
-  <td class=good>+${((T.netSol)/Math.max(T.vol,1e-9)).toFixed(2)}</td>
+  <td class=good>+${(T.netSol/Math.max(T.vol,1e-9)).toFixed(2)}</td>
   <td>${ageStr(now()-T.firstSeen)}</td></tr>`).join('')||'<tr><td class=muted>scanning for setups…</td></tr>';
  $('ops_note').textContent=ops.length?'Heuristic watch: young + rising flow + multiple fresh buyers. Validate before acting.':'';
 
@@ -233,26 +236,37 @@ function render(){
  const net=flow.bvol-flow.svol; const fn=$('f_net'); fn.textContent=(net>=0?'+':'')+net.toFixed(1); fn.className=net>=0?'good':'bad';
  $('f_dex').textContent=Object.entries(dexCount).map(([k,v])=>`${k}:${v}`).join('  ');
 
- // bound memory
  if(tokens.size>4000){const old=[...tokens.values()].sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000);old.forEach(T=>tokens.delete(T.mint));}
  if(wallets.size>8000){const old=[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000);old.forEach(W=>wallets.delete(W.addr));}
+ if(seen.size>120000) seen.clear();
 }
 
 async function poll(){
- if(!KEY){return;}
- let ok=0,errs=0;
- for(const pid of Object.keys(PROGRAMS)){
-  try{
-   const r=await fetch(`https://api-mainnet.helius-rpc.com/v0/addresses/${pid}/transactions/?api-key=${KEY}&limit=100`);
-   if(!r.ok){errs++; $('status').textContent='⚠ HTTP '+r.status+(r.status===401?' (bad key)':''); continue;}
-   const data=await r.json(); for(const tx of data) handleTx(tx); ok++;
-  }catch(e){errs++; $('status').textContent='⚠ '+e.message+' — if CORS, use python scripts/observatory.py';}
- }
- render();
- if(ok&&!errs) $('status').textContent='live · '+new Date().toLocaleTimeString()+' · swaps '+cnt.swaps;
+ if(!KEY||busy) return; busy=true;
+ try{
+  let pending=[];
+  for(const pid of Object.keys(PROGRAMS)){
+   try{
+    const sigs=await rpc('getSignaturesForAddress',[pid,{limit:25}]);
+    for(const s of sigs||[]) if(s&&s.signature&&!s.err&&!seen.has(s.signature)) pending.push(s.signature);
+   }catch(e){ $('status').textContent='⚠ '+e.message; busy=false; return; }
+  }
+  pending=pending.slice(0,16);                 // bound per-cycle work / rate
+  let parsed=0;
+  for(const sig of pending){
+   seen.add(sig);
+   try{
+    const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);
+    if(res){ const s=parseSwapRPC(res); if(s){ ingest(s); parsed++; } }
+   }catch(e){ /* skip individual tx errors */ }
+   await sleep(40);                            // gentle pacing
+  }
+  render();
+  $('status').textContent='live · '+new Date().toLocaleTimeString()+' · swaps '+cnt.swaps+' · +'+parsed;
+ } finally { busy=false; }
 }
 
-function start(){ $('overlay').style.display='none'; $('keyfield').value=KEY; poll(); setInterval(poll,6000); }
+function start(){ $('overlay').style.display='none'; $('keyfield').value=KEY; $('status').textContent='connecting…'; poll(); setInterval(poll,7000); }
 function saveKey(){ const k=$('keyfield').value.trim(); if(k){KEY=k;localStorage.setItem('helius_key',k);start();} }
 function saveKey2(){ const k=$('keyfield2').value.trim(); if(k){KEY=k;localStorage.setItem('helius_key',k);start();} }
 
