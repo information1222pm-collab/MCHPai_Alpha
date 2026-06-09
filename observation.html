@@ -103,10 +103,10 @@ a{color:var(--up)}.kf{display:none}
   <div id=bot_learn></div>
   <div class=h style=margin:16px 0 8px>Open Positions</div><div class=list id=bot_pos></div>
   <div class=h style=margin:16px 0 8px>Recent Trades</div><div class=list id=bot_log></div>
-  <div class=note>Entries decided by a <b>self-correcting contextual bandit</b> that learns from each trade's
-   realized PnL (explore% rises when losing, falls when winning); exits on risk rules. <b>Realistic fills</b>
-   — latency, slippage + impact, 1% fees, 12% failure. Paper only. It needs many trades to converge;
-   on a short session it stays negative — that honesty is the point.</div>
+  <div class=note><b>Every trade is priced from Helius</b> (getAsset) — entry and exit. Tokens Helius can't
+   price are <b>not traded</b> (no impure fills). A self-correcting bandit decides entries and learns from
+   realized PnL; exits on risk rules. Realistic costs (latency, slippage + impact, 1% fees, 12% failure).
+   Paper only. Fewer trades now (only Helius-priced tokens) but every one is on real data.</div>
 </section>
 
 <section id=s-movers><div class=h>Top Movers</div>
@@ -266,15 +266,15 @@ function tryExit(mint,ts){const pos=bot.pos.get(mint);if(!pos)return;const T=tok
   const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;
   bot.cash+=proc;bot.realized+=pnl;bUpdate(brain,1,pos.ctx,pnl/pos.cost);            // RL learns from realized PnL
   bot.closed.unshift({mint,pnl,ret,reason:ex,ts});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}}
-function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const f=feat(T),ts=now();
- if(bot.pos.has(mint)){tryExit(mint,ts);return;}                                     // re-check exit on every tick
- if(f.price>0&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers){
-  const ctx=ctxOf(f),a=bSelect(brain,ctx),size=botSize(f.liq);                       // RL decides BUY vs SKIP
-  if(a===1&&bot.pos.size<STRAT.maxPos&&bot.cash>=size){
-   if(Math.random()<COST.failP){bot.missed++;return;}                               // tx failed / beaten
-   const slip=COST.baseSlip+impactBps(size,f.liq),fill=f.price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;
-   if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0});}
-  }else if(a===0){bUpdate(brain,0,ctx,0);}}}                                         // learn the skip baseline
+async function botTick(mint){if(!bot.enabled||bot.pos.has(mint))return;const T=tokens.get(mint);if(!T)return;const f=feat(T),ts=now();
+ if(!(f.price>0&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers))return;
+ const ctx=ctxOf(f),a=bSelect(brain,ctx);                                            // RL decides BUY vs SKIP
+ if(a===0){bUpdate(brain,0,ctx,0);return;}
+ if(bot.pos.size>=STRAT.maxPos||bot.cash<botSize(f.liq))return;const size=botSize(f.liq);
+ const ep=await authPriceSol(mint);if(!ep){bot.skippedNoPrice=(bot.skippedNoPrice||0)+1;return;}  // PURE: no Helius price -> no trade
+ if(Math.random()<COST.failP){bot.missed++;return;}
+ const slip=COST.baseSlip+impactBps(size,f.liq),fill=ep*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;
+ if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0});}}                                         // learn the skip baseline
 /* CRITICAL: manage every open position each cycle, even tokens that went quiet */
 async function manageOpenPositions(){const ts=now();for(const m of [...bot.pos.keys()]){
   const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}   // mark at Helius authoritative price
@@ -347,7 +347,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  for(const pid of Object.keys(PROGRAMS)){try{const sigs=await rpc('getSignaturesForAddress',[pid,{limit:25}]);
   for(const s of sigs||[])if(s&&s.signature&&!s.err&&!seen.has(s.signature))pend.push(s.signature);}catch(e){$('status').textContent='⚠ '+e.message;busy=false;return;}}
  pend=pend.slice(0,18);let parsed=0;
- for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);botTick(s.mint);parsed++;}}}catch(e){}await sleep(35);}
+ for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);await botTick(s.mint);parsed++;}}}catch(e){}await sleep(35);}
  if(pollN++%40===0)refreshSolUsd();                                                  // keep SOL/USD fresh for marks
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
