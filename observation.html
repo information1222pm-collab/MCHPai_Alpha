@@ -154,6 +154,15 @@ select{background:rgba(0,0,0,.32);border:1px solid var(--hair);color:var(--ice);
 .dback:hover{border-color:var(--line2);background:rgba(86,240,192,.14)}
 #detail .row.clickable:hover{background:linear-gradient(90deg,rgba(86,240,192,.08),transparent);border-radius:8px}
 .stratcard-head{cursor:pointer}.stratcard-head:hover b{color:var(--mint)}
+.vizgrid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.viz{background:var(--glass);border:1px solid var(--hair);border-radius:18px;padding:18px 18px 16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),var(--shadow);backdrop-filter:blur(13px) saturate(140%);transition:border-color .3s var(--ease),transform .3s var(--ease),box-shadow .3s var(--ease);animation:vizfade .5s var(--ease) both}
+.viz:hover{border-color:var(--line2);transform:translateY(-2px);box-shadow:0 22px 46px -18px rgba(0,0,0,.7),0 0 30px -10px rgba(86,240,192,.18)}
+@keyframes vizfade{from{opacity:.5}to{opacity:1}}
+.vt{font-family:var(--mono);font-size:10.5px;letter-spacing:1.1px;text-transform:uppercase;color:var(--dim);margin-bottom:13px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.vt .vsub{font-size:9px;color:var(--faint);text-transform:none;letter-spacing:.2px;font-weight:400}
+.viz svg{margin:2px 0}
+.vrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px}
+@media(max-width:760px){.vizgrid{grid-template-columns:1fr}}
 @media(max-width:680px){.cols{grid-template-columns:1fr;gap:20px}.dgrid{grid-template-columns:repeat(2,1fr)}.wrap{padding:0 15px}.heroval{font-size:37px}.cols .h{font-size:11px}}
 </style>
 </head>
@@ -178,7 +187,7 @@ select{background:rgba(0,0,0,.32);border:1px solid var(--hair);color:var(--ice);
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-pulse>Pulse</a><a href=#s-intel>Intel</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
+  <a href=#s-hero class=on>Overview</a><a href=#s-pulse>Pulse</a><a href=#s-flowscope>Flowscope</a><a href=#s-cohorts>Cohorts</a><a href=#s-quant>Quant</a><a href=#s-intel>Intel</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
   <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
@@ -217,6 +226,10 @@ select{background:rgba(0,0,0,.32);border:1px solid var(--hair);color:var(--ice);
   <div class=note>The raw pulse of the market: every swap as it lands, who's moving size, where the volume is, and how
    buy/sell pressure is shifting. Dense by design — glance at the gauges, drill into the tape when something moves.</div>
 </section>
+
+<section id=s-flowscope><div class=h>🌊 Flowscope <span class=muted style=font-weight:400>order-flow microstructure</span></div><div id=flowscope_body></div></section>
+<section id=s-cohorts><div class=h>🧬 Cohorts <span class=muted style=font-weight:400>token lifecycle & survival</span></div><div id=cohorts_body></div></section>
+<section id=s-quant><div class=h>📐 Quant <span class=muted style=font-weight:400>strategy & portfolio analytics</span></div><div id=quant_body></div></section>
 
 <section id=s-signals>
   <div class=h>📡 Signals <span class=muted style=font-weight:400>live multi-detector stream</span> <button class=mini id=sigresp_btn onclick=toggleSignalStrat()>📡 Respond to all</button></div>
@@ -416,7 +429,7 @@ let heroMetric='volume',heroWin=0;
 const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map(),junk=new Set(),priceCache=new Map();
 const walletAlpha=new Map();let gradeQ=[];   // ALPHA: per-wallet forward-return grade + pending grade queue
 let signalFeed=[],sigCounts={};const sigSeen=new Map();   // SIGNALS: live multi-detector feed
-const tape=[];let bigBuys=0,bigSells=0;const tradeLog=[];   // PULSE/INTEL: live tape + closed-trade analytics
+const tape=[];let bigBuys=0,bigSells=0;const tradeLog=[];let lifeHist=[],discHist=[];   // PULSE/INTEL/COHORT: tape, trade analytics, lifecycle-over-time, AUC-over-time
 let ws=null,wsSubs=new Map(),wsState='off',wsReconnect=null;const RT_CAP=300;   // REALTIME: Helius WebSocket
 let apiStats={q:0,cache:0,skipped:0};
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
@@ -555,6 +568,33 @@ function gauge(val,mn,mx,label,unit='',good=null){const p=Math.max(0,Math.min(1,
 function underwater(eq,h=60){if(!eq||eq.length<2)return '<div class=ctr>—</div>';let pk=eq[0];const dd=eq.map(v=>{pk=Math.max(pk,v);return pk>0?(v-pk)/pk:0;});
  const w=620,mn=Math.min(...dd,-1e-6),pts=dd.map((d,i)=>`${(i/(dd.length-1)*w).toFixed(1)},${(-d/(-mn||1)*(h-4)).toFixed(1)}`).join(' ');
  return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}><polygon points="0,0 ${pts} ${w},0" fill=rgba(255,106,69,.18)/><polyline points="${pts}" fill=none stroke=#ff6a45 stroke-width=1.4/><text x=4 y=${h-3} fill=#5f7d76 font-size=9>max DD ${(mn*100).toFixed(0)}%</text></svg>`;}
+/* ===== expanded chart library (larger, animated, zero-dep) ===== */
+const vcard=(t,sub,c)=>'<div class=viz><div class=vt><span>'+t+'</span>'+(sub?'<span class=vsub>'+sub+'</span>':'')+'</div>'+c+'</div>';
+function vbars(items,h=160){if(!items.length)return '<div class=ctr>—</div>';const mx=Math.max(...items.map(i=>i.value),1),w=620,bw=w/items.length;
+ return '<svg viewBox="0 0 '+w+' '+h+'" width=100% height='+h+'>'+items.map((it,i)=>{const bh=(Math.max(0,it.value)/mx)*(h-26);return '<rect x="'+(i*bw+bw*0.16).toFixed(1)+'" y="'+(h-20-bh).toFixed(1)+'" width="'+(bw*0.68).toFixed(1)+'" height="'+bh.toFixed(1)+'" rx=3 fill="'+(it.color||'#56f0c0')+'" opacity=.85 style="filter:drop-shadow(0 0 5px '+(it.color||'#56f0c0')+'66)"><title>'+it.label+': '+(it.disp!=null?it.disp:it.value)+'</title></rect><text x="'+(i*bw+bw/2).toFixed(1)+'" y="'+(h-16-bh).toFixed(1)+'" fill=var(--dim) font-size=9 text-anchor=middle font-family=var(--mono)>'+(it.disp!=null?it.disp:it.value)+'</text><text x="'+(i*bw+bw/2).toFixed(1)+'" y="'+(h-5)+'" fill=#5f7d76 font-size=9 text-anchor=middle>'+it.label+'</text>';}).join('')+'</svg>';}
+function multiLine(series,h=180,opts){opts=opts||{};const all=series.flatMap(s=>s.v).filter(x=>isFinite(x));if(all.length<2)return '<div class=ctr>collecting…</div>';const mn=Math.min(...all),mx=Math.max(...all),r=(mx-mn)||1,w=620,Y=v=>h-14-(v-mn)/r*(h-24);
+ const paths=series.map(s=>{if(!s.v||s.v.length<2)return '';const p=s.v.map((v,i)=>[i/(s.v.length-1)*w,Y(v)]);return '<path d="'+smooth(p)+'" fill=none stroke="'+s.color+'" stroke-width=2 opacity=.92 style="filter:drop-shadow(0 0 4px '+s.color+'88)"/>';}).join('');
+ const leg=series.map(s=>'<span style="color:'+s.color+';font-family:var(--mono);font-size:10px;margin-right:12px">● '+s.name+'</span>').join('');
+ return '<svg viewBox="0 0 '+w+' '+h+'" width=100% height='+h+' preserveAspectRatio=none>'+paths+'</svg><div style=margin-top:6px>'+leg+'</div>';}
+function radar(labels,vals,h=210){const n=labels.length;if(n<3)return '<div class=ctr>—</div>';const cx=h/2,cy=h/2,R=h/2-30,mx=Math.max(...vals,1e-6);
+ const ptOf=(v,i)=>{const a=-Math.PI/2+i/n*2*Math.PI;return [cx+Math.cos(a)*R*(Math.max(0,v)/mx),cy+Math.sin(a)*R*(Math.max(0,v)/mx)];};
+ const grid=[0.33,0.66,1].map(g=>'<polygon points="'+labels.map((_,i)=>{const a=-Math.PI/2+i/n*2*Math.PI;return (cx+Math.cos(a)*R*g).toFixed(1)+','+(cy+Math.sin(a)*R*g).toFixed(1);}).join(' ')+'" fill=none stroke=var(--hair)/>').join('');
+ const spokes=labels.map((_,i)=>{const a=-Math.PI/2+i/n*2*Math.PI;return '<line x1='+cx+' y1='+cy+' x2='+(cx+Math.cos(a)*R).toFixed(1)+' y2='+(cy+Math.sin(a)*R).toFixed(1)+' stroke=var(--hair)/>';}).join('');
+ const poly='<polygon points="'+vals.map((v,i)=>ptOf(v,i).map(z=>z.toFixed(1)).join(',')).join(' ')+'" fill=rgba(86,240,192,.2) stroke=var(--mint) stroke-width=1.6 style="filter:drop-shadow(0 0 6px rgba(86,240,192,.5))"/>';
+ const labs=labels.map((l,i)=>{const a=-Math.PI/2+i/n*2*Math.PI,x=cx+Math.cos(a)*(R+16),y=cy+Math.sin(a)*(R+16);return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" fill=#7c948d font-size=9 text-anchor=middle dominant-baseline=middle>'+l+'</text>';}).join('');
+ return '<svg viewBox="0 0 '+h+' '+h+'" width='+h+' height='+h+' style=display:block;margin:0 auto>'+grid+spokes+poly+labs+'</svg>';}
+function stackArea(series,h=160){const n=Math.max.apply(null,series.map(s=>s.v.length).concat([0]));if(n<2)return '<div class=ctr>collecting…</div>';const w=620;
+ const totals=[];for(let i=0;i<n;i++){let t=0;series.forEach(s=>t+=s.v[i]||0);totals.push(t);}const mx=Math.max.apply(null,totals.concat([1]));
+ let acc=new Array(n).fill(0);const layers=series.map(s=>{const top=acc.map((a,i)=>a+(s.v[i]||0));const fwd=top.map((v,i)=>(i/(n-1)*w).toFixed(1)+' '+(h-v/mx*(h-6)).toFixed(1)).join(' L');const back=acc.slice().reverse().map((v,i)=>((n-1-i)/(n-1)*w).toFixed(1)+' '+(h-v/mx*(h-6)).toFixed(1)).join(' L');acc=top;return '<path d="M'+fwd+' L'+back+' Z" fill="'+s.color+'" opacity=.5/>';}).join('');
+ const leg=series.map(s=>'<span style="color:'+s.color+';font-family:var(--mono);font-size:9.5px;margin-right:10px">● '+s.name+'</span>').join('');
+ return '<svg viewBox="0 0 '+w+' '+h+'" width=100% height='+h+' preserveAspectRatio=none>'+layers+'</svg><div style=margin-top:6px>'+leg+'</div>';}
+function waterfall(vals,h=160){if(!vals||!vals.length)return '<div class=ctr>—</div>';const w=620,bw=w/vals.length;let cum=0;const seg=[];vals.forEach(v=>{seg.push([cum,cum+v]);cum+=v;});const lo=Math.min.apply(null,[0].concat(seg.map(p=>Math.min(p[0],p[1])))),hi=Math.max.apply(null,[0].concat(seg.map(p=>Math.max(p[0],p[1])))),r=(hi-lo)||1,Y=v=>h-16-(v-lo)/r*(h-22);
+ return '<svg viewBox="0 0 '+w+' '+h+'" width=100% height='+h+'>'+seg.map((p,i)=>{const y0=Y(p[0]),y1=Y(p[1]),up=vals[i]>=0;return '<rect x="'+(i*bw+bw*0.12).toFixed(1)+'" y="'+Math.min(y0,y1).toFixed(1)+'" width="'+(bw*0.76).toFixed(1)+'" height="'+(Math.abs(y1-y0)||1).toFixed(1)+'" fill="'+(up?'#34ecaa':'#ff6a52')+'" opacity=.82/>';}).join('')+'<line x1=0 y1="'+Y(0).toFixed(1)+'" x2='+w+' y2="'+Y(0).toFixed(1)+'" stroke=var(--line2)/><text x=4 y=12 fill=#5f7d76 font-size=9>cumulative '+(cum>=0?'+':'')+cum.toFixed(2)+'◎</text></svg>';}
+function ring(frac,label,sub,h=128){frac=Math.max(0,Math.min(1,frac||0));const cx=h/2,cy=h/2,rr=h/2-12,c=2*Math.PI*rr,col=frac>=0.5?'#34ecaa':frac>=0.25?'#f3c352':'#ff6a52';
+ return '<div style="display:flex;align-items:center;gap:18px"><svg width='+h+' height='+h+'><circle cx='+cx+' cy='+cy+' r='+rr+' fill=none stroke=rgba(255,255,255,.06) stroke-width=9/><circle cx='+cx+' cy='+cy+' r='+rr+' fill=none stroke="'+col+'" stroke-width=9 stroke-linecap=round stroke-dasharray="'+(c*frac).toFixed(1)+' '+c.toFixed(1)+'" transform="rotate(-90 '+cx+' '+cy+')" style="filter:drop-shadow(0 0 7px '+col+');transition:stroke-dasharray .7s var(--ease)"/><text x='+cx+' y='+(cy+1)+' fill="'+col+'" font-family=var(--mono) font-size=19 font-weight=600 text-anchor=middle dominant-baseline=middle>'+(frac*100).toFixed(0)+'%</text></svg><div><div style="font-family:var(--mono);font-size:14px">'+label+'</div><div class=sub>'+(sub||'')+'</div></div></div>';}
+function bubble(pts,xl,yl,h=190){if(!pts||pts.length<2)return '<div class=ctr>collecting…</div>';const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),w=620,xn=Math.min(...xs),xx=Math.max(...xs),yn=Math.min(...ys),yx=Math.max(...ys),rx=(xx-xn)||1,ry=(yx-yn)||1,sm=Math.max.apply(null,pts.map(p=>p.r||1).concat([1]));
+ const X=v=>14+(v-xn)/rx*(w-28),Y=v=>h-18-(v-yn)/ry*(h-30);
+ return '<svg viewBox="0 0 '+w+' '+h+'" width=100% height='+h+'>'+pts.map(p=>'<circle cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(4+(p.r||1)/sm*18).toFixed(1)+'" fill="'+(p.up?'rgba(52,236,170,.35)':'rgba(255,106,82,.32)')+'" stroke="'+(p.up?'#34ecaa':'#ff6a52')+'"'+(p.mint?' style=cursor:pointer onclick="openToken(\''+p.mint+'\')"':'')+'>'+(p.mint?'<title>'+short(p.mint)+'</title>':'')+'</circle>').join('')+'<text x='+(w-8)+' y='+(h-4)+' fill=#5b6166 font-size=9 text-anchor=end>'+xl+'</text><text x=12 y=12 fill=#5b6166 font-size=9>'+yl+'</text></svg>';}
 
 /* ---- data ---- */
 async function rpc(m,p){const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})});
@@ -725,7 +765,7 @@ function discoverPatterns(){ // build dataset from matured snapshots, fit, store
  if(rows.length<40)return null;const m=discLogistic(rows);
  // univariate lift per feature (median split)
  m.lift=DISC_FEATS.map((nm,i)=>{const col=rows.map(r=>r.x[i]).slice().sort((a,b)=>a-b),med=col[col.length>>1];const hi=rows.filter(r=>r.x[i]>med),lo=rows.filter(r=>r.x[i]<=med);const ph=hi.length?hi.filter(r=>r.y).length/hi.length:0,pl=lo.length?lo.filter(r=>r.y).length/lo.length:0;return {nm,ph,pl,lift:ph/(pl+1e-9)};});
- m.ts=now();m.base=rows.filter(r=>r.y).length/rows.length;disc=m;return m;}
+ m.ts=now();m.base=rows.filter(r=>r.y).length/rows.length;disc=m;discHist.push({ts:m.ts,auc:m.auc});if(discHist.length>80)discHist.shift();return m;}
 function discScore(T){if(!disc||disc.auc<0.6)return 0;const x=discFeat(T);return sigmoid(x.reduce((s,v,i)=>s+(v-disc.mu[i])/disc.sd[i]*disc.w[i],disc.b));}
 /* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
 function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
@@ -1039,6 +1079,85 @@ function renderIntel(){if(!$('i_funnel'))return;const A=tv(),N=now();
  $('i_volacc').innerHTML=bars(acc.map(({T,g})=>({label:short(T.mint),value:+g.toFixed(2),disp:'+'+(g*100|0)+'%',color:'#2fe6a0',full:T.mint})))||'<div class=ctr>—</div>';
  const osc=[];for(let i=1;i<hist.length;i++){const db=Math.max(0,hist[i].buys-hist[i-1].buys),ds=Math.max(0,hist[i].sells-hist[i-1].sells);osc.push((db-ds)/(db+ds||1));}
  $('i_osc').innerHTML=osc.length>1?rhChart(osc.map(v=>v+1),140,osc[osc.length-1]>=0):'<div class=ctr>collecting…</div>';}
+function renderFlowscope(){const el=$('flowscope_body');if(!el)return;const N=now(),A=tv();
+ const cvd=hist.map(s=>s.bvol-s.svol),tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;
+ const sd=diff(hist.slice(-12).map(s=>s.swaps)),tpm=Math.round(sd.reduce((a,b)=>a+b,0)/Math.max(sd.length*7/60,1/60));
+ const osc=[];for(let i=1;i<hist.length;i++){const db=Math.max(0,hist[i].buys-hist[i-1].buys),ds=Math.max(0,hist[i].sells-hist[i-1].sells);osc.push((db-ds)/(db+ds||1)+1);}
+ const fser=hist.slice(-60).map((s,i,a)=>i?{b:Math.max(0,s.buys-a[i-1].buys),s:Math.max(0,s.sells-a[i-1].sells)}:{b:0,s:0}).slice(1);
+ const whales=tape.filter(t=>t.sol>=2).slice(0,80).map(t=>({x:t.ts,y:t.sol,up:t.side==='buy',mint:t.mint}));
+ const vollead=A.slice().sort((a,b)=>b.vol-a.vol).slice(0,10).map(T=>({label:short(T.mint),value:+T.vol.toFixed(1),disp:T.vol.toFixed(1)+'◎',color:T.netSol>=0?'#34ecaa':'#ff6a52',full:T.mint}));
+ const sizes=tape.map(t=>t.sol).filter(x=>x>0),bigShare=(bigBuys+bigSells)/Math.max(cnt.swaps,1);
+ const bvs=[{label:'buy vol',value:+flow.bvol.toFixed(0),disp:flow.bvol.toFixed(0)+'◎',color:'#34ecaa'},{label:'sell vol',value:+flow.svol.toFixed(0),disp:flow.svol.toFixed(0)+'◎',color:'#ff6a52'}];
+ el.innerHTML='<div class=vrow>'+ring(bp,'Buy pressure',(bp*100).toFixed(0)+'% of flow',118)+ring(1-bp,'Sell pressure',((1-bp)*100).toFixed(0)+'% of flow',118)+'</div>'
+  +'<div class=vizgrid>'
+   +vcard('Cumulative Volume Delta','net ◎ buy−sell over session',rhChart(cvd,180,cvd.length?cvd[cvd.length-1]>=0:true,{fmt:x=>(x>=0?'+':'')+(+x).toFixed(2)+'◎'}))
+   +vcard('Aggression oscillator','buy vs sell tick tilt',osc.length>1?rhChart(osc,160,osc[osc.length-1]>=1):'<div class=ctr>collecting…</div>')
+   +vcard('Trade-size distribution','◎ per swap',histogram(sizes,'#56f0c0',160))
+   +vcard('Whale timeline','size vs time · ≥2◎ · tap',bubble(whales,'time →','size ◎',180))
+   +vcard('Order-flow pressure','buy(green)/sell(red) over time',flowStrip(fser,60))
+   +vcard('Buy vs sell volume','cumulative ◎',bars(bvs))
+   +vcard('Volume leaders','live ◎ · tap to drill',bars(vollead))
+   +vcard('Venue share','swaps by DEX · tap',donut(dexCount,128,'dex'))
+   +vcard('Price velocity','%/min across tokens',histogram(A.filter(T=>T.prices.length>=2&&N-T.firstSeen>20).map(T=>Math.max(-200,Math.min(500,pct(T)/Math.max((N-T.firstSeen)/60,1)))),'#f3c352',160))
+   +vcard('Trades / min','market tempo',ring(Math.min(1,tpm/400),tpm+' /min',tpm>250?'hot':tpm>80?'active':'quiet',118))
+   +vcard('Large-trade share','≥2◎ as % of swaps',ring(Math.min(1,bigShare*5),(bigShare*100).toFixed(1)+'%',bigBuys+' big buys / '+bigSells+' sells',118))
+  +'</div>';}
+function renderCohorts(){const el=$('cohorts_body');if(!el)return;const N=now(),A=tv();
+ const births=diff(hist.map(s=>s.tokens)),active=A.filter(T=>N-T.lastSeen<300).length,survFrac=A.length?active/A.length:0;
+ const mature=A.filter(T=>N-T.firstSeen>120&&T.maxMult>1.2&&T.firstPrice>0),rug=mature.filter(T=>T.lastPrice<=0.5*T.maxMult*T.firstPrice).length,rugFrac=mature.length?rug/mature.length:0;
+ const runners=A.filter(T=>N-T.firstSeen>90),win2=runners.length?runners.filter(T=>T.maxMult>=2).length/runners.length:0;
+ const mult=[['≥1.5×',1.5],['≥2×',2],['≥3×',3],['≥5×',5],['≥10×',10]].map(([l,m])=>({label:l,value:A.filter(T=>T.maxMult>=m).length,disp:String(A.filter(T=>T.maxMult>=m).length),color:'#56f0c0'}));
+ const ages=A.map(T=>N-T.firstSeen),ttp=A.filter(T=>T.maxMult>=1.5&&T.peakTs).map(T=>T.peakTs-T.firstSeen);
+ const peakSc=A.filter(T=>T.maxMult>1&&T.firstPrice>0).slice(-300).map(T=>({x:N-T.firstSeen,y:T.maxMult,up:T.maxMult>=2,mint:T.mint}));
+ const cats={fresh:0,heating:0,active:0,dumping:0,quiet:0};A.forEach(T=>cats[category(T)]++);
+ const lifeS=['fresh','heating','active','dumping','quiet'].map((k,i)=>({name:k,color:['#34ecaa','#8effe3','#56f0c0','#f3c352','#5f7d76'][i],v:lifeHist.map(l=>l[k]||0)}));
+ const velo=A.filter(T=>N-T.lastSeen<120&&T.buyers.size>=4).map(T=>({T,r:T.buyers.size/Math.max(N-T.firstSeen,1)*60})).sort((a,b)=>b.r-a.r).slice(0,10).map(({T,r})=>({label:short(T.mint),value:+r.toFixed(1),disp:r.toFixed(0)+'/min',color:'#34ecaa',full:T.mint}));
+ const bub=A.filter(T=>T.maxMult>1).slice(-120).map(T=>({x:N-T.firstSeen,y:T.maxMult,r:T.buyers.size,up:T.maxMult>=2,mint:T.mint}));
+ const surv=[[0,300,'<5m'],[300,600,'5-10m'],[600,1200,'10-20m'],[1200,1e9,'20m+']].map(([lo,hi,l])=>{const c=A.filter(T=>{const a=N-T.firstSeen;return a>=lo&&a<hi;}),al=c.filter(T=>N-T.lastSeen<300).length;return {label:l,value:c.length?+(al/c.length*100).toFixed(0):0,disp:(c.length?(al/c.length*100|0):0)+'%',color:'#8effe3'};});
+ el.innerHTML='<div class=vrow>'+ring(survFrac,'Survival',active+' active / '+A.length,118)+ring(1-rugFrac,'Not rugged',(rugFrac*100|0)+'% dumped >50%',118)+ring(win2,'≥2× rate',runners.length+' mature',118)+'</div>'
+  +'<div class=vizgrid>'
+   +vcard('Launch rate','new tokens / interval',rhChart(births.length>1?births:[0,0],160,true,{fmt:x=>Math.round(x)+' new'}))
+   +vcard('Lifecycle composition','phase mix over time',stackArea(lifeS,160))
+   +vcard('Multiple achievement','# tokens reaching each ×',vbars(mult,170))
+   +vcard('Survival by cohort','% active by birth age',vbars(surv,160))
+   +vcard('Age distribution','seconds since first seen',histogram(ages,'#8effe3',160))
+   +vcard('Time-to-peak','s from birth to peak',histogram(ttp,'#56f0c0',160))
+   +vcard('Age → peak ×','where runners cluster · tap',scatter(peakSc,'age s →','peak × (log)',170,true))
+   +vcard('Age · peak · buyers','bubble size = buyers · tap',bubble(bub,'age s →','peak ×',180))
+   +vcard('Lifecycle snapshot','current phase counts',bars([['fresh','#34ecaa'],['heating','#8effe3'],['active','#56f0c0'],['dumping','#f3c352'],['quiet','#5f7d76']].map(([k,c])=>({label:k,value:cats[k],disp:String(cats[k]),color:c}))))
+   +vcard('Buyer velocity leaders','buyers/min · tap',bars(velo))
+  +'</div>';}
+function renderQuant(){const el=$('quant_body');if(!el)return;const N=now(),act=strategies.filter(s=>!s.retired);
+ const lens=act.map(S=>S.book.eqHist.length).filter(x=>x>0),minL=lens.length?Math.min.apply(null,lens):0;
+ const PAL=['#34ecaa','#8effe3','#f3c352','#ff6a52','#8fd8ff','#c98bff','#56f0c0','#ffd166'];
+ const eqSeries=minL>1?act.map((S,i)=>({name:S.name.split(' ')[0],color:PAL[i%8],v:S.book.eqHist.slice(-minL)})):[];
+ let agg=[];if(minL>1){for(let i=0;i<minL;i++){let v=0;act.forEach(S=>{const h=S.book.eqHist;v+=h[h.length-minL+i]||0;});agg.push(v);}}
+ const rs=rateStats(60),stratBars=act.map(S=>{const r=(rs.per[S.name]||0)/Math.max(rs.hrs,1e-9);return {label:S.name.split(' ')[0],value:+r.toFixed(2),disp:(r>=0?'+':'')+r.toFixed(2)+'/hr',color:r>=0?'#34ecaa':'#ff6a52',click:"openDetail('strategy','"+S.id+"')"};});
+ const rets=tradeLog.map(t=>t.ret*100),rmult=tradeLog.map(t=>t.ret/0.25),wf=pnlLog.slice(-40).map(e=>e.pnl);
+ const alphaRet=tradeLog.filter(t=>t.alpha!=null).map(t=>({x:t.alpha,y:Math.max(0.05,1+t.ret),up:t.ret>=0}));
+ const holdRet=tradeLog.map(t=>({x:t.hold,y:Math.max(0.05,1+t.ret),up:t.ret>=0}));
+ const buckets={};pnlLog.forEach(e=>{const b=Math.floor(e.ts/60);buckets[b]=(buckets[b]||0)+e.pnl;});const ohr=Object.keys(buckets).sort((a,b)=>a-b).map(k=>buckets[k]*60);
+ const winAge=[[0,30],[30,60],[60,120],[120,1e9]].map(([lo,hi])=>{const b=tradeLog.filter(t=>t.entryAge>=lo&&t.entryAge<hi),w=b.length?b.filter(t=>t.ret>0).length/b.length:0;return {label:(hi>1e8?lo+'+':lo+'-'+hi)+'s',value:+(w*100).toFixed(0),disp:(w*100|0)+'%·'+b.length,color:w>=0.4?'#34ecaa':'#f3c352'};});
+ let dep=0,cash=0;strategies.forEach(S=>{S.book.pos.forEach(p=>dep+=p.cost);cash+=S.book.cash;});
+ let streak=0,sign=0;for(const t of tradeLog.slice().reverse()){const s=t.ret>0?1:-1;if(sign===0){sign=s;streak=1;}else if(s===sign)streak++;else break;}
+ const aucT=discHist.map(d=>d.auc);
+ el.innerHTML='<div class=vrow>'+ring(Math.min(1,dep/Math.max(dep+cash,1)),'Exposure',dep.toFixed(2)+'◎ deployed',118)
+   +'<div class=dstat style=display:flex;flex-direction:column;justify-content:center><div class=l>Current streak</div><div class="v '+(sign>0?'up':sign<0?'down':'')+'">'+(streak?(sign>0?streak+'W':streak+'L'):'—')+'</div></div>'
+   +'<div class=dstat style=display:flex;flex-direction:column;justify-content:center><div class=l>Closed trades</div><div class=v>'+tradeLog.length+'</div></div></div>'
+  +'<div class=vizgrid>'
+   +vcard('Equity curves','all strategies overlaid',multiLine(eqSeries,180))
+   +vcard('Aggregate drawdown','underwater equity',underwater(agg,90))
+   +vcard('PnL waterfall','last 40 closed trades',waterfall(wf,160))
+   +vcard('Return distribution','% per trade',histogram(rets,'#34ecaa',160))
+   +vcard('R-multiple distribution','return / risk',histogram(rmult,'#8effe3',160))
+   +vcard('Entry alpha → exit ×','does conviction pay? · tap',scatter(alphaRet,'alpha →','exit × (log)',170,true))
+   +vcard('Hold-time → exit ×','timing edge · tap',scatter(holdRet,'hold s →','exit × (log)',170,true))
+   +vcard('◎/hr trend','realized rate per minute',ohr.length>1?rhChart(ohr,160,ohr[ohr.length-1]>=0,{fmt:x=>(x>=0?'+':'')+(+x).toFixed(2)+'/hr'}):'<div class=ctr>collecting…</div>')
+   +vcard('Strategy ◎/hr','60m · tap to open',bars(stratBars))
+   +vcard('Win% by entry age','younger vs older entries',bars(winAge))
+   +(disc?vcard('Discovered feature weights','what the model keys on',radar(DISC_FEATS,disc.w.map(Math.abs),200)):'')
+   +(aucT.length>1?vcard('Model AUC trend','learning curve · >0.6 predictive',rhChart(aucT,150,aucT[aucT.length-1]>=0.6,{fmt:x=>(+x).toFixed(2)})):'')
+  +'</div>';}
 function renderSignals(){const el=$('sig_feed');if(!el)return;
  const SR=findSignalStrat(),srb=$('sigresp_btn');if(srb){const on=SR&&SR.on;srb.textContent=on?'📡 Responding ON':'📡 Respond to all';srb.className='mini'+(on?' on':'');}
  const cc=$('sig_counts');if(cc)cc.innerHTML=Object.keys(SIG_ICON).filter(k=>sigCounts[k]).map(k=>`<span class="tag clickable" onclick="openDetail('signal','${k}')">${SIG_ICON[k]} ${k} <b>${sigCounts[k]}</b> ›</span>`).join(' ')||'<span class=muted>warming up… signals appear as the stream flows</span>';
@@ -1187,7 +1306,7 @@ function scanSignals(){const t=now(),AS=findAlphaStrat(),TS=findTrendStrat();
   const A=alphaCached(T);if(A.score>=thrA)sig('alpha',T.mint,{score:+A.score.toFixed(0)});
   const age=t-T.firstSeen;if(age>0&&T.buyers.size/age*60>=thrT)sig('trend',T.mint,{});}}
 /* render only the visible tab + one rotating section per cycle (was: all 13 every cycle, each scanning every token) */
-const SECT={'s-pulse':renderPulse,'s-intel':renderIntel,'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
+const SECT={'s-pulse':renderPulse,'s-flowscope':renderFlowscope,'s-cohorts':renderCohorts,'s-quant':renderQuant,'s-intel':renderIntel,'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
 const SKEYS=Object.keys(SECT);let rrIdx=0,activeSection='s-hero';
 function render(){renderHero();renderChips();renderTrade();
  const af=SECT[activeSection];if(af)af();
@@ -1208,6 +1327,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  if(pollN++%40===0)refreshSolUsd();                                                  // keep SOL/USD fresh for marks
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  scanSignals();                                                                      // emit alpha/trend signals regardless of active tab
+ {const lc={fresh:0,heating:0,active:0,dumping:0,quiet:0};for(const T of tv())lc[category(T)]++;lifeHist.push(lc);if(lifeHist.length>80)lifeHist.shift();}   // COHORT: lifecycle composition over time
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
  refreshProof();gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
