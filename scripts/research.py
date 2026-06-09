@@ -32,7 +32,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mchpai_common.strategies import (
     CostModel, ExecutionModel, Features, Position, StrategyParams,
-    entry_signal, exit_signal,
+    entry_signal, exit_signal, position_size,
 )
 
 ACQ_DB = os.environ.get("ACQUIRE_DB", "data/acquisition.db")
@@ -79,7 +79,8 @@ class TState:
     def feat(self, ts):
         return Features(price=self.last, buy_vol=self.buy_vol, sell_vol=self.sell_vol,
                         buyers=len(self.buyers), age_s=ts - self.birth,
-                        prices=list(self.prices), smart_buyers=len(self.smart))
+                        prices=list(self.prices), smart_buyers=len(self.smart),
+                        liquidity=self.liq())
 
     def liq(self):
         return max(self.cumvol, 5.0)
@@ -121,9 +122,10 @@ def backtest(rows, wfirst, ticks, params: StrategyParams, cost: CostModel, seed=
                 slips.append(fill.slippage_bps)
                 eq_curve.append(cash + sum(p["tokens"] * states[m].last for m, p in positions.items() if m != mint))
                 del positions[mint]
-        elif len(positions) < params.max_positions and cash >= params.size_sol:
-            if entry_signal(f, params):
-                fill = ex.buy(params.size_sol, price, st.liq(), tick_path=tickpath(mint, ts), decision_ts=ts)
+        else:
+            size = position_size(params, st.liq())   # liquidity-aware sizing
+            if len(positions) < params.max_positions and cash >= size and entry_signal(f, params):
+                fill = ex.buy(size, price, st.liq(), tick_path=tickpath(mint, ts), decision_ts=ts)
                 if fill.ok and fill.tokens > 0:
                     cash -= fill.cost_sol
                     slips.append(fill.slippage_bps)
@@ -155,59 +157,83 @@ def backtest(rows, wfirst, ticks, params: StrategyParams, cost: CostModel, seed=
     }
 
 
+def build_grid(quick: bool) -> list[StrategyParams]:
+    """Aggressive sweep over every 'wiser' lever: smart-money gating, liquidity-
+    aware sizing, quality filter, and runner (let-winners-run) exits."""
+    smart_opts = [1, 2]
+    liqf_opts = [0.0, 0.04, 0.08]            # 0 = fixed size; >0 = % of liquidity
+    minliq_opts = [0.0, 4.0] if quick else [0.0, 4.0, 10.0]
+    runner_opts = [False, True]
+    trail_opts = [0.35, 0.55]
+    ratio_opts = [2.0, 3.0]
+    out = []
+    for smart in smart_opts:
+        for liqf in liqf_opts:
+            for minliq in minliq_opts:
+                for runner in runner_opts:
+                    for trail in trail_opts:
+                        for ratio in ratio_opts:
+                            out.append(StrategyParams(
+                                size_sol=0.5, max_positions=6, smart_min=smart,
+                                liq_fraction=liqf, min_ticket=0.08, max_ticket=1.0,
+                                min_liquidity_sol=minliq, runner=runner, trail=trail,
+                                ratio_in=ratio, take_profit=0.8, stop_loss=-0.35,
+                                mom_in=0.05, hold_max_s=1200,
+                                exit_reversal=not runner, exit_pressure=not runner))
+    return out
+
+
+def _label(p: StrategyParams) -> str:
+    return (f"smart>={p.smart_min} liqf={p.liq_fraction:.2f} minLiq={p.min_liquidity_sol:.0f} "
+            f"{'RUNNER' if p.runner else 'TP+80%'} trail{p.trail:.0%} ratio>={p.ratio_in:.0f}")
+
+
 def search(quick=False):
     rows, wfirst, ticks = load()
     if not rows:
         print("no data — run scripts/acquire.py first")
         return
-    grid = {
-        "ratio_in": [1.5, 2.5] if quick else [1.5, 2.5, 4.0],
-        "take_profit": [0.4, 0.8] if quick else [0.3, 0.6, 1.0],
-        "stop_loss": [-0.25] if quick else [-0.3, -0.2],
-        "smart_min": [0, 1, 2],
-        "mom_in": [0.05] if quick else [0.03, 0.1],
-    }
     cost = CostModel()
-    keys = list(grid)
+    configs = build_grid(quick)
     results = []
-    for combo in itertools.product(*[grid[k] for k in keys]):
-        kw = dict(zip(keys, combo))
-        p = StrategyParams(size_sol=0.5, max_positions=5, **kw)
-        # average a few seeds (failure prob is stochastic)
+    for p in configs:
         ms = [backtest(rows, wfirst, ticks, p, cost, seed=s) for s in range(3)]
         m = {k: float(np.mean([x[k] for x in ms])) for k in ms[0]}
-        m["params"] = kw
+        m["p"] = p
         results.append(m)
 
     elig = [r for r in results if r["trades"] >= 8]
     elig.sort(key=lambda r: -r["net_pnl"])
-    print(f"=== REALISTIC STRATEGY SEARCH ({len(rows)} swaps, {len(results)} configs) ===")
-    print("cost model: latency ~1.25s, slippage = 80bps + impact, 1% fee/side, "
-          "0.0018◎ fixed, 12% fail")
-    print(f"\n{'net◎':>7}{'ret%':>7}{'trades':>7}{'win%':>6}{'PF':>6}{'sharpe':>7}{'maxDD%':>7}  params")
-    for r in (elig[:8] or sorted(results, key=lambda r: -r["net_pnl"])[:8]):
+    print(f"=== AGGRESSIVE REALISTIC SEARCH ({len(rows)} swaps, {len(results)} configs) ===")
+    print("costs: latency ~1.25s · slippage 80bps + impact · 1% fee/side · 12% fail")
+    print(f"\n{'net◎':>7}{'ret%':>7}{'trades':>7}{'win%':>6}{'PF':>6}{'shrp':>6}{'DD%':>6}  config")
+    for r in (elig[:10] or sorted(results, key=lambda r: -r["net_pnl"])[:10]):
         print(f"{r['net_pnl']:>7.2f}{r['ret_pct']:>7.1f}{r['trades']:>7.0f}{r['win_rate']*100:>6.0f}"
-              f"{min(r['profit_factor'],9.99):>6.2f}{r['sharpe']:>7.2f}{r['max_dd_pct']:>7.1f}  "
-              f"ratio>={r['params']['ratio_in']} tp+{r['params']['take_profit']:.0%} "
-              f"sl{r['params']['stop_loss']:.0%} smart>={r['params']['smart_min']} mom+{r['params']['mom_in']:.0%}")
+              f"{min(r['profit_factor'],9.99):>6.2f}{r['sharpe']:>6.2f}{r['max_dd_pct']:>6.0f}  {_label(r['p'])}")
 
     best = elig[0] if elig else None
     print("\n--- verdict ---")
-    if best and best["net_pnl"] > 0 and best["win_rate"] >= 0.5:
-        print(f"Best config is NET POSITIVE after realistic costs: {best['net_pnl']:+.2f}◎ "
-              f"({best['ret_pct']:+.0f}%), win {best['win_rate']*100:.0f}%, {best['trades']:.0f} trades.")
-        print("⚠ Small sample — this is a HYPOTHESIS to validate on far more data, not a proven edge.")
+    if best and best["net_pnl"] > 0:
+        print(f"Best after realistic costs: {best['net_pnl']:+.2f}◎ ({best['ret_pct']:+.0f}%), "
+              f"win {best['win_rate']*100:.0f}%, PF {min(best['profit_factor'],9.99):.2f}, "
+              f"{best['trades']:.0f} trades — {_label(best['p'])}")
+        if best["win_rate"] < 0.4 and best["profit_factor"] > 1:
+            print("Low win-rate but profitable ⇒ fat-tail driven (runner working). Expected for memecoins.")
+        print("⚠ Small sample — HYPOTHESIS to validate on far more data, not a proven edge.")
     else:
-        print("No config is convincingly positive after realistic costs on this data.")
-        print("That is the honest result: edge is unproven. Gather more data and re-run;")
-        print("do NOT trade live on this.")
-    # did smart-money gating help?
-    by_smart = defaultdict(list)
-    for r in results:
-        by_smart[r["params"]["smart_min"]].append(r["net_pnl"])
-    print("\nsmart-money gating (avg net◎ across configs):")
-    for sm in sorted(by_smart):
-        print(f"  smart_min={sm}: {np.mean(by_smart[sm]):+.2f}")
+        print("Still no net-positive config after realistic costs on this data.")
+
+    def avg_by(keyfn, label):
+        d = defaultdict(list)
+        for r in results:
+            d[keyfn(r["p"])].append(r["net_pnl"])
+        print(f"\n{label} (avg net◎):")
+        for k in sorted(d):
+            print(f"  {k}: {np.mean(d[k]):+.2f}")
+    avg_by(lambda p: f"smart_min={p.smart_min}", "smart-money gating")
+    avg_by(lambda p: f"liq_fraction={p.liq_fraction:.2f}", "liquidity-aware sizing")
+    avg_by(lambda p: f"runner={p.runner}", "let-winners-run")
+    avg_by(lambda p: f"min_liquidity={p.min_liquidity_sol:.0f}", "quality filter")
 
 
 def main():

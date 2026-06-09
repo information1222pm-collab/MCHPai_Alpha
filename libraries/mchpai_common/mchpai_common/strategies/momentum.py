@@ -24,11 +24,11 @@ from dataclasses import dataclass, field
 
 @dataclass
 class StrategyParams:
-    size_sol: float = 0.5          # stake per position
+    size_sol: float = 0.5          # base stake (used when liq_fraction == 0)
     max_positions: int = 5
-    take_profit: float = 0.40      # +40%
+    take_profit: float = 0.40      # fixed TP (ignored when runner=True)
     stop_loss: float = -0.20       # -20%
-    trail: float = 0.25            # give back 25% from peak -> exit
+    trail: float = 0.25            # give back this fraction from peak -> exit
     ratio_in: float = 2.0          # buy_vol >= 2x sell_vol to enter
     ratio_out: float = 0.7         # ratio collapses -> exit
     mom_in: float = 0.05           # +5% momentum to enter
@@ -36,11 +36,27 @@ class StrategyParams:
     mom_window: int = 5
     hold_max_s: int = 600
     min_buyers: int = 3
-    min_vol_sol: float = 1.0       # liquidity/interest floor
+    min_vol_sol: float = 1.0       # buy+sell volume floor
     min_age_s: int = 8             # avoid the first chaotic seconds
     max_age_s: int = 900
-    fee: float = 0.02              # round-trip fee + slippage estimate (simple book)
+    fee: float = 0.02              # simple-book round-trip cost (dashboard parity)
     smart_min: int = 0             # require >= N experienced wallets early (0=off)
+
+    # --- "wiser" levers (improvements) ---
+    liq_fraction: float = 0.0      # >0: size = clamp(liq_fraction*liquidity, min/max ticket)
+    min_ticket: float = 0.1
+    max_ticket: float = 1.0
+    min_liquidity_sol: float = 0.0 # skip tokens with thin liquidity (avoid garbage + slippage)
+    runner: bool = False           # True: no fixed TP — let winners run on a trailing stop
+    exit_reversal: bool = True     # exit on momentum reversal (noisy; can disable)
+    exit_pressure: bool = True     # exit on sell-pressure (noisy; can disable)
+
+
+def position_size(p: StrategyParams, liquidity: float) -> float:
+    """Liquidity-aware sizing — never shove a fixed ticket into a thin pool."""
+    if p.liq_fraction <= 0:
+        return p.size_sol
+    return max(p.min_ticket, min(p.max_ticket, p.liq_fraction * liquidity))
 
 
 @dataclass
@@ -52,6 +68,7 @@ class Features:
     age_s: float
     prices: list[float] = field(default_factory=list)
     smart_buyers: int = 0          # experienced wallets (seen before this token) buying early
+    liquidity: float = 0.0         # liquidity proxy (SOL) for sizing + quality filter
 
     def ratio(self) -> float:
         return self.buy_vol / (self.sell_vol + 1e-9)
@@ -80,8 +97,9 @@ def entry_signal(f: Features, p: StrategyParams) -> bool:
         and f.momentum(p.mom_window) >= p.mom_in
         and f.buyers >= p.min_buyers
         and (f.buy_vol + f.sell_vol) >= p.min_vol_sol
+        and f.liquidity >= p.min_liquidity_sol  # quality: avoid thin/garbage pools
         and p.min_age_s <= f.age_s <= p.max_age_s
-        and f.smart_buyers >= p.smart_min     # unique edge: ride experienced money
+        and f.smart_buyers >= p.smart_min       # unique edge: ride experienced money
         and f.price > 0
     )
 
@@ -90,15 +108,19 @@ def exit_signal(pos: Position, f: Features, p: StrategyParams, hold_s: float | N
     if f.price <= 0:
         return (False, "")
     ret = f.price / pos.entry - 1.0
-    if ret >= p.take_profit:
-        return (True, "take_profit")
+    # hard stop always protects capital
     if ret <= p.stop_loss:
         return (True, "stop_loss")
+    # trailing stop lets winners run, then locks gains
     if pos.peak > 0 and f.price <= pos.peak * (1 - p.trail):
         return (True, "trailing_stop")
-    if f.momentum(p.mom_window) <= p.mom_out:
+    # fixed take-profit only when NOT in runner mode (runner = ride the fat tail)
+    if not p.runner and ret >= p.take_profit:
+        return (True, "take_profit")
+    # optional (noisy) exits — disable to stop churning on wiggles
+    if p.exit_reversal and f.momentum(p.mom_window) <= p.mom_out:
         return (True, "momentum_reversal")
-    if f.ratio() < p.ratio_out:
+    if p.exit_pressure and f.ratio() < p.ratio_out:
         return (True, "sell_pressure")
     hold = hold_s if hold_s is not None else f.age_s
     if hold >= p.hold_max_s:

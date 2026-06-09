@@ -222,7 +222,8 @@ function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0
 const tv=()=>[...tokens.values()];
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
-const STRAT={size:0.5,maxPos:5,tp:0.6,sl:-0.25,trail:0.25,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:600,minBuyers:3,minVol:1,minAge:8,maxAge:900,smartMin:1};
+const STRAT={size:0.5,liqFrac:0.05,minTicket:0.08,maxTicket:1.0,maxPos:6,tp:0.8,sl:-0.35,trail:0.4,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:1200,minBuyers:3,minVol:1,minLiq:8,minAge:8,maxAge:1200,smartMin:2,runner:true};
+const botSize=liq=>STRAT.liqFrac>0?Math.max(STRAT.minTicket,Math.min(STRAT.maxTicket,STRAT.liqFrac*liq)):STRAT.size;
 const COST={baseSlip:80,impactK:0.9,liqFloor:5,feeBps:100,fixed:0.0018,failP:0.12,exitGap:150};
 const bot={cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],enabled:true,missed:0};
 const impactBps=(sz,liq)=>COST.impactK*(sz/Math.max(liq,COST.liqFloor))*1e4;
@@ -231,16 +232,19 @@ function feat(T){const bv=(T.vol+T.netSol)/2,sv=(T.vol-T.netSol)/2,p=T.prices,
  return {price:T.lastPrice,ratio:bv/(sv+1e-9),mom,buyers:T.buyers.size,smart:T.smart.size,age:now()-T.firstSeen,vol:bv+sv,liq:T.vol};}
 function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const f=feat(T),ts=now(),pos=bot.pos.get(mint);
  if(pos){pos.peak=Math.max(pos.peak,f.price);const ret=f.price/pos.entry-1;let ex=null,adv=false;
-  if(ret>=STRAT.tp)ex='take profit';else if(ret<=STRAT.sl){ex='stop loss';adv=true;}else if(f.price<=pos.peak*(1-STRAT.trail)){ex='trail stop';adv=true;}
-  else if(f.mom<=STRAT.momOut){ex='reversal';adv=true;}else if(f.ratio<STRAT.ratioOut){ex='sell pressure';adv=true;}else if((ts-pos.openTs)>=STRAT.holdMax)ex='timeout';
+  if(ret<=STRAT.sl){ex='stop loss';adv=true;}else if(f.price<=pos.peak*(1-STRAT.trail)){ex='trail stop';adv=ret<0;}
+  else if(!STRAT.runner&&ret>=STRAT.tp)ex='take profit';
+  else if(!STRAT.runner&&f.mom<=STRAT.momOut){ex='reversal';adv=true;}
+  else if(!STRAT.runner&&f.ratio<STRAT.ratioOut){ex='sell pressure';adv=true;}
+  else if((ts-pos.openTs)>=STRAT.holdMax)ex='timeout';
   if(ex){let slip=COST.baseSlip+impactBps(pos.tokens*f.price,f.liq);if(adv)slip+=COST.exitGap;
    const fill=f.price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;
    bot.cash+=proc;bot.realized+=pnl;bot.closed.unshift({mint,pnl,ret,reason:ex,ts});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}
- }else if(bot.pos.size<STRAT.maxPos&&bot.cash>=STRAT.size){
-  if(f.ratio>=STRAT.ratioIn&&f.mom>=STRAT.momIn&&f.buyers>=STRAT.minBuyers&&f.smart>=STRAT.smartMin&&f.vol>=STRAT.minVol&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.price>0){
+ }else{const size=botSize(f.liq);if(bot.pos.size<STRAT.maxPos&&bot.cash>=size&&
+   f.ratio>=STRAT.ratioIn&&f.mom>=STRAT.momIn&&f.buyers>=STRAT.minBuyers&&f.smart>=STRAT.smartMin&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.price>0){
    if(Math.random()<COST.failP){bot.missed++;return;}                          // tx failed / beaten
-   const slip=COST.baseSlip+impactBps(STRAT.size,f.liq),fill=f.price*(1+slip/1e4),fee=STRAT.size*COST.feeBps/1e4+COST.fixed,toks=(STRAT.size-fee)/fill;
-   if(toks>0){bot.cash-=STRAT.size;bot.pos.set(mint,{entry:fill,cost:STRAT.size,tokens:toks,openTs:ts,peak:fill});}}}}
+   const slip=COST.baseSlip+impactBps(size,f.liq),fill=f.price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;
+   if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill});}}}}
 function botEquity(){let o=0;bot.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return bot.cash+o;}
 
 /* ---- render ---- */
