@@ -73,7 +73,7 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
+  <a href=#s-hero class=on>Overview</a><a href=#s-signals>Signals</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
   <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
@@ -90,6 +90,16 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
     <div class=chip><div class=l>Wallets</div><div class=v id=c_wal>0</div></div>
     <div class=chip><div class=l>Swaps/min</div><div class=v id=c_spm>0</div></div>
   </div>
+</section>
+
+<section id=s-signals>
+  <div class=h>📡 Signals <span class=muted style=font-weight:400>live multi-detector stream</span></div>
+  <div id=sig_counts style=margin-bottom:8px></div>
+  <div class=list id=sig_feed></div>
+  <div class=note>A unified live feed across detectors: 🧠 proven-wallet buys (graded +ROI), 🐋 whale buys (≥5◎),
+   👥 followed-wallet copies, 📈 volume surges, 🚀 breakouts (≥2×), 🎯 Alpha-score fires, and ⚡ trending. Each
+   is deduped per token (60s) so the stream stays signal, not noise. The Alpha Engine and auto-buy strategies
+   act on these automatically; this tab is your at-a-glance read of everything firing right now.</div>
 </section>
 
 <section id=s-trade>
@@ -214,6 +224,8 @@ let KEY=localStorage.getItem('helius_key')||'',busy=false,pollN=0;
 let heroMetric='volume',heroWin=0;
 const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map(),junk=new Set(),priceCache=new Map();
 const walletAlpha=new Map();let gradeQ=[];   // ALPHA: per-wallet forward-return grade + pending grade queue
+let signalFeed=[],sigCounts={};const sigSeen=new Map();   // SIGNALS: live multi-detector feed
+let ws=null,wsSubs=new Map(),wsState='off',wsReconnect=null;const RT_CAP=300;   // REALTIME: Helius WebSocket
 let apiStats={q:0,cache:0,skipped:0};
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
 
@@ -292,7 +304,13 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
  // ALPHA: time-series sample (for buy-acceleration / liquidity-growth) + wallet-grading queue (forward-return attribution)
  const ls=T.bSamp[T.bSamp.length-1];if(!ls||s.ts-ls.ts>=4){T.bSamp.push({ts:s.ts,b:T.buyers.size,v:T.vol});if(T.bSamp.length>16)T.bSamp.shift();}
  if(s.side==='buy'&&s.price>0)gradeQ.push({wallet:s.wallet,mint:s.mint,entry:s.price,ts:s.ts});
+ // SIGNAL DETECTORS — multi-source live feed (deduped per token/type)
+ if(s.side==='buy'){if(s.sol>=5)sig('whale',s.mint,{sol:+s.sol.toFixed(2)});const q=walletQ(s.wallet);if(q>0.3)sig('smart',s.mint,{q:+q.toFixed(2)});if(follows.has(s.wallet))sig('copy',s.mint,{});}
+ const bs=T.bSamp;if(bs.length>=4){const lv=bs[bs.length-1],mv=bs[bs.length>>1];if(lv.v>mv.v*3&&lv.v-mv.v>3)sig('volsurge',s.mint,{});}
+ if(T.firstPrice&&T.lastPrice>=T.firstPrice*2&&(now()-T.firstSeen)>30&&s.side==='buy'&&s.price>=T.lastPrice)sig('breakout',s.mint,{x:+(T.lastPrice/T.firstPrice).toFixed(1)});
  maybeBlocklist(T);}
+function pushSignal(type,mint,extra){signalFeed.unshift(Object.assign({type,mint,ts:now()},extra||{}));if(signalFeed.length>80)signalFeed.pop();sigCounts[type]=(sigCounts[type]||0)+1;}
+function sig(type,mint,extra){const k=type+'|'+mint,t=now();if(sigSeen.get(k)&&t-sigSeen.get(k)<60)return;sigSeen.set(k,t);if(sigSeen.size>5000)sigSeen.clear();pushSignal(type,mint,extra);}
 function category(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen;if(rec>600)return 'quiet';if(age<60)return 'fresh';
  if(T.buyers.size>=3&&T.netSol>0&&T.buys>=T.sells)return 'heating';if(T.sells>T.buys&&T.netSol<0)return 'dumping';return 'active';}
 function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0?T.netSol/T.vol:0;
@@ -491,17 +509,41 @@ async function pollFollows(){if(!KEY||!follows.size||fbusy)return;fbusy=true;try
    await sleep(35);}}catch(e){}}
 }finally{fbusy=false;}}
 function renderCopy(){const el=$('copy_info');if(!el)return;
- el.innerHTML=`<div class=row><span class=muted>followed wallets</span><span class=up>${follows.size}</span></div>
-  <div class=row><span class=muted>follow hits · buys · sells</span><span>${followStats.hits} · <span class=up>${followStats.buys}</span> · <span class=down>${followStats.sells}</span></div>
-  <div class=row><span class=muted>scan cursor</span><span>${followCursor} / ${follows.size}${fbusy?' · scanning…':''}</span></div>
-  <div class=row><span class=muted>batch / cycle (~6s)</span><span><input type=number value=${followBatch} min=1 max=40 onchange="setFollowBatch(this.value)" class=pin></span></div>`;
+ const graded=[...follows].filter(w=>{const a=walletAlpha.get(w);return a&&a.n>=2;}).length;
+ const wsLabel={live:'● realtime live',connecting:'connecting…',reconnecting:'reconnecting…',off:'off (polling)'}[wsState]||wsState;
+ el.innerHTML=`<div class=row><span class=muted>followed wallets · graded</span><span><span class=up>${follows.size}</span> · ${graded}</span></div>
+  <div class=row><span class=muted>realtime feed</span><span class="${wsState==='live'?'up':'down'}">${wsLabel} · ${wsSubs.size} subs</span></div>
+  <div class=row><span class=muted>realtime · poll hits · buys · sells</span><span>${followStats.rt||0} · ${followStats.hits} · <span class=up>${followStats.buys}</span> · <span class=down>${followStats.sells}</span></div>
+  <div class=row><span class=muted>auto-pruned · promoted</span><span><span class=down>${followStats.pruned||0}</span> · <span class=up>${followStats.promoted||0}</span></span></div>
+  <div class=row><span class=muted>poll batch / cycle (overflow)</span><span><input type=number value=${followBatch} min=1 max=40 onchange="setFollowBatch(this.value)" class=pin></span></div>
+  <div style=margin-top:6px><button class=mini id=copy_prune onclick=pruneNow()>✂ Prune dead · adopt proven</button></div>`;
  const lg=$('copy_log');if(lg)lg.innerHTML=followStats.lastBuy.slice(0,12).map(b=>`<div class=item><div><div class=nm>${short(b.mint)}</div><div class=sub>${short(b.wallet)} bought · ${new Date(b.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge up">${b.sol.toFixed(2)}◎</div></div></div>`).join('')||'<div class=ctr>waiting for a followed wallet to trade…</div>';}
 function setFollowBatch(v){followBatch=Math.max(1,Math.min(40,parseInt(v)||12));}
-function loadFollowsTextarea(){const t=$('copy_ta');if(t&&!t.value)t.value=[...follows].join('\n');}
+function loadFollowsTextarea(force){const t=$('copy_ta');if(t&&(force||!t.value))t.value=[...follows].join('\n');}
 function saveFollowsUI(){const t=$('copy_ta');if(!t)return;const B58=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
  const a=t.value.split(/[\s,]+/).map(s=>s.trim()).filter(s=>B58.test(s));follows=new Set(a);saveFollows();ensureCopyStrat();renderCopy();
  const st=$('copy_save');if(st)st.textContent='✓ saved '+follows.size+' wallets';}
-function clearFollows(){if(typeof confirm!=='undefined'&&!confirm('Stop following all wallets?'))return;follows=new Set();saveFollows();const t=$('copy_ta');if(t)t.value='';renderCopy();}
+function clearFollows(){if(typeof confirm!=='undefined'&&!confirm('Stop following all wallets?'))return;follows=new Set();saveFollows();const t=$('copy_ta');if(t)t.value='';reconnectRealtime();renderCopy();}
+/* ===== AUTO-PRUNE / PROMOTE — keep proven wallets, drop dead weight, adopt discovered alpha ===== */
+function pruneWallets(){if(!follows.size)return {pruned:0,promoted:0};let pruned=0,promoted=0;
+ for(const w of [...follows]){const wa=walletAlpha.get(w);if(wa&&wa.n>=4&&wa.a<-0.1){follows.delete(w);pruned++;}}   // proven-negative → drop
+ if(follows.size<800){const cands=[...walletAlpha.entries()].filter(([w,wa])=>wa.n>=5&&wa.a>0.5&&!follows.has(w)).sort((a,b)=>b[1].a-a[1].a);
+  for(const [w] of cands){if(follows.size>=800)break;follows.add(w);promoted++;}}   // discovered proven-positive → adopt
+ if(pruned||promoted){saveFollows();followStats.pruned=(followStats.pruned||0)+pruned;followStats.promoted=(followStats.promoted||0)+promoted;loadFollowsTextarea(true);reconnectRealtime();}
+ return {pruned,promoted};}
+function pruneNow(){const r=pruneWallets();const b=$('copy_prune');if(b)b.textContent=`✓ −${r.pruned} dead · +${r.promoted} proven`;renderCopy();}
+/* ===== REALTIME — Helius WebSocket logsSubscribe per followed wallet (near-instant copy) ===== */
+function rtPriority(){return [...follows].sort((a,b)=>walletQ(b)-walletQ(a)).slice(0,RT_CAP);}   // proven wallets get the live slots
+function connectRealtime(){if(typeof WebSocket==='undefined'||!KEY||!follows.size){wsState='off';return;}
+ try{ws=new WebSocket(`wss://mainnet.helius-rpc.com/?api-key=${KEY}`);}catch(e){wsState='off';return;}
+ wsState='connecting';
+ ws.onopen=()=>{wsState='live';wsSubs.clear();let id=9000;for(const w of rtPriority()){try{ws.send(JSON.stringify({jsonrpc:'2.0',id,method:'logsSubscribe',params:[{mentions:[w]},{commitment:'processed'}]}));wsSubs.set(id,w);id++;}catch(e){}}};
+ ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+  if(m.method==='logsNotification'){const v=m.params&&m.params.result&&m.params.result.value;if(v&&v.signature&&!v.err&&!seen.has(v.signature)){seen.add(v.signature);rtIngest(v.signature);}}};
+ ws.onclose=()=>{wsState='reconnecting';clearTimeout(wsReconnect);wsReconnect=setTimeout(connectRealtime,4000);};
+ ws.onerror=()=>{try{ws.close();}catch(e){}};}
+function reconnectRealtime(){if(typeof WebSocket==='undefined')return;try{if(ws&&ws.readyState<=1){ws.close();return;}}catch(e){}connectRealtime();}
+async function rtIngest(sig){try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const sw=parseSwapRPC(res);if(sw){ingest(sw);await botTick(sw.mint);followStats.rt=(followStats.rt||0)+1;}}}catch(e){}}
 
 /* ---- render ---- */
 function renderHero(){const ser=hist.map(METRICS[heroMetric].s);let w=ser;if(heroWin>0)w=ser.slice(-heroWin);
@@ -535,12 +577,19 @@ function renderFlow(){const tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;
 function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlphaStrat(),thr=(AS&&AS.params.alphaMin)||68,on=AS&&AS.on;
  const btn=$('alpha_btn');if(btn){btn.textContent=on?'🎯 Auto-buy ON':'🎯 Auto-buy';btn.className='mini'+(on?' on':'');}
  const scored=tv().filter(T=>now()-T.lastSeen<90&&T.buyers.size>=4&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,A:alphaScore(T,feat(T))})).filter(x=>x.A.score>=Math.max(30,thr-25)).sort((a,b)=>b.A.score-a.A.score).slice(0,8);
+ scored.forEach(({T,A})=>{if(A.score>=thr)sig('alpha',T.mint,{score:+A.score.toFixed(0)});});   // surface alpha fires into the signals feed
  const graded=[...walletAlpha.values()].filter(w=>w.n>=2);const proven=graded.filter(w=>w.a>0).length;
  const st=$('alpha_stat');if(st)st.innerHTML=`<div class=row><span class=muted>graded wallets · proven (+ROI)</span><span>${graded.length} · <span class=up>${proven}</span></span></div><div class=row><span class=muted>entry bar · firing now</span><span>alpha ≥ ${thr} · <span class="${scored.filter(x=>x.A.score>=thr).length?'up':''}">${scored.filter(x=>x.A.score>=thr).length}</span></span></div>`;
  el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class=item>
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${fire?'var(--up)':'#f5a623'}>${A.score.toFixed(0)}</span>${fire?' <span class="tag" style=color:var(--up)>🎯 buy</span>':''}</div>
    <div class=sub>smart ${(A.cSmart*100|0)} · accel ${(A.cAccel*100|0)} · flow ${(A.cFlow*100|0)} · liq ${(A.cLiq*100|0)} · org ${(A.cOrg*100|0)}</div></div>
   <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';}
+const SIG_ICON={whale:'🐋',smart:'🧠',copy:'👥',volsurge:'📈',breakout:'🚀',alpha:'🎯',trend:'⚡'};
+function renderSignals(){const el=$('sig_feed');if(!el)return;
+ const cc=$('sig_counts');if(cc)cc.innerHTML=Object.keys(SIG_ICON).filter(k=>sigCounts[k]).map(k=>`<span class=tag>${SIG_ICON[k]} ${k} <b>${sigCounts[k]}</b></span>`).join(' ')||'<span class=muted>warming up… signals appear as the stream flows</span>';
+ el.innerHTML=signalFeed.slice(0,40).map(s=>{const T=tokens.get(s.mint),mult=T?T.maxMult.toFixed(1)+'×':'',up=T&&pct(T)>=0;
+  const meta=[s.sol?('buy '+s.sol+'◎'):'',s.q?('walletQ '+s.q):'',s.score?('alpha '+(s.score|0)):'',s.x?(s.x+'× breakout'):''].filter(Boolean).join(' · ');
+  return `<div class=item><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';}
 function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35&&now()-x.T.lastSeen<300).sort((a,b)=>b.s-a.s).slice(0,10);
  $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class=item>
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=50?'#f5a623':'#8b9197'}>${s.toFixed(0)}</span></div>
@@ -633,6 +682,7 @@ function renderTrends(){const t=trends();
  const TS=findTrendStrat(),on=TS&&TS.on,thr=TS?TS.params.trendRate:8;
  const btn=$('tr_autobtn');if(btn){btn.textContent=on?'⚡ Auto-buy ON':'⚡ Auto-buy';btn.className='mini'+(on?' on':'');}
  const qualifying=lead.filter(({rate})=>rate*60>=thr).length;
+ lead.forEach(({T,rate})=>{if(rate*60>=thr)sig('trend',T.mint,{});});   // feed trending into the signals stream
  const ast=$('tr_autostat');if(ast)ast.innerHTML=on?`<div class=note style=color:var(--up)>⚡ Auto-buying trending tokens ≥ ${thr}/min buyers (${qualifying} qualifying now). Paper · "${TS.name}" book — tune size/stop/threshold in Trading. Flip its 🔴 LIVE switch for on-chain.</div>`:`<div class=note>Tap <b>Auto-buy</b> to open paper positions automatically on the fastest-growing tokens (≥ ${thr}/min buyers). Tune it in the Trading tab.</div>`;
  $('tr_lead').innerHTML=lead.map(({T,rate})=>{const hot=rate*60>=thr&&on;return `<div class=item><div><div class=nm>${short(T.mint)} ${hot?'<span class="tag" style=color:var(--up)>⚡buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning…</div>';}
 function genStrategy(){const w=trends().winners;
@@ -645,7 +695,7 @@ function genStrategy(){const w=trends().winners;
  if((w.peak||2)>=4){S.params.spikeJump=0.3;S.params.spikeLevel=0.6;}else{S.params.trail=0.35;}
  strategies.push(S);saveStrats();renderTrade();
  $('tr_edge').innerHTML=`<div class=note style=color:var(--up)>✓ Created “${S.name}” → minBuyers ${S.params.minBuyers}, smart ≥${S.params.smartMin}, liq ≥${S.params.minLiq}◎, ratio ≥${S.params.ratioIn}. Tune/toggle it in the Trading tab.</div>`+$('tr_edge').innerHTML;}
-function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderTrends();renderAlpha();renderOpps();renderDist();renderCopy();
+function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderTrends();renderAlpha();renderSignals();renderOpps();renderDist();renderCopy();
  if(tokens.size>4000)tv().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
  if(seen.size>120000)seen.clear();}
@@ -661,12 +711,12 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();   // grade wallet alpha, persist, auto-evolve
+ gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%30===0)pruneWallets();   // grade, persist, auto-evolve, auto-prune/promote wallets
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){pollFollows();setInterval(pollFollows,6000);}}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
