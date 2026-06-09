@@ -152,6 +152,7 @@ const now=()=>Math.floor(Date.now()/1000);
 const short=s=>s?s.slice(0,4)+'…'+s.slice(-3):'—';
 const ageStr=s=>{s=Math.max(0,s);return s<60?s+'s':s<3600?(s/60|0)+'m':(s/3600|0)+'h'};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const median=a=>{if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y);return s[s.length>>1];};
 const fmtPct=p=>(p>=0?'+':'')+p.toFixed(1)+'%';
 const COL=['#00c805','#5aa9ff','#f5a623','#ff5000','#a78bfa','#8b9197'];
 
@@ -166,7 +167,7 @@ const METRICS={volume:{l:'Volume',u:'◎',f:v=>v.toFixed(2),s:x=>x.bvol+x.svol},
  tokens:{l:'Tokens',u:'',f:v=>(v|0).toLocaleString(),s:x=>x.tokens}};
 const WINS=[['2m',17],['5m',43],['10m',86],['ALL',0]];
 
-function tok(m){if(!tokens.has(m))tokens.set(m,{mint:m,dex:'',firstSeen:now(),lastSeen:now(),firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),smart:new Set(),netSol:0,prices:[]});return tokens.get(m);}
+function tok(m){if(!tokens.has(m))tokens.set(m,{mint:m,dex:'',firstSeen:now(),lastSeen:now(),firstPrice:0,lastPrice:0,maxMult:1,buys:0,sells:0,vol:0,buyers:new Set(),smart:new Set(),netSol:0,prices:[],med:[],rejected:0});return tokens.get(m);}
 function wal(a){if(!wallets.has(a))wallets.set(a,{addr:a,swaps:0,buys:0,sells:0,netSol:0,tokens:new Set(),lastMint:'',lastTs:0});return wallets.get(a);}
 function pct(T){return T.firstPrice&&T.lastPrice?(T.lastPrice/T.firstPrice-1)*100:0;}
 
@@ -213,8 +214,11 @@ function parseSwapRPC(res){const meta=res.meta,msg=res.transaction&&res.transact
  if(!dex)for(const inr of meta.innerInstructions||[])for(const ix of inr.instructions||[])if(DEXMAP[ix.programId]){dex=DEXMAP[ix.programId];break;}
  return {wallet:fp,mint,side,sol:Math.abs(solL)/1e9,tok:Math.abs(best),price:Math.abs(solL)/1e9/Math.abs(best),ts:res.blockTime||now(),dex};}
 function ingest(s){cnt.swaps++;if(!walletFirst.has(s.wallet))walletFirst.set(s.wallet,s.ts);
- const T=tok(s.mint);T.lastSeen=s.ts;if(s.dex)T.dex=s.dex;if(!T.firstPrice&&s.price)T.firstPrice=s.price;
- if(s.price){T.lastPrice=s.price;T.prices.push(s.price);if(T.prices.length>30)T.prices.shift();if(T.firstPrice)T.maxMult=Math.max(T.maxMult,s.price/T.firstPrice);}
+ const T=tok(s.mint);T.lastSeen=s.ts;if(s.dex)T.dex=s.dex;
+ // PRICE SANITIZATION: reject dust (<0.005◎) + >5x outliers vs rolling median (kills parsing artifacts/phantom spikes)
+ if(s.price>0&&s.sol>=0.005){let ok=true;if(T.med.length>=3){const m=median(T.med);if(m>0&&(s.price/m>5||s.price/m<0.2)){ok=false;T.rejected++;}}
+  if(ok){if(!T.firstPrice)T.firstPrice=s.price;T.lastPrice=s.price;T.prices.push(s.price);if(T.prices.length>30)T.prices.shift();
+   T.med.push(s.price);if(T.med.length>12)T.med.shift();if(T.firstPrice)T.maxMult=Math.max(T.maxMult,s.price/T.firstPrice);}}
  T.vol+=s.sol;if(s.side==='buy'){T.buys++;T.buyers.add(s.wallet);if((walletFirst.get(s.wallet)||s.ts)<T.firstSeen)T.smart.add(s.wallet);T.netSol+=s.sol;flow.buys++;flow.bvol+=s.sol;}else{T.sells++;T.netSol-=s.sol;flow.sells++;flow.svol+=s.sol;}
  if(s.dex)dexCount[s.dex]=(dexCount[s.dex]||0)+1;const W=wal(s.wallet);W.swaps++;W.tokens.add(s.mint);W.lastMint=s.mint;W.lastTs=s.ts;
  if(s.side==='buy'){W.buys++;W.netSol-=s.sol;}else{W.sells++;W.netSol+=s.sol;}}

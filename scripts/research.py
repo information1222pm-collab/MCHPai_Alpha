@@ -24,10 +24,15 @@ import argparse
 import itertools
 import os
 import sqlite3
+import statistics
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 
 import numpy as np
+
+# --- price sanitization (data purity) ---
+MIN_SOL_PX = 0.005   # trades below this give an unreliable price (dust)
+MAX_DEV = 5.0        # reject a price that deviates >5x from the token's rolling median
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mchpai_common.strategies import (
@@ -51,7 +56,8 @@ def load():
 
 
 class TState:
-    __slots__ = ("birth", "last", "buy_vol", "sell_vol", "buyers", "smart", "prices", "cumvol")
+    __slots__ = ("birth", "last", "buy_vol", "sell_vol", "buyers", "smart",
+                 "prices", "cumvol", "_med", "rejected")
 
     def __init__(self, ts):
         self.birth = ts
@@ -60,12 +66,27 @@ class TState:
         self.buyers = set()
         self.smart = set()
         self.prices = []
+        self._med = deque(maxlen=12)
+        self.rejected = 0
+
+    def _clean_price(self, price, sol):
+        """Accept a price only if non-dust and not a wild outlier vs the token's
+        rolling median — kills dust/multi-hop parsing artifacts."""
+        if not price or price <= 0 or sol < MIN_SOL_PX:
+            return False
+        if self._med:
+            m = statistics.median(self._med)
+            if m > 0 and (price / m > MAX_DEV or price / m < 1.0 / MAX_DEV):
+                self.rejected += 1
+                return False
+        return True
 
     def update(self, side, sol, price, wallet, wfirst):
         self.cumvol += sol
-        if price:
+        if self._clean_price(price, sol):
             self.last = price
             self.prices.append(price)
+            self._med.append(price)
             if len(self.prices) > 30:
                 self.prices.pop(0)
         if side == "buy":
