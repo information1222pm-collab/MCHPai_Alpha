@@ -225,7 +225,7 @@ function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0
 const tv=()=>[...tokens.values()];
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
-const STRAT={size:0.5,liqFrac:0.05,minTicket:0.08,maxTicket:1.0,maxPos:6,tpHard:3.0,sl:-0.35,trail:0.4,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:420,minBuyers:3,minVol:1,minLiq:8,minAge:8,maxAge:1200,smartMin:2,runner:true};
+const STRAT={size:0.5,liqFrac:0.05,minTicket:0.08,maxTicket:1.0,maxPos:6,tpHard:3.0,sl:-0.35,trail:0.4,spikeJump:0.35,spikeLevel:0.8,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:420,minBuyers:3,minVol:1,minLiq:8,minAge:8,maxAge:1200,smartMin:2,runner:true};
 const botSize=liq=>STRAT.liqFrac>0?Math.max(STRAT.minTicket,Math.min(STRAT.maxTicket,STRAT.liqFrac*liq)):STRAT.size;
 const COST={baseSlip:80,impactK:0.9,liqFloor:5,feeBps:100,fixed:0.0018,failP:0.12,exitGap:150};
 const bot={cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],enabled:true,missed:0};
@@ -247,8 +247,10 @@ function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.rati
 const trailFor=ret=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:STRAT.trail;
 function tryExit(mint,ts){const pos=bot.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;
  const price=T.lastPrice||pos.entry;pos.peak=Math.max(pos.peak,price);const ret=price/pos.entry-1;
+ const jump=ret-(pos.lastRet||0);pos.lastRet=ret;                                    // change in PnL this update
  const tr=ret>0?trailFor(ret):STRAT.trail;let ex=null,adv=false;
  if(ret<=STRAT.sl){ex='stop loss';adv=true;}
+ else if(ret>0&&(jump>=STRAT.spikeJump||ret>=STRAT.spikeLevel))ex='spike take-profit';  // drastic spike -> grab it NOW
  else if(price<=pos.peak*(1-tr)){ex=ret>0?'take profit':'trail stop';adv=ret<0;}
  else if(ret>=STRAT.tpHard)ex='take profit';
  else if((ts-pos.openTs)>=STRAT.holdMax){ex='timeout';adv=ret<0;}
@@ -263,7 +265,7 @@ function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)ret
   if(a===1&&bot.pos.size<STRAT.maxPos&&bot.cash>=size){
    if(Math.random()<COST.failP){bot.missed++;return;}                               // tx failed / beaten
    const slip=COST.baseSlip+impactBps(size,f.liq),fill=f.price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;
-   if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx});}
+   if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0});}
   }else if(a===0){bUpdate(brain,0,ctx,0);}}}                                         // learn the skip baseline
 /* CRITICAL: manage every open position each cycle, even tokens that went quiet */
 function manageOpenPositions(){const ts=now();[...bot.pos.keys()].forEach(m=>tryExit(m,ts));}
