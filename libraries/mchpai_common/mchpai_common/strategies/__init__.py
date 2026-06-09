@@ -10,8 +10,10 @@ from .momentum import (
     position_size,
 )
 from .execution_model import CostModel, ExecutionModel, Fill
+from .rl_policy import OnlineBandit
 
 __all__ = [
+    "OnlineBandit",
     "Features",
     "PaperBook",
     "Position",

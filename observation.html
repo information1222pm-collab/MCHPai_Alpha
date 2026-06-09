@@ -89,7 +89,7 @@ a{color:var(--up)}.kf{display:none}
 </section>
 
 <section id=s-trade>
-  <div class=h>Momentum Bot <span class="tag" style=color:var(--up);background:var(--upbg)>PAPER</span></div>
+  <div class=h>RL Trader · self-correcting <span class="tag" style=color:var(--up);background:var(--upbg)>PAPER</span></div>
   <div class=heroval id=bot_eq>—</div>
   <div class="chg up" id=bot_chg>—</div>
   <div id=bot_chart style=margin:8px 0></div>
@@ -99,11 +99,14 @@ a{color:var(--up)}.kf{display:none}
     <div class=chip><div class=l>Trades</div><div class=v id=bot_tr>0</div></div>
     <div class=chip><div class=l>Win rate</div><div class=v id=bot_win>0%</div></div>
   </div>
+  <div class=row style=margin-top:12px><span class=muted>🧠 policy</span><span id=bot_brain>learning…</span></div>
+  <div id=bot_learn></div>
   <div class=h style=margin:16px 0 8px>Open Positions</div><div class=list id=bot_pos></div>
   <div class=h style=margin:16px 0 8px>Recent Trades</div><div class=list id=bot_log></div>
-  <div class=note>Smart-money-gated momentum with <b>realistic fills</b> — latency, slippage + price
-   impact, 1% fees, and 12% tx-failure. Paper only; real execution is the gated server-side
-   <code>scripts/trader.py</code>. Expect this to be hard to keep positive — that honesty is the point.</div>
+  <div class=note>Entries decided by a <b>self-correcting contextual bandit</b> that learns from each trade's
+   realized PnL (explore% rises when losing, falls when winning); exits on risk rules. <b>Realistic fills</b>
+   — latency, slippage + impact, 1% fees, 12% failure. Paper only. It needs many trades to converge;
+   on a short session it stays negative — that honesty is the point.</div>
 </section>
 
 <section id=s-movers><div class=h>Top Movers</div>
@@ -229,22 +232,33 @@ const bot={cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],enabled
 const impactBps=(sz,liq)=>COST.impactK*(sz/Math.max(liq,COST.liqFloor))*1e4;
 function feat(T){const bv=(T.vol+T.netSol)/2,sv=(T.vol-T.netSol)/2,p=T.prices,
  mom=p.length>=2?(p[p.length-1]/p[Math.max(0,p.length-1-STRAT.momWin)]-1):0;
- return {price:T.lastPrice,ratio:bv/(sv+1e-9),mom,buyers:T.buyers.size,smart:T.smart.size,age:now()-T.firstSeen,vol:bv+sv,liq:T.vol};}
+ return {price:T.lastPrice,ratio:bv/(sv+1e-9),mom,buyers:T.buyers.size,smart:T.smart.size,age:now()-T.firstSeen,vol:bv+sv,liq:T.vol,bv,sv};}
+/* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
+function makeBandit(dim,k){return {dim,k,w:Array.from({length:k},()=>new Float64Array(dim)),lr:0.05,eps:0.25,epsMin:0.02,epsMax:0.45,l2:1e-3,recent:[],updates:0,mean:new Float64Array(dim),M2:new Float64Array(dim).fill(1),n:0};}
+function bObs(b,x){b.n++;for(let i=0;i<b.dim;i++){const d=x[i]-b.mean[i];b.mean[i]+=d/b.n;b.M2[i]+=d*(x[i]-b.mean[i]);}}
+function bStd(b,x){const o=new Float64Array(b.dim);for(let i=0;i<b.dim;i++){const v=b.M2[i]/Math.max(b.n,1);o[i]=(x[i]-b.mean[i])/Math.sqrt(v+1e-6);}return o;}
+function bQ(b,a,xs){let s=0;for(let i=0;i<b.dim;i++)s+=b.w[a][i]*xs[i];return s;}
+function bSelect(b,x){bObs(b,x);if(Math.random()<b.eps)return Math.random()<0.5?1:0;const xs=bStd(b,x);return bQ(b,1,xs)>=bQ(b,0,xs)?1:0;}
+function bUpdate(b,a,x,r){const xs=bStd(b,x),pred=bQ(b,a,xs);for(let i=0;i<b.dim;i++)b.w[a][i]+=b.lr*((r-pred)*xs[i]-b.l2*b.w[a][i]);b.recent.push(r);if(b.recent.length>60)b.recent.shift();b.updates++;const m=b.recent.reduce((s,v)=>s+v,0)/(b.recent.length||1);b.eps=Math.max(b.epsMin,Math.min(b.epsMax,b.eps*(m<0?1.06:0.96)));}
+function bRecent(b){return b.recent.length?b.recent.reduce((s,v)=>s+v,0)/b.recent.length:0;}
+const brain=makeBandit(8,2);
+function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.ratio,10)/10,Math.tanh(f.mom*5),Math.min(f.smart,5)/5,Math.log1p(f.liq)/5,Math.min(f.buyers,20)/20,Math.min(f.age,600)/600,Math.tanh(imb),1];}
 function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const f=feat(T),ts=now(),pos=bot.pos.get(mint);
  if(pos){pos.peak=Math.max(pos.peak,f.price);const ret=f.price/pos.entry-1;let ex=null,adv=false;
   if(ret<=STRAT.sl){ex='stop loss';adv=true;}else if(f.price<=pos.peak*(1-STRAT.trail)){ex='trail stop';adv=ret<0;}
-  else if(!STRAT.runner&&ret>=STRAT.tp)ex='take profit';
-  else if(!STRAT.runner&&f.mom<=STRAT.momOut){ex='reversal';adv=true;}
-  else if(!STRAT.runner&&f.ratio<STRAT.ratioOut){ex='sell pressure';adv=true;}
-  else if((ts-pos.openTs)>=STRAT.holdMax)ex='timeout';
+  else if(!STRAT.runner&&ret>=STRAT.tp)ex='take profit';else if((ts-pos.openTs)>=STRAT.holdMax)ex='timeout';
   if(ex){let slip=COST.baseSlip+impactBps(pos.tokens*f.price,f.liq);if(adv)slip+=COST.exitGap;
    const fill=f.price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;
-   bot.cash+=proc;bot.realized+=pnl;bot.closed.unshift({mint,pnl,ret,reason:ex,ts});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}
- }else{const size=botSize(f.liq);if(bot.pos.size<STRAT.maxPos&&bot.cash>=size&&
-   f.ratio>=STRAT.ratioIn&&f.mom>=STRAT.momIn&&f.buyers>=STRAT.minBuyers&&f.smart>=STRAT.smartMin&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.price>0){
-   if(Math.random()<COST.failP){bot.missed++;return;}                          // tx failed / beaten
+   bot.cash+=proc;bot.realized+=pnl;bUpdate(brain,1,pos.ctx,pnl/pos.cost);          // RL learns from realized PnL
+   bot.closed.unshift({mint,pnl,ret,reason:ex,ts});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}
+ }else if(f.price>0&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers){
+  const ctx=ctxOf(f),a=bSelect(brain,ctx),size=botSize(f.liq);                       // RL decides BUY vs SKIP
+  if(a===1&&bot.pos.size<STRAT.maxPos&&bot.cash>=size){
+   if(Math.random()<COST.failP){bot.missed++;return;}                               // tx failed / beaten
    const slip=COST.baseSlip+impactBps(size,f.liq),fill=f.price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;
-   if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill});}}}}
+   if(toks>0){bot.cash-=size;bot.pos.set(mint,{entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx});}
+  }else if(a===0){bUpdate(brain,0,ctx,0);}                                          // learn the skip baseline
+ }}
 function botEquity(){let o=0;bot.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return bot.cash+o;}
 
 /* ---- render ---- */
@@ -293,6 +307,8 @@ function renderTrade(){const eq=botEquity(),chg=eq-bot.start,p=chg/bot.start*100
  const wins=bot.closed.filter(c=>c.pnl>0).length,n=bot.closed.length;
  $('bot_real').innerHTML=`<span class="${bot.realized>=0?'up':'down'}">${bot.realized>=0?'+':''}${bot.realized.toFixed(3)}</span>`;
  $('bot_open').textContent=bot.pos.size;$('bot_tr').textContent=n;$('bot_win').textContent=(n?(wins/n*100).toFixed(0):0)+'%';
+ const rr=bRecent(brain);$('bot_brain').innerHTML=`${brain.updates} updates · explore <b>${(brain.eps*100).toFixed(0)}%</b> · recent reward <span class="${rr>=0?'up':'down'}">${(rr*100).toFixed(1)}%</span>`;
+ let cum=0;const curve=brain.recent.map(v=>cum+=v);$('bot_learn').innerHTML=curve.length>1?spark(curve,rr>=0,620,40):'<span class=muted style=font-size:11px>policy warming up — decisions + rewards accruing</span>';
  const pos=[...bot.pos.entries()].map(([m,po])=>{const T=tokens.get(m),cur=(T&&T.lastPrice)||po.entry,ret=(cur/po.entry-1)*100,up2=ret>=0;
   return `<div class=item><div><div class=nm>${short(m)}</div><div class=sub>entry ${po.entry.toExponential(2)} · ${ageStr(now()-po.openTs)}</div></div>
   <div class=rt><div class=px>${cur.toExponential(2)}</div><div class="badge ${up2?'up':'down'}">${fmtPct(ret)}</div></div></div>`;}).join('');
