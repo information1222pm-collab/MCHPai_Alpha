@@ -73,7 +73,7 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
+  <a href=#s-hero class=on>Overview</a><a href=#s-pulse>Pulse</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
   <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
@@ -90,6 +90,27 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
     <div class=chip><div class=l>Wallets</div><div class=v id=c_wal>0</div></div>
     <div class=chip><div class=l>Swaps/min</div><div class=v id=c_spm>0</div></div>
   </div>
+</section>
+
+<section id=s-pulse>
+  <div class=h>📟 Market Pulse <span class=muted style=font-weight:400>real-time dynamics</span></div>
+  <div class=chips>
+    <div class=chip><div class=l>Swaps/min</div><div class=v id=p_spm>0</div></div>
+    <div class=chip><div class=l>New tokens/min</div><div class=v id=p_tpm>0</div></div>
+    <div class=chip><div class=l>Buy pressure</div><div class=v id=p_press>—</div></div>
+    <div class=chip><div class=l>Whale buys/sells</div><div class=v id=p_whale>0/0</div></div>
+  </div>
+  <div class=h style=margin:16px 0 6px>Order-flow pressure <span class=muted style=font-weight:400>buy vs sell over time</span></div>
+  <div id=p_flowstrip></div>
+  <div class=cols style=margin-top:14px>
+    <div><div class=h style=color:var(--dim);font-size:12px>🐋 Whale tape <span class=muted style=font-weight:400>≥2◎</span></div><div class=list id=p_whaletape></div></div>
+    <div><div class=h style=color:var(--dim);font-size:12px>📊 Volume leaders</div><div id=p_vol></div></div>
+  </div>
+  <div class=h style=margin:16px 0 6px>Live trade tape</div>
+  <div class=list id=p_tape style=max-height:340px;overflow:auto></div>
+  <div class=h style=margin:16px 0 8px>Activity by DEX</div><div id=p_dex></div>
+  <div class=note>The raw pulse of the market: every swap as it lands, who's moving size, where the volume is, and how
+   buy/sell pressure is shifting. Dense by design — glance at the gauges, drill into the tape when something moves.</div>
 </section>
 
 <section id=s-signals>
@@ -110,6 +131,8 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <div id=disc_status></div>
   <div class=h style=margin:16px 0 8px>Feature lift <span class=muted style=font-weight:400>P(run) when high vs low</span></div>
   <div id=disc_lift></div>
+  <div class=h style=margin:16px 0 8px>Alpha score → outcome <span class=muted style=font-weight:400>does the score predict the run?</span></div>
+  <div id=disc_scatter></div>
   <div class=h style=margin:16px 0 8px>Live candidates by win-probability</div>
   <div class=list id=disc_live></div>
   <div class=note>Each token's <b>early</b> features are snapshotted at ~${20}s, then labelled by whether it
@@ -132,6 +155,7 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
    sign your own swaps) and is wiped on reload or disarm. A hot key in a browser is inherently risky — fund a
    throwaway wallet with only what you can lose, or run the server-side <code>trader.py</code> for production.</div>
   <div class=row style=margin-top:8px><span class=muted>📡 data filter</span><span id=bot_api>—</span></div>
+  <div class=h style=margin:16px 0 8px>📈 Open Positions <span class=muted style=font-weight:400>live unrealized PnL</span></div><div class=list id=open_pos></div>
   <div class=h style=margin:16px 0 8px>Recent Trades · all strategies</div><div class=list id=bot_log></div>
   <div class=note>Build strategies on the fly: pick an <b>entry</b> (rl · tiered · momentum), an <b>exit</b>
    (risk rules · first-sell), toggle <b>Require Helius price</b>, and tune every parameter. Each strategy runs
@@ -160,7 +184,9 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
 
 <section id=s-tokens><div class=h>Tokens <span class=muted id=tok_sort>by activity</span></div><div class=list id=tokens></div></section>
 
-<section id=s-wallets><div class=h>Wallets <span class=muted>by recent net flow</span></div><div class=list id=wallets></div></section>
+<section id=s-wallets><div class=h>🏆 Smart-Money Leaderboard <span class=muted style=font-weight:400>wallets graded by realized forward-ROI</span></div>
+  <div class=list id=smartboard></div>
+  <div class=h style=margin:16px 0 8px>Active Wallets <span class=muted style=font-weight:400>by recent net flow</span></div><div class=list id=wallets></div></section>
 
 <section id=s-flow><div class=h>Buy / Sell Pressure</div>
   <div class=pressure id=pressure></div>
@@ -248,6 +274,7 @@ let heroMetric='volume',heroWin=0;
 const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map(),junk=new Set(),priceCache=new Map();
 const walletAlpha=new Map();let gradeQ=[];   // ALPHA: per-wallet forward-return grade + pending grade queue
 let signalFeed=[],sigCounts={};const sigSeen=new Map();   // SIGNALS: live multi-detector feed
+const tape=[];let bigBuys=0,bigSells=0;   // PULSE: rolling live trade tape + size tallies
 let ws=null,wsSubs=new Map(),wsState='off',wsReconnect=null;const RT_CAP=300;   // REALTIME: Helius WebSocket
 let apiStats={q:0,cache:0,skipped:0};
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
@@ -290,6 +317,16 @@ function histogram(v,c='#5aa9ff',h=150){if(!v||v.length<3)return '<div class=ctr
  return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}>${cnts.map((c2,i)=>`<rect x="${(i*bw+1).toFixed(1)}" y="${(h-c2/mc*(h-6)).toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${(c2/mc*(h-6)).toFixed(1)}" rx=2 fill="${c}" opacity=.8/>`).join('')}</svg>
   <div class=row style=border:none><span class=muted>${mn.toFixed(2)}</span><span class=muted>${mx.toFixed(2)}</span></div>`;}
 const diff=a=>a.map((v,i)=>i?Math.max(0,v-a[i-1]):0).slice(1);
+/* scatter: points [{x,y,up}] in data space, log-y optional — validates score vs outcome */
+function scatter(pts,xl='',yl='',h=170,logy=false){if(!pts||pts.length<3)return '<div class=ctr>collecting…</div>';
+ const xs=pts.map(p=>p.x),ys=pts.map(p=>logy?Math.log10(Math.max(p.y,1e-9)):p.y),w=620;
+ const xn=Math.min(...xs),xx=Math.max(...xs),yn=Math.min(...ys),yx=Math.max(...ys),rx=(xx-xn)||1,ry=(yx-yn)||1;
+ const X=v=>8+(v-xn)/rx*(w-16),Y=v=>h-14-(v-yn)/ry*(h-26);
+ const dots=pts.map((p,i)=>`<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r=2.6 fill="${p.up?'#00c805':'#ff5000'}" opacity=.7/>`).join('');
+ return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}><line x1=8 y1=${h-14} x2=${w-8} y2=${h-14} stroke=#23272b/><line x1=8 y1=8 x2=8 y2=${h-14} stroke=#23272b/>${dots}<text x=${w-8} y=${h-3} fill=#5b6166 font-size=9 text-anchor=end>${xl}</text><text x=11 y=14 fill=#5b6166 font-size=9>${yl}</text></svg>`;}
+/* horizontal stacked flow strip (buy green / sell red over time) */
+function flowStrip(series,h=46){if(!series||series.length<2)return '<div class=ctr>—</div>';const w=620,bw=w/series.length;
+ return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}>${series.map((s,i)=>{const tot=s.b+s.s||1,bh=(s.b/tot)*h;return `<rect x="${(i*bw).toFixed(1)}" y=0 width="${(bw+0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill=#00c805 opacity=.7/><rect x="${(i*bw).toFixed(1)}" y="${bh.toFixed(1)}" width="${(bw+0.5).toFixed(1)}" height="${(h-bh).toFixed(1)}" fill=#ff5000 opacity=.6/>`;}).join('')}</svg>`;}
 
 /* ---- data ---- */
 async function rpc(m,p){const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})});
@@ -328,6 +365,7 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
  const ls=T.bSamp[T.bSamp.length-1];if(!ls||s.ts-ls.ts>=4){T.bSamp.push({ts:s.ts,b:T.buyers.size,v:T.vol});if(T.bSamp.length>16)T.bSamp.shift();}
  if(s.side==='buy'&&s.price>0)gradeQ.push({wallet:s.wallet,mint:s.mint,entry:s.price,ts:s.ts});
  snapToken(T,s.ts);   // PATTERN DISCOVERY: capture early-feature snapshot for later labelling
+ tape.unshift({mint:s.mint,side:s.side,sol:s.sol,dex:s.dex,ts:s.ts});if(tape.length>120)tape.pop();if(s.sol>=2){if(s.side==='buy')bigBuys++;else bigSells++;}   // PULSE: live trade tape
  // SIGNAL DETECTORS — multi-source live feed (deduped per token/type)
  if(s.side==='buy'){if(s.sol>=5)sig('whale',s.mint,{sol:+s.sol.toFixed(2)});const q=walletQ(s.wallet);if(q>0.3)sig('smart',s.mint,{q:+q.toFixed(2)});if(follows.has(s.wallet))sig('copy',s.mint,{});}
  const bs=T.bSamp;if(bs.length>=4){const lv=bs[bs.length-1],mv=bs[bs.length>>1];if(lv.v>mv.v*3&&lv.v-mv.v>3)sig('volsurge',s.mint,{});}
@@ -706,7 +744,9 @@ function renderMovers(){const movable=tv().filter(T=>T.prices.length>=2&&T.first
  $('gainers').innerHTML=g.map(tokRow).join('')||'<div class=ctr>—</div>';
  $('losers').innerHTML=l.map(tokRow).join('')||'<div class=ctr>—</div>';}
 function renderTokens(){$('tokens').innerHTML=tv().sort((a,b)=>b.lastSeen-a.lastSeen).slice(0,40).map(tokRow).join('')||'<div class=ctr>waiting for activity…</div>';}
-function renderWallets(){$('wallets').innerHTML=[...wallets.values()].sort((a,b)=>b.lastTs-a.lastTs).slice(0,40).map(W=>{const up=W.netSol>=0;
+function renderWallets(){const sb=$('smartboard');if(sb){const graded=[...walletAlpha.entries()].filter(([,v])=>v[1]>=2).sort((a,b)=>b[1][0]-a[1][0]).slice(0,12);
+  sb.innerHTML=graded.map(([addr,v])=>{const roi=v[0],up=roi>=0,fol=follows.has(addr);return `<div class=item><div><div class=nm>${short(addr)} ${fol?'<span class="tag" style=color:var(--up)>following</span>':''}</div><div class=sub>${v[1]} graded trades</div></div><div class=rt><div class="badge ${up?'up':'down'}">${up?'+':''}${(roi*100).toFixed(0)}% ROI</div></div></div>`;}).join('')||'<div class=ctr>grading wallets… (needs ≥2 resolved trades each)</div>';}
+ $('wallets').innerHTML=[...wallets.values()].sort((a,b)=>b.lastTs-a.lastTs).slice(0,40).map(W=>{const up=W.netSol>=0;
  return `<div class=item><div><div class=nm>${short(W.addr)} ${W.tokens.size>=3?'<span class="tag sniper">sniper</span>':''}</div>
  <div class=sub>${W.tokens.size} tokens · ${W.swaps} swaps · ${W.buys}b/${W.sells}s</div></div>
  <div class=rt><div class="badge ${up?'up':'down'}">${(up?'+':'')+W.netSol.toFixed(2)}◎</div></div></div>`;}).join('')||'<div class=ctr>waiting…</div>';}
@@ -726,6 +766,18 @@ function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlpha
    <div class=sub>smart ${(A.cSmart*100|0)} · accel ${(A.cAccel*100|0)} · flow ${(A.cFlow*100|0)} · liq ${(A.cLiq*100|0)} · org ${(A.cOrg*100|0)}</div></div>
   <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';}
 const SIG_ICON={whale:'🐋',smart:'🧠',copy:'👥',volsurge:'📈',breakout:'🚀',alpha:'🎯',trend:'⚡'};
+const DEXSHORT=d=>(d||'?').replace('raydium_','ray-').replace('pumpfun','pump').replace('pumpswap','pswap').replace('meteora_','met-').replace('orca_whirlpool','orca');
+function renderPulse(){const el=$('p_tape');if(!el)return;
+ const sd=diff(hist.slice(-9).map(s=>s.swaps));$('p_spm').textContent=Math.round(sd.reduce((a,b)=>a+b,0)/Math.max(sd.length*7/60,1/60));
+ const td=diff(hist.slice(-9).map(s=>s.tokens));$('p_tpm').textContent=Math.round(td.reduce((a,b)=>a+b,0)/Math.max(td.length*7/60,1/60));
+ const tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;const pe=$('p_press');pe.textContent=(bp*100).toFixed(0)+'% buy';pe.className='v '+(bp>=.5?'up':'down');
+ $('p_whale').textContent=bigBuys+'/'+bigSells;
+ const ser=hist.slice(-60).map((s,i,a)=>i?{b:Math.max(0,s.buys-a[i-1].buys),s:Math.max(0,s.sells-a[i-1].sells)}:{b:0,s:0}).slice(1);
+ $('p_flowstrip').innerHTML=flowStrip(ser);
+ $('p_whaletape').innerHTML=tape.filter(t=>t.sol>=2).slice(0,10).map(t=>`<div class=item><div><div class=nm>${t.side==='buy'?'🟢':'🔴'} ${short(t.mint)}</div><div class=sub>${DEXSHORT(t.dex)} · ${new Date(t.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${t.side==='buy'?'up':'down'}">${t.sol.toFixed(2)}◎</div></div></div>`).join('')||'<div class=ctr>watching for size…</div>';
+ $('p_vol').innerHTML=bars(tv().sort((a,b)=>b.vol-a.vol).slice(0,8).map(T=>({label:short(T.mint),value:+T.vol.toFixed(1),disp:T.vol.toFixed(1)+'◎',color:T.netSol>=0?'#00c805':'#ff5000',full:T.mint})));
+ $('p_tape').innerHTML=tape.slice(0,50).map(t=>`<div class=row style=border-bottom:1px solid #15181b;padding:3px 0><span><span class="${t.side==='buy'?'up':'down'}">${t.side==='buy'?'▲':'▼'}</span> ${short(t.mint)} <span class=muted style=font-size:10px>${DEXSHORT(t.dex)}</span></span><span class="${t.side==='buy'?'up':'down'}">${t.sol.toFixed(3)}◎</span></div>`).join('')||'<div class=ctr>waiting for swaps…</div>';
+ $('p_dex').innerHTML=donut(dexCount);}
 function renderSignals(){const el=$('sig_feed');if(!el)return;
  const SR=findSignalStrat(),srb=$('sigresp_btn');if(srb){const on=SR&&SR.on;srb.textContent=on?'📡 Responding ON':'📡 Respond to all';srb.className='mini'+(on?' on':'');}
  const cc=$('sig_counts');if(cc)cc.innerHTML=Object.keys(SIG_ICON).filter(k=>sigCounts[k]).map(k=>`<span class=tag>${SIG_ICON[k]} ${k} <b>${sigCounts[k]}</b></span>`).join(' ')||'<span class=muted>warming up… signals appear as the stream flows</span>';
@@ -733,6 +785,7 @@ function renderSignals(){const el=$('sig_feed');if(!el)return;
   const meta=[s.sol?('buy '+s.sol+'◎'):'',s.q?('walletQ '+s.q):'',s.score?('alpha '+(s.score|0)):'',s.x?(s.x+'× breakout'):''].filter(Boolean).join(' · ');
   return `<div class=item><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';}
 function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findDiscStrat();
+ const sc=$('disc_scatter');if(sc){const pts=tv().filter(T=>(now()-T.firstSeen)>60&&T.maxMult>1&&T.firstPrice>0).slice(-400).map(T=>({x:alphaCached(T).score,y:T.maxMult,up:T.maxMult>=1.5}));sc.innerHTML=scatter(pts,'alpha score →','peak × (log)',160,true);}   // always: validates score→outcome
  const ab=$('disc_auto');if(ab){ab.textContent=autoDiscover?'auto ●':'auto ○';ab.className='mini'+(autoDiscover?' on':'');}
  const ub=$('disc_use');if(ub){const on=DS&&DS.on;ub.textContent=on?'🧬 Trading it':'🧬 Trade it';ub.className='mini'+(on?' on':'');}
  const matured=tv().filter(T=>T._snap&&(now()-T.firstSeen)>=DISC_DECIDE+45).length;
@@ -791,7 +844,10 @@ function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity
  $('strat_list').innerHTML=strategies.map(stratCard).join('');renderLive();
  $('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
  const allC=[].concat.apply([],strategies.map(S=>S.book.closed.map(c=>Object.assign({strat:S.name},c)))).sort((a,b)=>b.ts-a.ts).slice(0,14);
- $('bot_log').innerHTML=allC.map(c=>`<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.strat} · ${c.reason}</div></div><div class=rt><div class="badge ${c.pnl>=0?'up':'down'}">${(c.pnl>=0?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`).join('')||'<div class=ctr>no trades yet</div>';}
+ $('bot_log').innerHTML=allC.map(c=>`<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.strat} · ${c.reason}</div></div><div class=rt><div class="badge ${c.pnl>=0?'up':'down'}">${(c.pnl>=0?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`).join('')||'<div class=ctr>no trades yet</div>';
+ const op=$('open_pos');if(op){const open=[];strategies.forEach(S=>S.book.pos.forEach((p,m)=>{const T=tokens.get(m),px=(T&&T.lastPrice)||p.entry,ret=px/p.entry-1,upnl=p.tokens*px-p.cost;open.push({S,m,ret,upnl,age:now()-p.openTs,scaled:p.scaled,moon:p.mooned});}));
+  open.sort((a,b)=>b.upnl-a.upnl);
+  op.innerHTML=open.map(o=>{const up=o.upnl>=0;return `<div class=item><div><div class=nm>${short(o.m)} <span class=tag>${o.S.name.split(' ')[0]}</span>${o.moon?' <span class="tag" style=color:var(--up)>🌙</span>':o.scaled?' <span class=tag>scaled</span>':''}</div><div class=sub>${ageStr(o.age)} held · ${fmtPct(o.ret*100)}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${up?'+':''}${o.upnl.toFixed(3)}◎</div></div></div>`;}).join('')||'<div class=ctr>no open positions</div>';}}
 /* ===== BACKTESTER — replay the saved dataset through every strategy (realistic costs) ===== */
 const btMed=a=>{const s=[...a].sort((x,y)=>x-y);return s[s.length>>1];};
 function btState(birth){return {birth,last:0,first:0,bv:0,sv:0,buyers:new Set(),smart:new Set(),prices:[],med:[]};}
@@ -868,7 +924,7 @@ function scanSignals(){const t=now(),AS=findAlphaStrat(),TS=findTrendStrat();
   const A=alphaCached(T);if(A.score>=thrA)sig('alpha',T.mint,{score:+A.score.toFixed(0)});
   const age=t-T.firstSeen;if(age>0&&T.buyers.size/age*60>=thrT)sig('trend',T.mint,{});}}
 /* render only the visible tab + one rotating section per cycle (was: all 13 every cycle, each scanning every token) */
-const SECT={'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
+const SECT={'s-pulse':renderPulse,'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
 const SKEYS=Object.keys(SECT);let rrIdx=0,activeSection='s-hero';
 function render(){renderHero();renderChips();renderTrade();
  const af=SECT[activeSection];if(af)af();
