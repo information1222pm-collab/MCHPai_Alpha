@@ -1,8 +1,10 @@
 # Taxonomy validation — do the candidate populations exist?
 
 **Phase status:** 8A (Internal Validation) ✓ complete · 8B (External Replication)
-— *not started; awaiting fresh sessions*. Internal stability is settled; external
-truth is not. See `docs/TAXONOMY.md` for the naming doctrine.
+✓ **first pass complete** — see [`external_replication.md`](external_replication.md):
+the token-to-token split and the SOL-paired population replicated 3/3 across fresh
+sessions; the router population 2/3. No names written yet. See `docs/TAXONOMY.md`
+for the naming doctrine.
 
 Phase 7 found 6 candidate clusters. Phase 8 asks the prior question — **existence,
 not identity** — and refuses to name anything until reality reproduces it.
