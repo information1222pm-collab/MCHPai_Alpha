@@ -80,19 +80,25 @@ def main():
                 sg = s.get("signature")
                 if sg and not s.get("err") and sg not in seen:
                     pend.append(sg)
-        for sg in pend[:60]:
+        batch = pend[:120]
+        for sg in batch:
             seen.add(sg)
-            res = rpc("getTransaction", [sg, {"maxSupportedTransactionVersion": 0, "encoding": "jsonParsed"}])
-            if not res:
-                continue
-            for sw in swaps_from_jsonparsed(res):
-                try:
-                    conn.execute("INSERT OR IGNORE INTO swaps VALUES(?,?,?,?,?,?,?,?,?,?)",
-                                 (sw["signature"], sw["wallet"], sw["mint"], sw["side"],
-                                  sw["sol"], sw["tok"], sw["price"], sw["dex"], 0, sw["ts"]))
-                    stored += 1
-                except Exception:
-                    pass
+
+        def fetch(sg):
+            return swaps_from_jsonparsed(rpc("getTransaction",
+                [sg, {"maxSupportedTransactionVersion": 0, "encoding": "jsonParsed"}]) or {})
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=int(os.environ.get("RPC_WORKERS", "10"))) as ex:
+            for sws in ex.map(fetch, batch):
+                for sw in sws:
+                    try:
+                        conn.execute("INSERT OR IGNORE INTO swaps VALUES(?,?,?,?,?,?,?,?,?,?)",
+                                     (sw["signature"], sw["wallet"], sw["mint"], sw["side"],
+                                      sw["sol"], sw["tok"], sw["price"], sw["dex"], 0, sw["ts"]))
+                        stored += 1
+                    except Exception:
+                        pass
         conn.commit()
         n = conn.execute("SELECT count(*) FROM swaps").fetchone()[0]
         nt = conn.execute("SELECT count(distinct mint) FROM swaps").fetchone()[0]
