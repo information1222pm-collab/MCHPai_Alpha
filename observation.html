@@ -73,7 +73,7 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-signals>Signals</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
+  <a href=#s-hero class=on>Overview</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
   <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
@@ -100,6 +100,22 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
    👥 followed-wallet copies, 📈 volume surges, 🚀 breakouts (≥2×), 🎯 Alpha-score fires, and ⚡ trending. Each
    is deduped per token (60s) so the stream stays signal, not noise. The Alpha Engine and auto-buy strategies
    act on these automatically; this tab is your at-a-glance read of everything firing right now.</div>
+</section>
+
+<section id=s-patterns>
+  <div class=h>🧬 Discovered Patterns <span class=muted style=font-weight:400>the system learns what predicts winners</span>
+   <button class=mini id=disc_run onclick=discoverPatterns()>↻ Discover now</button>
+   <button class=mini id=disc_auto onclick=toggleAutoDiscover()>auto</button>
+   <button class=mini id=disc_use onclick=toggleDisc()>🧬 Trade it</button></div>
+  <div id=disc_status></div>
+  <div class=h style=margin:16px 0 8px>Feature lift <span class=muted style=font-weight:400>P(run) when high vs low</span></div>
+  <div id=disc_lift></div>
+  <div class=h style=margin:16px 0 8px>Live candidates by win-probability</div>
+  <div class=list id=disc_live></div>
+  <div class=note>Each token's <b>early</b> features are snapshotted at ~${20}s, then labelled by whether it
+   forward-ran. A logistic model is refit continuously (train/test AUC) to discover the winning pattern; the
+   <b>Discovered 🧬</b> strategy trades it — but only while the model is genuinely predictive (test AUC &gt; 0.6).
+   The more data it sees, the sharper it gets. Paper by default. Patterns are a hypothesis, not a guarantee.</div>
 </section>
 
 <section id=s-trade>
@@ -311,6 +327,7 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
  // ALPHA: time-series sample (for buy-acceleration / liquidity-growth) + wallet-grading queue (forward-return attribution)
  const ls=T.bSamp[T.bSamp.length-1];if(!ls||s.ts-ls.ts>=4){T.bSamp.push({ts:s.ts,b:T.buyers.size,v:T.vol});if(T.bSamp.length>16)T.bSamp.shift();}
  if(s.side==='buy'&&s.price>0)gradeQ.push({wallet:s.wallet,mint:s.mint,entry:s.price,ts:s.ts});
+ snapToken(T,s.ts);   // PATTERN DISCOVERY: capture early-feature snapshot for later labelling
  // SIGNAL DETECTORS — multi-source live feed (deduped per token/type)
  if(s.side==='buy'){if(s.sol>=5)sig('whale',s.mint,{sol:+s.sol.toFixed(2)});const q=walletQ(s.wallet);if(q>0.3)sig('smart',s.mint,{q:+q.toFixed(2)});if(follows.has(s.wallet))sig('copy',s.mint,{});}
  const bs=T.bSamp;if(bs.length>=4){const lv=bs[bs.length-1],mv=bs[bs.length>>1];if(lv.v>mv.v*3&&lv.v-mv.v>3)sig('volsurge',s.mint,{});}
@@ -351,8 +368,8 @@ async function clearData(){if(!DB||(typeof confirm!=='undefined'&&!confirm('Dele
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
 /* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
-const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25],['trendRate','Trending buyers/min ≥',8],['alphaMin','Alpha score ≥',68],['scaleAt','Scale-out at +ret',0.4],['scaleFrac','Scale-out fraction',0.5],['moonAt','Moonbag lock at +ret',1.5],['moonFrac','Moonbag keep fraction',0.25],['moonTrail','Moonbag trail (loose)',0.55]];
-const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending','alpha','signal'],EXIT_MODES=['risk','firstSell'];
+const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25],['trendRate','Trending buyers/min ≥',8],['alphaMin','Alpha score ≥',68],['scaleAt','Scale-out at +ret',0.4],['scaleFrac','Scale-out fraction',0.5],['moonAt','Moonbag lock at +ret',1.5],['moonFrac','Moonbag keep fraction',0.25],['moonTrail','Moonbag trail (loose)',0.55],['discMin','Discovered win-prob ≥ %',55]];
+const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending','alpha','signal','discovered'],EXIT_MODES=['risk','firstSell'];
 function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
 function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0,peakEq:10};}
 function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',live:false,retired:false,moonbag:false,alloc:1,params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
@@ -419,6 +436,31 @@ function alphaScore(T,f){let smartW=0;T.buyers.forEach(a=>{const q=walletQ(a);if
  return {score,cSmart,cAccel,cFlow,cLiq,cOrg,cMom};}
 /* memoize the (somewhat heavy) score per token for ~3s so scanSignals + renderAlpha don't double-compute */
 function alphaCached(T){const t=now();if(T._a&&t-T._a.ts<3)return T._a.v;const v=alphaScore(T,feat(T));T._a={ts:t,v};return v;}
+/* ===== PATTERN DISCOVERY — the system learns, over time, which early signals predict winners ===== */
+const DISC_FEATS=['buyers','smart','liq','ratio','netflow','mom','organic','accel','age'];
+const DISC_DECIDE=20,DISC_RUNX=1.5;let disc=null,autoDiscover=localStorage.getItem('mchpai_autodiscover')!=='0';
+function discFeat(T){const f=feat(T),s=T.bSamp;let accel=0;if(s&&s.length>=4){const h=s.length>>1,e=s[0],m=s[h],l=s[s.length-1];accel=(l.b-m.b)/Math.max(l.ts-m.ts,1)-(m.b-e.b)/Math.max(m.ts-e.ts,1);}
+ return [f.buyers,f.smart,Math.log1p(f.liq),Math.min(f.ratio,10),(f.bv-f.sv)/(f.bv+f.sv+1e-9),Math.tanh(f.mom*5),Math.min(1,f.buyers/Math.max(T.buys,1)),accel*60,now()-T.firstSeen];}
+/* snapshot a token's EARLY features once, at the decision age — labelled later by forward outcome */
+function snapToken(T,ts){if(!T._snap&&(ts-T.firstSeen)>=DISC_DECIDE&&T.lastPrice>0&&T.buyers.size>=1)T._snap={p:T.lastPrice,x:discFeat(T)};}
+function sigmoid(z){return 1/(1+Math.exp(-z));}
+function discLogistic(rows){ // rows: [{x:[],y:0/1}]  -> {w,b,mu,sd,auc,n,wins}
+ const d=DISC_FEATS.length,n=rows.length;const mu=new Array(d).fill(0),sd=new Array(d).fill(0);
+ rows.forEach(r=>r.x.forEach((v,i)=>mu[i]+=v/n));rows.forEach(r=>r.x.forEach((v,i)=>sd[i]+=(v-mu[i])**2/n));for(let i=0;i<d;i++)sd[i]=Math.sqrt(sd[i])+1e-9;
+ const Z=rows.map(r=>({xs:r.x.map((v,i)=>(v-mu[i])/sd[i]),y:r.y}));
+ const cut=Math.floor(n*0.7),tr=Z.slice(0,cut),te=Z.slice(cut);const w=new Array(d).fill(0);let b=0;
+ for(let it=0;it<3000;it++){const g=new Array(d).fill(0);let gb=0;for(const r of tr){const p=sigmoid(r.xs.reduce((s,v,i)=>s+v*w[i],b)),e=p-r.y;for(let i=0;i<d;i++)g[i]+=e*r.xs[i];gb+=e;}for(let i=0;i<d;i++)w[i]-=0.1*(g[i]/tr.length+0.01*w[i]);b-=0.1*gb/tr.length;}
+ const score=r=>sigmoid(r.xs.reduce((s,v,i)=>s+v*w[i],b));const pos=te.filter(r=>r.y===1).map(score),neg=te.filter(r=>r.y===0).map(score);
+ let auc=0.5;if(pos.length&&neg.length){let c=0;for(const a of pos)for(const bn of neg)c+=a>bn?1:a===bn?0.5:0;auc=c/(pos.length*neg.length);}
+ return {w,b,mu,sd,auc,n,wins:rows.filter(r=>r.y===1).length};}
+function discoverPatterns(){ // build dataset from matured snapshots, fit, store
+ const rows=[];for(const T of tv()){if(!T._snap||(now()-T.firstSeen)<DISC_DECIDE+45||T.firstPrice<=0)continue;
+  const maxP=T.maxMult*T.firstPrice,fwd=maxP/Math.max(T._snap.p,1e-12);rows.push({x:T._snap.x,y:fwd>=DISC_RUNX?1:0});}
+ if(rows.length<40)return null;const m=discLogistic(rows);
+ // univariate lift per feature (median split)
+ m.lift=DISC_FEATS.map((nm,i)=>{const col=rows.map(r=>r.x[i]).slice().sort((a,b)=>a-b),med=col[col.length>>1];const hi=rows.filter(r=>r.x[i]>med),lo=rows.filter(r=>r.x[i]<=med);const ph=hi.length?hi.filter(r=>r.y).length/hi.length:0,pl=lo.length?lo.filter(r=>r.y).length/lo.length:0;return {nm,ph,pl,lift:ph/(pl+1e-9)};});
+ m.ts=now();m.base=rows.filter(r=>r.y).length/rows.length;disc=m;return m;}
+function discScore(T){if(!disc||disc.auc<0.6)return 0;const x=discFeat(T);return sigmoid(x.reduce((s,v,i)=>s+(v-disc.mu[i])/disc.sd[i]*disc.w[i],disc.b));}
 /* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
 function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
@@ -482,6 +524,7 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  else if(S.entry==='trending'){const rate=f.buyers/Math.max(f.age,1)*60;if(!(now()-T.lastSeen<120&&rate>=P.trendRate&&f.ratio>=1))return;}  // fastest buyer-growth, still net-buying
  else if(S.entry==='alpha'){const A=alphaScore(T,f);if(A.score<P.alphaMin)return;convSize=alphaSize(P,f.liq,A.score)*(S.alloc||1);if(b.cash<convSize)return;extra={scaleOut:true,alpha:+A.score.toFixed(1),moon:!!S.moonbag};}  // confluence gate + conviction size + scale-out (+moonbag)
  else if(S.entry==='signal'){if(!(T._sig&&now()-T._sig.ts<10))return;extra={scaleOut:true,moon:!!S.moonbag,sigType:T._sig.type};}   // respond to every fresh signal; ride winners via scale-out/moonbag
+ else if(S.entry==='discovered'){const p=discScore(T);if(!disc||disc.auc<0.6||p*100<(P.discMin||55))return;extra={scaleOut:true,moon:!!S.moonbag,prob:+(p*100).toFixed(0)};}   // trade the learned pattern (only if the model is actually predictive)
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
  let ep=f.price;if(S.requireHelius){const ap=await authPriceSol(mint);if(ap)ep=ap;}   // prefer Helius price; fall back to sanitized swap price (fresh tokens often have no DAS price yet — don't block the entry)
  if(Math.random()<COST.failP){b.missed++;return;}
@@ -575,6 +618,14 @@ function ensureSignalStrat(){if(findSignalStrat())return findSignalStrat();
  Object.assign(S.params,{minBuyers:3,minLiq:1,minAge:0,maxAge:100000,size:0.25,maxPos:12,sl:-0.25,trail:0.4,tpHard:99,spikeJump:9,spikeLevel:9,holdMax:900,scaleAt:0.5,scaleFrac:0.5,moonAt:1.5,moonFrac:0.25,moonTrail:0.55});
  strategies.push(S);saveStrats();return S;}
 function toggleSignalStrat(){const S=ensureSignalStrat();S.on=!S.on;saveStrats();renderTrade();renderSignals();}
+/* DISCOVERED — trades the live-learned logistic pattern; off until the model is predictive (AUC>0.6) */
+function findDiscStrat(){return strategies.find(s=>s.entry==='discovered');}
+function ensureDiscStrat(){if(findDiscStrat())return findDiscStrat();
+ const S=newStrategy('Discovered 🧬','discovered');S.moonbag=true;S.on=false;   // stays off until it has learned a pattern
+ Object.assign(S.params,{discMin:55,minBuyers:2,minLiq:1,minAge:8,maxAge:600,size:0.3,maxPos:8,sl:-0.25,trail:0.4,tpHard:99,spikeJump:9,spikeLevel:9,holdMax:900,scaleAt:0.5,scaleFrac:0.5,moonAt:1.5,moonFrac:0.25,moonTrail:0.55});
+ strategies.push(S);saveStrats();return S;}
+function toggleDisc(){const S=ensureDiscStrat();S.on=!S.on;if(S.on&&(!disc||disc.auc<0.6)){discoverPatterns();}saveStrats();renderTrade();renderPatterns();}
+function toggleAutoDiscover(){autoDiscover=!autoDiscover;localStorage.setItem('mchpai_autodiscover',autoDiscover?'1':'0');renderPatterns();}
 /* rotating direct poll of followed wallets — catches their swaps even if not in the DEX sample */
 async function pollFollows(){if(!KEY||!follows.size||fbusy)return;fbusy=true;try{
  const list=[...follows],n=Math.min(followBatch,list.length),batch=[];
@@ -681,6 +732,21 @@ function renderSignals(){const el=$('sig_feed');if(!el)return;
  el.innerHTML=signalFeed.slice(0,40).map(s=>{const T=tokens.get(s.mint),mult=T?T.maxMult.toFixed(1)+'×':'',up=T&&pct(T)>=0;
   const meta=[s.sol?('buy '+s.sol+'◎'):'',s.q?('walletQ '+s.q):'',s.score?('alpha '+(s.score|0)):'',s.x?(s.x+'× breakout'):''].filter(Boolean).join(' · ');
   return `<div class=item><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';}
+function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findDiscStrat();
+ const ab=$('disc_auto');if(ab){ab.textContent=autoDiscover?'auto ●':'auto ○';ab.className='mini'+(autoDiscover?' on':'');}
+ const ub=$('disc_use');if(ub){const on=DS&&DS.on;ub.textContent=on?'🧬 Trading it':'🧬 Trade it';ub.className='mini'+(on?' on':'');}
+ const matured=tv().filter(T=>T._snap&&(now()-T.firstSeen)>=DISC_DECIDE+45).length;
+ if(!disc){st.innerHTML=`<div class=note>Learning… ${matured} tokens matured (need ≥40). The model fits once enough tokens have a snapshot + a known outcome. Keep it running — discovery sharpens with data.</div>`;
+  $('disc_lift').innerHTML='';$('disc_live').innerHTML='<div class=ctr>—</div>';return;}
+ const pred=disc.auc>0.6;
+ st.innerHTML=`<div class=row><span class=muted>model · tokens · winners</span><span>logistic · ${disc.n} · ${disc.wins} (${(disc.base*100|0)}%)</span></div>
+  <div class=row><span class=muted>held-out AUC</span><span class="${pred?'up':'down'}"><b>${disc.auc.toFixed(2)}</b> · ${pred?'predictive ✓ tradeable':'not predictive yet'}</span></div>
+  <div class=row><span class=muted>last learned</span><span>${ageStr(now()-disc.ts)} ago</span></div>`;
+ const order=disc.w.map((wv,i)=>[i,wv]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+ $('disc_lift').innerHTML=order.map(([i,wv])=>{const L=disc.lift[i];return `<div class=row><span class=muted>${DISC_FEATS[i]}</span><span><span class="${wv>0?'up':'down'}">w ${wv>=0?'+':''}${wv.toFixed(2)}</span> · lift ${L.lift.toFixed(2)}× (${(L.ph*100|0)}/${(L.pl*100|0)})</span></div>`;}).join('');
+ const cand=tv().filter(T=>now()-T.lastSeen<90&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,p:discScore(T)})).filter(x=>x.p>0.3).sort((a,b)=>b.p-a.p).slice(0,8);
+ const thr=(DS&&DS.params.discMin)||55;
+ $('disc_live').innerHTML=pred?(cand.map(({T,p})=>`<div class=item><div><div class=nm>${short(T.mint)} <span class=tag style=color:${p*100>=thr?'var(--up)':'#f5a623'}>${(p*100|0)}%</span>${p*100>=thr?' <span class="tag" style=color:var(--up)>🧬 buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)}</div></div><div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div></div></div>`).join('')||'<div class=ctr>no live matches…</div>'):'<div class=ctr>model not predictive yet — gathering data</div>';}
 function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35&&now()-x.T.lastSeen<300).sort((a,b)=>b.s-a.s).slice(0,10);
  $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class=item>
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=50?'#f5a623':'#8b9197'}>${s.toFixed(0)}</span></div>
@@ -802,7 +868,7 @@ function scanSignals(){const t=now(),AS=findAlphaStrat(),TS=findTrendStrat();
   const A=alphaCached(T);if(A.score>=thrA)sig('alpha',T.mint,{score:+A.score.toFixed(0)});
   const age=t-T.firstSeen;if(age>0&&T.buyers.size/age*60>=thrT)sig('trend',T.mint,{});}}
 /* render only the visible tab + one rotating section per cycle (was: all 13 every cycle, each scanning every token) */
-const SECT={'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-copy':renderCopy,'s-dist':renderDist};
+const SECT={'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
 const SKEYS=Object.keys(SECT);let rrIdx=0,activeSection='s-hero';
 function render(){renderHero();renderChips();renderTrade();
  const af=SECT[activeSection];if(af)af();
@@ -825,12 +891,12 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  scanSignals();                                                                      // emit alpha/trend signals regardless of active tab
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- refreshProof();gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, prune
+ refreshProof();gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');const h=a.getAttribute('href');if(h&&h[0]==='#'){activeSection=h.slice(1);render();}}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();ensureMoonStrat();ensureSignalStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();ensureMoonStrat();ensureSignalStrat();ensureDiscStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}
  const sv=localStorage.getItem('mchpai_server');if(sv){const f=$('srv_url');if(f)f.value=sv;connectServer();}}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
