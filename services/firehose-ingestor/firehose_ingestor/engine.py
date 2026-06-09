@@ -223,6 +223,24 @@ class AlphaEngine:
             if age > 0 and len(t.buyers) / age * 60 >= trend_rate:
                 self._sig("trend", mint, now)
 
+    # ------------------------------------------------------------- maintenance
+    def maintain(self, now: int, max_tokens: int = 20000, max_wallets: int = 300000,
+                 stale: int = 1800) -> None:
+        """Bound memory for a 24/7 server: drop stale/oldest tokens + wallet_first."""
+        if len(self.tokens) > max_tokens:
+            ordered = sorted(self.tokens.items(), key=lambda kv: kv[1].last_seen)
+            for mint, _t in ordered[: len(self.tokens) - max_tokens]:
+                self.tokens.pop(mint, None)
+        elif len(self.tokens) > max_tokens // 2:
+            for mint in [m for m, t in self.tokens.items() if now - t.last_seen > stale]:
+                self.tokens.pop(mint, None)
+        if len(self.wallet_first) > max_wallets:
+            ordered = sorted(self.wallet_first.items(), key=lambda kv: kv[1])
+            for addr, _ts in ordered[: len(self.wallet_first) - max_wallets]:
+                self.wallet_first.pop(addr, None)
+        if len(self.sig_seen) > 8000:
+            self.sig_seen.clear()
+
     # ----------------------------------------------------------------- readers
     def top_signals(self, n: int = 40) -> list[dict]:
         return list(self.signals)[:n]

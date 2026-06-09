@@ -321,7 +321,8 @@ function category(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen;if(rec>600
  if(T.buyers.size>=3&&T.netSol>0&&T.buys>=T.sells)return 'heating';if(T.sells>T.buys&&T.netSol<0)return 'dumping';return 'active';}
 function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0?T.netSol/T.vol:0;
  let s=Math.min(40,T.buyers.size*5)+Math.max(0,fi)*30+Math.min(20,(T.maxMult-1)*15)+(rec<120?10:0)-(age>600?20:0);return Math.max(0,Math.min(100,s));}
-const tv=()=>[...tokens.values()];
+let _tvC=null,_tvK=-1;
+const tv=()=>{if(_tvK===pollN&&_tvC)return _tvC;_tvC=[...tokens.values()];_tvK=pollN;return _tvC;};   // memoize per poll cycle (avoids re-spreading the Map across renderers)
 /* ===== PERSISTENT DATA VAULT (IndexedDB) — preserve ALL gathered data (10GB target) ===== */
 const TARGET_BYTES=10*1024*1024*1024,MAX_SWAPS=5000000,RESTORE_N=25000;
 let DB=null,replaying=false,swapBuf=[],tradeBuf=[];
@@ -380,6 +381,8 @@ function alphaScore(T,f){let smartW=0;T.buyers.forEach(a=>{const q=walletQ(a);if
   cLiq=Math.max(0,Math.min(1,liqG*4)),cOrg=organic,cMom=Math.max(0,Math.min(1,f.mom*5));
  const score=100*(0.30*cSmart+0.20*cAccel+0.18*cFlow+0.12*cLiq+0.10*cOrg+0.10*cMom)*recency;
  return {score,cSmart,cAccel,cFlow,cLiq,cOrg,cMom};}
+/* memoize the (somewhat heavy) score per token for ~3s so scanSignals + renderAlpha don't double-compute */
+function alphaCached(T){const t=now();if(T._a&&t-T._a.ts<3)return T._a.v;const v=alphaScore(T,feat(T));T._a={ts:t,v};return v;}
 /* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
 function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
@@ -447,7 +450,9 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  if(Math.random()<COST.failP){b.missed++;return;}
  sOpen(S,mint,ep,ts,convSize,ctxOf(f),extra);if(S.live&&liveArmed)liveExecute('buy',mint,convSize,S);}
 async function botTick(mint){if(junk.has(mint)){apiStats.skipped++;return;}const T=tokens.get(mint);if(!T)return;const f=feat(T);for(const S of strategies)if(S.on)await sTick(S,mint,T,f);}
-async function manageOpenPositions(){const ts=now();const held=new Set();strategies.forEach(S=>S.book.pos.forEach((_,m)=>held.add(m)));for(const m of held){const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}}for(const S of strategies)if(S.on)for(const m of [...S.book.pos.keys()])sExit(S,m,ts);}
+async function manageOpenPositions(){const ts=now();const held=new Set();strategies.forEach(S=>S.book.pos.forEach((_,m)=>held.add(m)));
+ await Promise.all([...held].map(async m=>{const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}}));   // mark all held positions in parallel
+ for(const S of strategies)if(S.on)for(const m of [...S.book.pos.keys()])sExit(S,m,ts);}
 const bookEquity=b=>{let o=0;b.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return b.cash+o;};
 
 /* ===== LIVE EXECUTION — opt-in, heavily gated. Hot key held in memory ONLY (never persisted/sent). ===== */
@@ -578,7 +583,8 @@ function connectServer(){const f=$('srv_url'),u=(f&&f.value||'').trim();if(!u||t
  try{srvWs=new WebSocket(u);}catch(e){srvState='bad url';renderServer();return;}srvState='connecting';renderServer();
  srvWs.onopen=()=>{srvState='live';renderServer();};
  srvWs.onmessage=async ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
-  if(m.t==='swap'&&m.swap){const sw=m.swap;if(sw.signature&&seen.has(sw.signature))return;if(sw.signature)seen.add(sw.signature);srvCount++;ingest(sw);await botTick(sw.mint);}};
+  const arr=m.t==='swaps'&&m.swaps?m.swaps:(m.t==='swap'&&m.swap?[m.swap]:null);if(!arr)return;
+  for(const sw of arr){if(sw.signature&&seen.has(sw.signature))continue;if(sw.signature)seen.add(sw.signature);srvCount++;ingest(sw);await botTick(sw.mint);}};
  srvWs.onclose=()=>{if(srvState!=='off')srvState='reconnecting';renderServer();};
  srvWs.onerror=()=>{try{srvWs.close();}catch(e){}};}
 function disconnectServer(){srvState='off';try{if(srvWs)srvWs.close();}catch(e){}srvWs=null;localStorage.removeItem('mchpai_server');renderServer();}
@@ -617,8 +623,7 @@ function renderFlow(){const tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;
 function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlphaStrat(),thr=(AS&&AS.params.alphaMin)||68,on=AS&&AS.on;
  const btn=$('alpha_btn');if(btn){btn.textContent=on?'🎯 Auto-buy ON':'🎯 Auto-buy';btn.className='mini'+(on?' on':'');}
  const MS=findMoonStrat(),mon=MS&&MS.on,mb=$('moon_btn');if(mb){mb.textContent=mon?'🌙 Moonshot ON':'🌙 Moonshot';mb.className='mini'+(mon?' on':'');}
- const scored=tv().filter(T=>now()-T.lastSeen<90&&T.buyers.size>=4&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,A:alphaScore(T,feat(T))})).filter(x=>x.A.score>=Math.max(30,thr-25)).sort((a,b)=>b.A.score-a.A.score).slice(0,8);
- scored.forEach(({T,A})=>{if(A.score>=thr)sig('alpha',T.mint,{score:+A.score.toFixed(0)});});   // surface alpha fires into the signals feed
+ const scored=tv().filter(T=>now()-T.lastSeen<90&&T.buyers.size>=4&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,A:alphaCached(T)})).filter(x=>x.A.score>=Math.max(30,thr-25)).sort((a,b)=>b.A.score-a.A.score).slice(0,8);
  const graded=[...walletAlpha.values()].filter(w=>w.n>=2);const proven=graded.filter(w=>w.a>0).length;
  const st=$('alpha_stat');if(st)st.innerHTML=`<div class=row><span class=muted>graded wallets · proven (+ROI)</span><span>${graded.length} · <span class=up>${proven}</span></span></div><div class=row><span class=muted>entry bar · firing now</span><span>alpha ≥ ${thr} · <span class="${scored.filter(x=>x.A.score>=thr).length?'up':''}">${scored.filter(x=>x.A.score>=thr).length}</span></span></div>`;
  el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class=item>
@@ -724,7 +729,6 @@ function renderTrends(){const t=trends();
  const TS=findTrendStrat(),on=TS&&TS.on,thr=TS?TS.params.trendRate:8;
  const btn=$('tr_autobtn');if(btn){btn.textContent=on?'⚡ Auto-buy ON':'⚡ Auto-buy';btn.className='mini'+(on?' on':'');}
  const qualifying=lead.filter(({rate})=>rate*60>=thr).length;
- lead.forEach(({T,rate})=>{if(rate*60>=thr)sig('trend',T.mint,{});});   // feed trending into the signals stream
  const ast=$('tr_autostat');if(ast)ast.innerHTML=on?`<div class=note style=color:var(--up)>⚡ Auto-buying trending tokens ≥ ${thr}/min buyers (${qualifying} qualifying now). Paper · "${TS.name}" book — tune size/stop/threshold in Trading. Flip its 🔴 LIVE switch for on-chain.</div>`:`<div class=note>Tap <b>Auto-buy</b> to open paper positions automatically on the fastest-growing tokens (≥ ${thr}/min buyers). Tune it in the Trading tab.</div>`;
  $('tr_lead').innerHTML=lead.map(({T,rate})=>{const hot=rate*60>=thr&&on;return `<div class=item><div><div class=nm>${short(T.mint)} ${hot?'<span class="tag" style=color:var(--up)>⚡buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning…</div>';}
 function genStrategy(){const w=trends().winners;
@@ -737,8 +741,19 @@ function genStrategy(){const w=trends().winners;
  if((w.peak||2)>=4){S.params.spikeJump=0.3;S.params.spikeLevel=0.6;}else{S.params.trail=0.35;}
  strategies.push(S);saveStrats();renderTrade();
  $('tr_edge').innerHTML=`<div class=note style=color:var(--up)>✓ Created “${S.name}” → minBuyers ${S.params.minBuyers}, smart ≥${S.params.smartMin}, liq ≥${S.params.minLiq}◎, ratio ≥${S.params.ratioIn}. Tune/toggle it in the Trading tab.</div>`+$('tr_edge').innerHTML;}
-function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderTrends();renderAlpha();renderSignals();renderOpps();renderDist();renderCopy();
- if(tokens.size>4000)tv().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
+/* signal emission is decoupled from rendering so signals fire no matter which tab is open */
+function scanSignals(){const t=now(),AS=findAlphaStrat(),TS=findTrendStrat();
+ const thrA=(AS&&AS.params.alphaMin)||68,thrT=(TS&&TS.params.trendRate)||8;
+ for(const T of tv()){if(t-T.lastSeen>=90||T.buyers.size<4||T.lastPrice<=0||junk.has(T.mint))continue;
+  const A=alphaCached(T);if(A.score>=thrA)sig('alpha',T.mint,{score:+A.score.toFixed(0)});
+  const age=t-T.firstSeen;if(age>0&&T.buyers.size/age*60>=thrT)sig('trend',T.mint,{});}}
+/* render only the visible tab + one rotating section per cycle (was: all 13 every cycle, each scanning every token) */
+const SECT={'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-copy':renderCopy,'s-dist':renderDist};
+const SKEYS=Object.keys(SECT);let rrIdx=0,activeSection='s-hero';
+function render(){renderHero();renderChips();renderTrade();
+ const af=SECT[activeSection];if(af)af();
+ for(let i=0;i<SKEYS.length;i++){const rk=SKEYS[(rrIdx+i)%SKEYS.length];if(rk!==activeSection){SECT[rk]();rrIdx=(rrIdx+i+1)%SKEYS.length;break;}}
+ if(tokens.size>4000)tv().slice().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
  if(seen.size>120000)seen.clear();}
 function setMetric(m){heroMetric=m;renderHero();}
@@ -747,17 +762,20 @@ function setWin(n){heroWin=n;renderHero();}
 async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  for(const pid of Object.keys(PROGRAMS)){try{const sigs=await rpc('getSignaturesForAddress',[pid,{limit:50}]);
   for(const s of sigs||[])if(s&&s.signature&&!s.err&&!seen.has(s.signature))pend.push(s.signature);}catch(e){$('status').textContent='⚠ '+e.message;busy=false;return;}}
- pend=pend.slice(0,36);let parsed=0;
- for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);await botTick(s.mint);parsed++;}}}catch(e){}await sleep(35);}
+ pend=pend.slice(0,48);let parsed=0;const CC=6;                                       // bounded-concurrency fetch (~6x the old sequential throughput → more coverage)
+ for(let i=0;i<pend.length;i+=CC){const chunk=pend.slice(i,i+CC);
+  const res=await Promise.all(chunk.map(async sg=>{seen.add(sg);try{const r=await rpc('getTransaction',[sg,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);return r?parseSwapRPC(r):null;}catch(e){return null;}}));
+  for(const s of res)if(s){ingest(s);await botTick(s.mint);parsed++;}}
  if(pollN++%40===0)refreshSolUsd();                                                  // keep SOL/USD fresh for marks
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
+ scanSignals();                                                                      // emit alpha/trend signals regardless of active tab
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
  gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%30===0)pruneWallets();   // grade, persist, auto-evolve, auto-prune/promote wallets
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
-document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
+document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');const h=a.getAttribute('href');if(h&&h[0]==='#'){activeSection=h.slice(1);render();}}));
 function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();ensureMoonStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}
  const sv=localStorage.getItem('mchpai_server');if(sv){const f=$('srv_url');if(f)f.value=sv;connectServer();}}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}

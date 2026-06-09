@@ -58,6 +58,8 @@ def build_app():
         for ws in dead:
             clients.discard(ws)
 
+    buf: list = []
+
     async def _consume():
         key = os.environ.get("HELIUS_API_KEY", "")
         if key:
@@ -68,18 +70,31 @@ def build_app():
             state["source"] = "mock (set HELIUS_API_KEY for the real firehose)"
         async for sw in fh.swaps():
             engine.ingest(sw)
-            await _broadcast({"t": "swap", "swap": sw})
+            buf.append(sw)          # batched: flushed by _flusher, not one WS msg per swap
+
+    async def _flusher():
+        """Flush buffered swaps to clients at a fixed rate so a high-throughput
+        firehose can't drown WS clients in per-swap messages."""
+        while True:
+            await asyncio.sleep(0.4)
+            if buf:
+                batch, buf[:] = buf[:2000], buf[2000:]
+                await _broadcast({"t": "swaps", "swaps": batch})
 
     async def _scanner():
         while True:
             await asyncio.sleep(7)
-            engine.scan(engine.now or int(time.time()))
+            now = engine.now or int(time.time())
+            engine.scan(now)
+            engine.maintain(now)
             await _broadcast({"t": "signals", "signals": engine.top_signals(20),
                               "stats": engine.stats()})
 
     @app.on_event("startup")
     async def _startup():
-        app.state.tasks = [asyncio.create_task(_consume()), asyncio.create_task(_scanner())]
+        app.state.tasks = [asyncio.create_task(_consume()),
+                           asyncio.create_task(_flusher()),
+                           asyncio.create_task(_scanner())]
 
     @app.on_event("shutdown")
     async def _shutdown():
