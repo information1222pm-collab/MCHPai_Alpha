@@ -69,7 +69,7 @@ a{color:var(--up)}.kf{display:none}
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
+  <a href=#s-hero class=on>Overview</a><a href=#s-trade>Trading</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
   <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-opps>Opportunities</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
@@ -86,6 +86,23 @@ a{color:var(--up)}.kf{display:none}
     <div class=chip><div class=l>Wallets</div><div class=v id=c_wal>0</div></div>
     <div class=chip><div class=l>Swaps/min</div><div class=v id=c_spm>0</div></div>
   </div>
+</section>
+
+<section id=s-trade>
+  <div class=h>Momentum Bot <span class="tag" style=color:var(--up);background:var(--upbg)>PAPER</span></div>
+  <div class=heroval id=bot_eq>—</div>
+  <div class="chg up" id=bot_chg>—</div>
+  <div id=bot_chart style=margin:8px 0></div>
+  <div class=chips>
+    <div class=chip><div class=l>Realized PnL</div><div class=v id=bot_real>0</div></div>
+    <div class=chip><div class=l>Open</div><div class=v id=bot_open>0</div></div>
+    <div class=chip><div class=l>Trades</div><div class=v id=bot_tr>0</div></div>
+    <div class=chip><div class=l>Win rate</div><div class=v id=bot_win>0%</div></div>
+  </div>
+  <div class=h style=margin:16px 0 8px>Open Positions</div><div class=list id=bot_pos></div>
+  <div class=h style=margin:16px 0 8px>Recent Trades</div><div class=list id=bot_log></div>
+  <div class=note>Simulated fills at the live price (no slippage/latency) on buy/sell-ratio + momentum
+   rules. Paper only — real execution is the gated server-side <code>scripts/trader.py</code>.</div>
 </section>
 
 <section id=s-movers><div class=h>Top Movers</div>
@@ -202,6 +219,23 @@ function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0
  let s=Math.min(40,T.buyers.size*5)+Math.max(0,fi)*30+Math.min(20,(T.maxMult-1)*15)+(rec<120?10:0)-(age>600?20:0);return Math.max(0,Math.min(100,s));}
 const tv=()=>[...tokens.values()];
 
+/* ---- paper momentum bot (same rules as scripts/trader.py) ---- */
+const STRAT={size:0.5,maxPos:5,tp:0.4,sl:-0.2,trail:0.25,ratioIn:2,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:600,minBuyers:3,minVol:1,minAge:8,maxAge:900,fee:0.02};
+const bot={cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],enabled:true};
+function feat(T){const bv=(T.vol+T.netSol)/2,sv=(T.vol-T.netSol)/2,p=T.prices,
+ mom=p.length>=2?(p[p.length-1]/p[Math.max(0,p.length-1-STRAT.momWin)]-1):0;
+ return {price:T.lastPrice,ratio:bv/(sv+1e-9),mom,buyers:T.buyers.size,age:now()-T.firstSeen,vol:bv+sv};}
+function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const f=feat(T),ts=now(),pos=bot.pos.get(mint);
+ if(pos){pos.peak=Math.max(pos.peak,f.price);const ret=f.price/pos.entry-1;let ex=null;
+  if(ret>=STRAT.tp)ex='take profit';else if(ret<=STRAT.sl)ex='stop loss';else if(f.price<=pos.peak*(1-STRAT.trail))ex='trail stop';
+  else if(f.mom<=STRAT.momOut)ex='reversal';else if(f.ratio<STRAT.ratioOut)ex='sell pressure';else if(f.age>=STRAT.holdMax)ex='timeout';
+  if(ex){const proc=pos.tokens*f.price*(1-STRAT.fee),pnl=proc-pos.size;bot.cash+=proc;bot.realized+=pnl;
+   bot.closed.unshift({mint,pnl,ret,reason:ex,ts});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}
+ }else if(bot.pos.size<STRAT.maxPos&&bot.cash>=STRAT.size){
+  if(f.ratio>=STRAT.ratioIn&&f.mom>=STRAT.momIn&&f.buyers>=STRAT.minBuyers&&f.vol>=STRAT.minVol&&f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.price>0){
+   const cost=STRAT.size*(1+STRAT.fee);if(bot.cash>=cost){bot.cash-=cost;bot.pos.set(mint,{entry:f.price,size:STRAT.size,tokens:STRAT.size/f.price,openTs:ts,peak:f.price});}}}}
+function botEquity(){let o=0;bot.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return bot.cash+o;}
+
 /* ---- render ---- */
 function renderHero(){const ser=hist.map(METRICS[heroMetric].s);let w=ser;if(heroWin>0)w=ser.slice(-heroWin);
  const M=METRICS[heroMetric],cur=w.length?w[w.length-1]:0,st=w.length?w[0]:0,chg=cur-st,p=st?chg/Math.abs(st)*100:0,up=chg>=0;
@@ -241,7 +275,21 @@ function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35
  $('regime').innerHTML=`<span class="${heat>=cold?'up':'down'}">${heat>=cold?'RISK-ON':'RISK-OFF'}</span> <span class=muted>(${heat} hot / ${cold} cold)</span>`;}
 function renderDist(){$('ch_multhist').innerHTML=histogram(tv().map(T=>T.maxMult),'#00c805');$('ch_volhist').innerHTML=histogram(tv().map(T=>T.vol).filter(v=>v>0),'#5aa9ff');}
 
-function render(){renderHero();renderChips();renderMovers();renderTokens();renderWallets();renderFlow();renderOpps();renderDist();
+function renderTrade(){const eq=botEquity(),chg=eq-bot.start,p=chg/bot.start*100,up=chg>=0;
+ $('bot_eq').textContent=eq.toFixed(3)+' ◎';const bc=$('bot_chg');bc.className='chg '+(up?'up':'down');
+ bc.textContent=(up?'▲ ':'▼ ')+Math.abs(chg).toFixed(3)+'◎  '+fmtPct(p);
+ $('bot_chart').innerHTML=rhChart(bot.eqHist.length>1?bot.eqHist:[bot.start,eq],170,up);
+ const wins=bot.closed.filter(c=>c.pnl>0).length,n=bot.closed.length;
+ $('bot_real').innerHTML=`<span class="${bot.realized>=0?'up':'down'}">${bot.realized>=0?'+':''}${bot.realized.toFixed(3)}</span>`;
+ $('bot_open').textContent=bot.pos.size;$('bot_tr').textContent=n;$('bot_win').textContent=(n?(wins/n*100).toFixed(0):0)+'%';
+ const pos=[...bot.pos.entries()].map(([m,po])=>{const T=tokens.get(m),cur=(T&&T.lastPrice)||po.entry,ret=(cur/po.entry-1)*100,up2=ret>=0;
+  return `<div class=item><div><div class=nm>${short(m)}</div><div class=sub>entry ${po.entry.toExponential(2)} · ${ageStr(now()-po.openTs)}</div></div>
+  <div class=rt><div class=px>${cur.toExponential(2)}</div><div class="badge ${up2?'up':'down'}">${fmtPct(ret)}</div></div></div>`;}).join('');
+ $('bot_pos').innerHTML=pos||'<div class=ctr>no open positions</div>';
+ $('bot_log').innerHTML=bot.closed.slice(0,12).map(c=>{const up2=c.pnl>=0;
+  return `<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.reason}</div></div>
+  <div class=rt><div class="badge ${up2?'up':'down'}">${(up2?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`;}).join('')||'<div class=ctr>no trades yet</div>';}
+function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderOpps();renderDist();
  if(tokens.size>4000)tv().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
  if(seen.size>120000)seen.clear();}
@@ -252,8 +300,9 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  for(const pid of Object.keys(PROGRAMS)){try{const sigs=await rpc('getSignaturesForAddress',[pid,{limit:25}]);
   for(const s of sigs||[])if(s&&s.signature&&!s.err&&!seen.has(s.signature))pend.push(s.signature);}catch(e){$('status').textContent='⚠ '+e.message;busy=false;return;}}
  pend=pend.slice(0,18);let parsed=0;
- for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);parsed++;}}}catch(e){}await sleep(35);}
+ for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);botTick(s.mint);parsed++;}}}catch(e){}await sleep(35);}
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
+ bot.eqHist.push(botEquity());if(bot.eqHist.length>150)bot.eqHist.shift();
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
