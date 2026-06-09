@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """MCHPAI Observation Center — real-time mission-control dashboard.
 
-A single-file, dependency-free (stdlib only) web server that reads the
-acquisition / analysis / ml stores READ-ONLY and serves a live, auto-refreshing
-dashboard so you can watch the observatory in real time:
+A single-file web server (stdlib + the mchpai_common library for real wallet
+profiling) that reads the acquisition / analysis / ml stores READ-ONLY and serves
+a live, auto-refreshing dashboard so you can watch the observatory in real time:
 
   * live counters (births, tokens, swaps, snapshots) + milestone ladder
   * incoming token-birth feed
@@ -23,7 +23,14 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+# the actual instrument — reuse the real profiling logic, not a shortcut
+from mchpai_common.schemas.common import Side
+from mchpai_common.schemas.trade import Trade
+from mchpai_common.wallets import profile_wallet, profile_wallet_advanced
 
 ACQ_DB = os.environ.get("ACQUIRE_DB", "data/acquisition.db")
 ANALYSIS_DB = os.environ.get("ANALYSIS_DB", "data/analysis.db")
@@ -112,6 +119,71 @@ def api_patterns() -> dict:
     return {"note": "run scripts/analyze.py to generate patterns"}
 
 
+def _trades_for(acq, wallet: str) -> list[Trade]:
+    rows = q(acq, "SELECT signature, mint, side, sol_amount, token_amount, price, ts "
+                  "FROM swaps WHERE wallet=? ORDER BY ts, slot", (wallet,))
+    return [
+        Trade(signature=r[0], wallet=wallet, mint=r[1], side=Side(r[2]),
+              sol_amount=r[3], token_amount=r[4], price_sol=r[5],
+              block_time=datetime.fromtimestamp(r[6], tz=timezone.utc))
+        for r in rows
+    ]
+
+
+def api_wallets() -> list:
+    """Top wallets by realized PnL (FIFO-matched) — the wallet leaderboard."""
+    acq = ro(ACQ_DB)
+    if not acq:
+        return []
+    # bound compute to the most active wallets
+    cand = q(acq, "SELECT wallet, count(*) c, count(DISTINCT mint) t, sum(sol_amount) v "
+                  "FROM swaps GROUP BY wallet HAVING c >= 2 ORDER BY c DESC LIMIT 150")
+    out = []
+    for w, c, t, v in cand:
+        p = profile_wallet(w, _trades_for(acq, w))
+        out.append({
+            "wallet": w, "tokens": t, "swaps": c, "volume": round(v or 0, 3),
+            "realized_pnl": round(p.realized_pnl_sol, 4), "win_rate": round(p.win_rate, 3),
+            "closed": p.closed_trades, "roi": round(p.roi, 3),
+            "tag": "multi-token" if t >= 3 else "",
+        })
+    acq.close()
+    out.sort(key=lambda r: (-r["realized_pnl"], -r["volume"]))
+    return out[:30]
+
+
+def api_wallet(addr: str) -> dict:
+    """Full per-wallet observation — the advanced behavioral profile + recent trades."""
+    acq = ro(ACQ_DB)
+    if not acq or not addr:
+        return {}
+    trades = _trades_for(acq, addr)
+    if not trades:
+        acq.close()
+        return {"wallet": addr, "swaps": 0}
+    adv = profile_wallet_advanced(addr, trades)
+    recent = [{"mint": t.mint, "side": t.side.value, "sol": round(t.sol_amount, 4),
+               "price": t.price_sol, "ts": int(t.block_time.timestamp())}
+              for t in trades[-20:]]
+    acq.close()
+    return {
+        "wallet": addr, "swaps": len(trades),
+        "tokens": len({t.mint for t in trades}),
+        "profile": {
+            "wallet_alpha_score": round(adv.wallet_alpha_score, 1),
+            "win_rate": round(adv.win_rate, 3), "sharpe": round(adv.sharpe, 3),
+            "kelly_fraction": round(adv.kelly_fraction, 3),
+            "expectancy_sol": round(adv.expectancy_sol, 4),
+            "avg_hold_seconds": round(adv.avg_hold_seconds, 1),
+            "diamond_hand_score": round(adv.diamond_hand_score, 3),
+            "rug_avoidance": round(adv.rug_avoidance, 3),
+            "scaling_behavior": round(adv.scaling_behavior, 3),
+            "closed_trades": adv.closed_trades,
+        },
+        "recent": recent,
+    }
+
+
 def api_ml() -> list:
     db = ro(ML_DB)
     if not db:
@@ -125,7 +197,7 @@ def api_ml() -> list:
 
 ROUTES = {
     "/api/stats": api_stats, "/api/births": api_births, "/api/top": api_top,
-    "/api/patterns": api_patterns, "/api/ml": api_ml,
+    "/api/patterns": api_patterns, "/api/ml": api_ml, "/api/wallets": api_wallets,
 }
 
 # ----------------------------------------------------------------------- html
@@ -194,6 +266,12 @@ a{color:var(--accent);text-decoration:none}.tag{font-size:10px;color:var(--dim)}
     <table><thead><tr><th>wallet</th><th>tokens</th></tr></thead>
     <tbody id=wallets></tbody></table></div>
 
+  <div class="card full"><h2>Wallet Observation — Top Wallets by realized PnL · click a row for the full behavioral profile</h2>
+    <table><thead><tr><th>wallet</th><th>tokens</th><th>swaps</th><th>vol◎</th>
+    <th>realized PnL◎</th><th>win%</th><th>closed</th><th></th></tr></thead>
+    <tbody id=wallets_top></tbody></table>
+    <div id=wallet_detail class=note></div></div>
+
   <div class="card full"><h2>Pattern Analysis — correlations & consistencies</h2>
     <div class=row><div id=corr style=flex:1></div><div id=consist style=flex:1></div></div>
     <div class=note id=hyp></div></div>
@@ -246,7 +324,24 @@ async function tick(){
   if(p.hypotheses)$('hyp').innerHTML=(p.caveat?('⚠ '+p.caveat+'<br>'):'')+p.hypotheses.map(h=>'• '+h).join('<br>');
   else if(p.note)$('hyp').textContent=p.note;
  }
+ const ws=await j('/api/wallets');
+ if(ws){$('wallets_top').innerHTML=ws.map(w=>`<tr style=cursor:pointer onclick="loadWallet('${w.wallet}')">
+  <td class=mono>${short(w.wallet)}</td><td>${w.tokens}</td><td>${w.swaps}</td>
+  <td>${w.volume.toFixed(2)}</td><td class="${w.realized_pnl>=0?'good':'bad'}">${w.realized_pnl.toFixed(3)}</td>
+  <td>${(w.win_rate*100).toFixed(0)}%</td><td>${w.closed}</td>
+  <td class=tag>${w.tag}</td></tr>`).join('')||'<tr><td class=muted>no wallet data</td></tr>';}
  $('upd').textContent='live · updated '+new Date().toLocaleTimeString();
+}
+async function loadWallet(a){
+ const d=await j('/api/wallet?addr='+encodeURIComponent(a));
+ if(!d||!d.profile){$('wallet_detail').textContent='no closed trades for this wallet yet';return}
+ const p=d.profile;
+ $('wallet_detail').innerHTML=`<b class=good>${a}</b> — ${d.tokens} tokens · ${d.swaps} swaps<br>
+  alpha=<b>${p.wallet_alpha_score}</b> · win=${(p.win_rate*100).toFixed(0)}% · sharpe=${p.sharpe} ·
+  kelly=${p.kelly_fraction} · expectancy=${p.expectancy_sol}◎ · hold=${(p.avg_hold_seconds/60).toFixed(1)}m ·
+  diamond=${p.diamond_hand_score} · rug-avoid=${p.rug_avoidance} · closed=${p.closed_trades}<br>
+  <span class=muted>recent:</span> `+d.recent.map(r=>
+   `<span class=pill>${r.side=='buy'?'▲':'▼'} ${short(r.mint)} ${r.sol}◎</span>`).join(' ');
 }
 tick();setInterval(tick,4000);
 </script></body></html>"""
@@ -258,7 +353,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
-        if path in ROUTES:
+        if path == "/api/wallet":
+            addr = parse_qs(urlparse(self.path).query).get("addr", [""])[0]
+            self._send(200, "application/json", json.dumps(api_wallet(addr)).encode())
+        elif path in ROUTES:
             self._send(200, "application/json", json.dumps(ROUTES[path]()).encode())
         elif path in ("/", "/index.html"):
             self._send(200, "text/html; charset=utf-8", PAGE.encode())
