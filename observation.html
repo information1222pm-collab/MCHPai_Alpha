@@ -353,7 +353,9 @@ const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending','alpha'],EXI
 function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
 function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0,peakEq:10};}
 function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',live:false,retired:false,moonbag:false,params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
-function loadStrats(){try{const raw=localStorage.getItem('mchpai_strats');if(raw)return JSON.parse(raw).map(s=>{const S=newStrategy(s.name,s.entry);if(s.id)S.id=s.id;S.on=s.on!==false;if(s.exitMode)S.exitMode=s.exitMode;S.requireHelius=!!s.requireHelius;S.live=!!s.live;S.retired=!!s.retired;S.moonbag=!!s.moonbag;if(s.retireReason)S.retireReason=s.retireReason;if(s.retired)S.on=false;Object.assign(S.params,s.params||{});return S;});}catch(e){}return [newStrategy('RL Trader','rl'),newStrategy('Tiered Newborn','tiered'),newStrategy('Momentum','momentum')];}
+function loadStrats(){try{const raw=localStorage.getItem('mchpai_strats');if(raw)return JSON.parse(raw).map(s=>{const S=newStrategy(s.name,s.entry);if(s.id)S.id=s.id;S.on=s.on!==false;if(s.exitMode)S.exitMode=s.exitMode;S.requireHelius=!!s.requireHelius;S.live=!!s.live;S.retired=!!s.retired;S.moonbag=!!s.moonbag;if(s.retireReason)S.retireReason=s.retireReason;if(s.retired)S.on=false;Object.assign(S.params,s.params||{});
+ if(S.entry==='alpha'&&(S.params.alphaMin===68||S.params.alphaMin===58))S.params.alphaMin=S.moonbag?35:40;   // migrate stale near-unreachable defaults so alpha actually trades
+ return S;});}catch(e){}return [newStrategy('RL Trader','rl'),newStrategy('Tiered Newborn','tiered'),newStrategy('Momentum','momentum')];}
 let strategies=loadStrats();
 function saveStrats(){try{localStorage.setItem('mchpai_strats',JSON.stringify(strategies.map(s=>({id:s.id,name:s.name,on:s.on,entry:s.entry,exitMode:s.exitMode,requireHelius:s.requireHelius,live:s.live,retired:s.retired,moonbag:s.moonbag,retireReason:s.retireReason,params:s.params}))));}catch(e){}}
 function findS(id){return strategies.find(s=>s.id===id);}
@@ -446,7 +448,7 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  else if(S.entry==='trending'){const rate=f.buyers/Math.max(f.age,1)*60;if(!(now()-T.lastSeen<120&&rate>=P.trendRate&&f.ratio>=1))return;}  // fastest buyer-growth, still net-buying
  else if(S.entry==='alpha'){const A=alphaScore(T,f);if(A.score<P.alphaMin)return;convSize=alphaSize(P,f.liq,A.score);if(b.cash<convSize)return;extra={scaleOut:true,alpha:+A.score.toFixed(1),moon:!!S.moonbag};}  // confluence gate + conviction size + scale-out (+moonbag)
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
- let ep=f.price;if(S.requireHelius){ep=await authPriceSol(mint);if(!ep)return;}
+ let ep=f.price;if(S.requireHelius){const ap=await authPriceSol(mint);if(ap)ep=ap;}   // prefer Helius price; fall back to sanitized swap price (fresh tokens often have no DAS price yet — don't block the entry)
  if(Math.random()<COST.failP){b.missed++;return;}
  sOpen(S,mint,ep,ts,convSize,ctxOf(f),extra);if(S.live&&liveArmed)liveExecute('buy',mint,convSize,S);}
 async function botTick(mint){if(junk.has(mint)){apiStats.skipped++;return;}const T=tokens.get(mint);if(!T)return;const f=feat(T);for(const S of strategies)if(S.on)await sTick(S,mint,T,f);}
@@ -521,13 +523,13 @@ function toggleTrendAutobuy(){const S=ensureTrendStrat();S.on=!S.on;saveStrats()
 /* integrated Alpha engine strategy — high-conviction by default */
 function findAlphaStrat(){return strategies.find(s=>s.entry==='alpha');}
 function ensureAlphaStrat(){if(findAlphaStrat())return findAlphaStrat();
- const S=newStrategy('Alpha Engine','alpha');Object.assign(S.params,{alphaMin:68,minBuyers:6,minLiq:4,minAge:10,maxAge:900,size:0.5,maxPos:5,sl:-0.3,trail:0.3,tpHard:5,spikeJump:0.35,spikeLevel:0.9,holdMax:900,scaleAt:0.4,scaleFrac:0.5});strategies.push(S);saveStrats();return S;}
+ const S=newStrategy('Alpha Engine','alpha');Object.assign(S.params,{alphaMin:40,minBuyers:6,minLiq:4,minAge:10,maxAge:900,size:0.5,maxPos:5,sl:-0.3,trail:0.3,tpHard:5,spikeJump:0.35,spikeLevel:0.9,holdMax:900,scaleAt:0.4,scaleFrac:0.5});strategies.push(S);saveStrats();return S;}
 function toggleAlpha(){const S=ensureAlphaStrat();S.on=!S.on;saveStrats();renderTrade();renderAlpha();}
 /* MOONSHOT — asymmetric fat-tail rider: many small bets, cut losers fast, ride a free moonbag to the moon */
 function findMoonStrat(){return strategies.find(s=>s.entry==='alpha'&&s.moonbag);}
 function ensureMoonStrat(){if(findMoonStrat())return findMoonStrat();
  const S=newStrategy('Moonshot 🌙','alpha');S.moonbag=true;
- Object.assign(S.params,{alphaMin:58,minBuyers:5,minLiq:3,minAge:8,maxAge:1200,size:0.3,maxPos:8,sl:-0.25,trail:0.45,tpHard:99,spikeJump:9,spikeLevel:9,holdMax:1800,scaleAt:0.6,scaleFrac:0.5,moonAt:1.5,moonFrac:0.25,moonTrail:0.55});
+ Object.assign(S.params,{alphaMin:35,minBuyers:5,minLiq:3,minAge:8,maxAge:1200,size:0.3,maxPos:8,sl:-0.25,trail:0.45,tpHard:99,spikeJump:9,spikeLevel:9,holdMax:1800,scaleAt:0.6,scaleFrac:0.5,moonAt:1.5,moonFrac:0.25,moonTrail:0.55});
  strategies.push(S);saveStrats();return S;}
 function toggleMoon(){const S=ensureMoonStrat();S.on=!S.on;saveStrats();renderTrade();renderAlpha();}
 function setMoonbag(id,v){const S=findS(id);S.moonbag=v;saveStrats();renderTrade();}

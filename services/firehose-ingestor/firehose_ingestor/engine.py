@@ -210,7 +210,7 @@ class AlphaEngine:
             self._sig("breakout", mint, ts, x=round(t.last_price / t.first_price, 1))
 
     # ------------------------------------------------------------- periodic scan
-    def scan(self, now: int, alpha_min: float = 68.0, trend_rate: float = 8.0) -> None:
+    def scan(self, now: int, alpha_min: float = 40.0, trend_rate: float = 8.0) -> None:
         """Emit alpha-fire and trending signals across active tokens (call ~7s)."""
         self.grade_wallets(now)
         for mint, t in self.tokens.items():
