@@ -1,0 +1,69 @@
+name: daily-wallet-scrape
+
+# Runs the active-trader wallet scrape every day at midnight US/Eastern.
+# GitHub cron is UTC and has no timezone, and Eastern shifts with DST, so we
+# trigger at BOTH 04:00 UTC (midnight EDT) and 05:00 UTC (midnight EST); the
+# runner only proceeds during the true Eastern-midnight hour, so it runs once.
+on:
+  schedule:
+    - cron: "0 4 * * *"   # 00:00 America/New_York during EDT
+    - cron: "0 5 * * *"   # 00:00 America/New_York during EST
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run now regardless of the time-of-day guard"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # to commit the lightweight daily summary
+
+concurrency:
+  group: daily-wallet-scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # under the 6h GitHub Actions job cap
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python and deps
+        run: |
+          uv venv
+          uv pip install -e . httpx tzdata
+
+      - name: Run daily scrape
+        env:
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          WIS_PG_DSN: ${{ secrets.WIS_PG_DSN }}   # optional: durable rating store
+        run: |
+          source .venv/bin/activate
+          FORCE=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
+            FORCE="--force"
+          fi
+          PYTHONPATH=src python -m wis.jobs.runner $FORCE
+
+      - name: Commit daily summary (lightweight)
+        run: |
+          git config user.name "wis-bot"
+          git config user.email "wis-bot@users.noreply.github.com"
+          git add ratings/daily/summary-*.md 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No summary to commit (job may have skipped outside the Eastern-midnight hour)."
+          else
+            git commit -m "chore: daily wallet scrape summary $(TZ=America/New_York date +%F)"
+            git push
+          fi
+
+      - name: Upload full wallet CSV (90-day artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-wallets
+          path: ratings/daily/wallets-*.csv
+          if-no-files-found: ignore

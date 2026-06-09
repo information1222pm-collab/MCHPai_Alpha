@@ -30,11 +30,25 @@ def _per_quote_pnl(ws: WalletState) -> tuple[dict[str, float], dict[str, float],
     return pnl_by, roi_by, primary
 
 
+_DAY_NANOS = 86_400 * 1_000_000_000
+
+
+def _activity(ws: WalletState) -> tuple[float, float]:
+    closed = ws.ledger.closed
+    if not closed:
+        return 0.0, 0.0
+    span = max(int(t.exit_time) for t in closed) - min(int(t.entry_time) for t in closed)
+    active_days = span / _DAY_NANOS
+    tpd = len(closed) / active_days if active_days > 0 else float(len(closed))
+    return active_days, tpd
+
+
 def rate_wallet(ws: WalletState, prices=None) -> WalletRating:
     frame = ws.frame(prices=prices)
     scores = score_wallet(frame)
     p = frame.performance
     pnl_by, roi_by, primary = _per_quote_pnl(ws)
+    active_days, trades_per_day = _activity(ws)
     return WalletRating(
         wallet=ws.address.value,
         closed_trades=frame.sample_size,
@@ -53,6 +67,8 @@ def rate_wallet(ws: WalletState, prices=None) -> WalletRating:
         primary_quote=primary,
         pnl_by_quote=pnl_by,
         roi_by_quote=roi_by,
+        active_days=active_days,
+        trades_per_day=trades_per_day,
     )
 
 

@@ -23,3 +23,7 @@ venv/
 # Live observation artifacts (real wallet data; reproducible, not source)
 sessions/
 *.helius.jsonl
+
+# Daily scrape: keep lightweight summaries in-repo; full CSVs are artifacts /
+# go to the durable rating store (Postgres). Don't commit the bulky CSVs.
+ratings/daily/wallets-*.csv

@@ -38,6 +38,10 @@ class WalletRating:
     pnl_by_quote: dict[str, float] = field(default_factory=dict)   # realized pnl
     roi_by_quote: dict[str, float] = field(default_factory=dict)   # pnl/cost (pnl %)
 
+    # Activity (for the "active trader" filter):
+    active_days: float = 0.0      # span from first entry to last exit, in days
+    trades_per_day: float = 0.0   # closed_trades / active_days
+
     @property
     def primary_pnl(self) -> float | None:
         return self.pnl_by_quote.get(self.primary_quote) if self.primary_quote else None
