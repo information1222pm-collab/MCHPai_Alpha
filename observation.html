@@ -149,7 +149,8 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <div id=tr_profile></div>
   <div class=h style=margin:16px 0 8px>What's working now <span class=muted style=font-weight:400>features separating winners</span></div>
   <div id=tr_edge></div>
-  <div class=h style=margin:16px 0 8px>Trending now <span class=muted style=font-weight:400>fastest buyer growth</span></div>
+  <div class=h style=margin:16px 0 8px>Trending now <span class=muted style=font-weight:400>fastest buyer growth</span> <button class=mini id=tr_autobtn onclick=toggleTrendAutobuy()>⚡ Auto-buy</button></div>
+  <div id=tr_autostat></div>
   <div class=list id=tr_lead></div>
   <div class=note>Profiles all coins with a real trajectory (age &gt; 90s, ≥5 trades), splits ≥2× winners from
    the rest, and shows their early fingerprint. <b>Generate strategy</b> creates a new momentum strategy
@@ -310,8 +311,8 @@ async function clearData(){if(!DB||(typeof confirm!=='undefined'&&!confirm('Dele
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
 /* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
-const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25]];
-const ENTRY_TYPES=['rl','tiered','momentum','copywallet'],EXIT_MODES=['risk','firstSell'];
+const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25],['trendRate','Trending buyers/min ≥',8]];
+const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending'],EXIT_MODES=['risk','firstSell'];
 function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
 function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0,peakEq:10};}
 function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',live:false,retired:false,params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
@@ -358,6 +359,7 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers))return;
  if(S.entry==='copywallet'){const need=Math.max(1,P.smartMin),have=follows.size?((T.follow&&T.follow.size)||0):T.smart.size;if(have<need)return;}  // mirror followed wallets (or experienced money if no list)
  else if(S.entry==='momentum'){if(!(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin))return;}
+ else if(S.entry==='trending'){const rate=f.buyers/Math.max(f.age,1)*60;if(!(now()-T.lastSeen<120&&rate>=P.trendRate&&f.ratio>=1))return;}  // fastest buyer-growth, still net-buying
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
  let ep=f.price;if(S.requireHelius){ep=await authPriceSol(mint);if(!ep)return;}
  if(Math.random()<COST.failP){b.missed++;return;}
@@ -424,6 +426,11 @@ function loadFollows(){try{const r=localStorage.getItem('mchpai_follows');if(r){
 function saveFollows(){try{localStorage.setItem('mchpai_follows',JSON.stringify([...follows]));}catch(e){}}
 function ensureCopyStrat(){if(!follows.size||strategies.some(s=>s.entry==='copywallet'))return;
  const S=newStrategy('Copy Wallets','copywallet');Object.assign(S.params,{smartMin:1,minBuyers:1,minLiq:0,minAge:0,maxAge:99999,holdMax:900,sl:-0.4,trail:0.35,size:0.5});strategies.push(S);saveStrats();}
+/* auto-buy the "Trending now" tokens — fastest buyer-growth, still net-buying */
+function findTrendStrat(){return strategies.find(s=>s.entry==='trending');}
+function ensureTrendStrat(){if(findTrendStrat())return findTrendStrat();
+ const S=newStrategy('Trending Auto-Buy','trending');Object.assign(S.params,{minBuyers:5,minAge:8,maxAge:600,minLiq:2,trendRate:8,sl:-0.35,trail:0.3,tpHard:2,spikeJump:0.3,spikeLevel:0.6,holdMax:600,size:0.5});strategies.push(S);saveStrats();return S;}
+function toggleTrendAutobuy(){const S=ensureTrendStrat();S.on=!S.on;saveStrats();renderTrade();renderTrends();}
 /* rotating direct poll of followed wallets — catches their swaps even if not in the DEX sample */
 async function pollFollows(){if(!KEY||!follows.size||fbusy)return;fbusy=true;try{
  const list=[...follows],n=Math.min(followBatch,list.length),batch=[];
@@ -534,6 +541,7 @@ function backtestStrategy(S,all,wfirst){const P=S.params;let cash=10;const start
   if(pos.size>=P.maxPos||f.price<=0)continue;const size=sz(f.liq);if(cash<size)continue;let go=false;
   if(S.entry==='tiered'){const b=st.buyers.size;go=(st.sv<=Math.max(2,b*P.maxSellRatio))&&((f.age<=60&&b>=P.tier1Buyers)||(f.age<=120&&b>=P.tier2Buyers)||(f.age<=180&&b>=P.tier3Buyers));}
   else if(S.entry==='copywallet'){go=st.smart.size>=Math.max(1,P.smartMin)&&s.side==='buy'&&(wfirst.get(s.wallet)||st.birth)<st.birth;}
+  else if(S.entry==='trending'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers){const rate=st.buyers.size/Math.max(f.age,1)*60;go=rate>=P.trendRate&&f.ratio>=1;}}
   else{if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers)){}else go=(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin);}
   if(go){if(rand()<0.12)continue;open(s.mint,f.price,ts,size,S.exitMode==='firstSell'?{mode:'firstSell'}:null);}}
  pos.forEach((p,m)=>{const st=states.get(m);close(m,st.last||p.entry,true);});
@@ -563,7 +571,11 @@ function renderTrends(){const t=trends();
  const edges=feats.map(([k,lab])=>({lab,e:t.losers[k]>0?t.winners[k]/t.losers[k]:1})).sort((a,b)=>Math.abs(b.e-1)-Math.abs(a.e-1));
  $('tr_edge').innerHTML=t.winners.n>=5?edges.map(x=>`<div class=row><span class=muted>${x.lab}</span><span class="${x.e>=1.25?'up':x.e<=0.8?'down':''}">${x.e>=1?'+':''}${((x.e-1)*100).toFixed(0)}% vs losers</span></div>`).join(''):'<div class=ctr>need more mature tokens…</div>';
  const lead=tv().filter(T=>now()-T.lastSeen<120&&T.buyers.size>=4).map(T=>({T,rate:T.buyers.size/Math.max(now()-T.firstSeen,1)})).sort((a,b)=>b.rate-a.rate).slice(0,8);
- $('tr_lead').innerHTML=lead.map(({T,rate})=>`<div class=item><div><div class=nm>${short(T.mint)}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`).join('')||'<div class=ctr>scanning…</div>';}
+ const TS=findTrendStrat(),on=TS&&TS.on,thr=TS?TS.params.trendRate:8;
+ const btn=$('tr_autobtn');if(btn){btn.textContent=on?'⚡ Auto-buy ON':'⚡ Auto-buy';btn.className='mini'+(on?' on':'');}
+ const qualifying=lead.filter(({rate})=>rate*60>=thr).length;
+ const ast=$('tr_autostat');if(ast)ast.innerHTML=on?`<div class=note style=color:var(--up)>⚡ Auto-buying trending tokens ≥ ${thr}/min buyers (${qualifying} qualifying now). Paper · "${TS.name}" book — tune size/stop/threshold in Trading. Flip its 🔴 LIVE switch for on-chain.</div>`:`<div class=note>Tap <b>Auto-buy</b> to open paper positions automatically on the fastest-growing tokens (≥ ${thr}/min buyers). Tune it in the Trading tab.</div>`;
+ $('tr_lead').innerHTML=lead.map(({T,rate})=>{const hot=rate*60>=thr&&on;return `<div class=item><div><div class=nm>${short(T.mint)} ${hot?'<span class="tag" style=color:var(--up)>⚡buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning…</div>';}
 function genStrategy(){const w=trends().winners;
  if(w.n<6){$('tr_edge').innerHTML='<div class=note>Not enough mature winners yet to synthesize — keep it running and try again.</div>';return;}
  const S=newStrategy('Trend '+new Date().toLocaleTimeString(),'momentum');
@@ -595,7 +607,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');}));
-function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){pollFollows();setInterval(pollFollows,6000);}}
+function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){pollFollows();setInterval(pollFollows,6000);}}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
