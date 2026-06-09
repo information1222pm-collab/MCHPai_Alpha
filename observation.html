@@ -372,6 +372,16 @@ function allocate(force){if(!autopilot)return;if(!force&&now()-SESSION_START<600
  const st=rateStats(45);for(const S of strategies){if(!S.on||S.retired){continue;}const p=st.per[S.name]||0;S.alloc=+Math.max(0.4,Math.min(2.5,1+Math.tanh(p/3)*1.5)).toFixed(2);}
  saveStrats();}
 function toggleAutopilot(){autopilot=!autopilot;localStorage.setItem('mchpai_autopilot',autopilot?'1':'0');if(!autopilot)strategies.forEach(S=>S.alloc=1);renderTrade();}
+/* ===== LIVE SAFETY GATE — only risk real funds once a strategy PROVES itself; auto-halt when it stops ===== */
+let proofGate=localStorage.getItem('mchpai_proofgate')!=='0';   // default ON
+let autoHaltOn=localStorage.getItem('mchpai_autohalt')!=='0';   // default ON
+const PROOF_TRADES=15,PROOF_RATE=0,HALT_RATE=-1.5;              // proven = ≥15 trades & ≥0 ◎/hr; halt = < -1.5 ◎/hr
+function refreshProof(){const st=rateStats(120);for(const S of strategies){const n=st.pcnt[S.name]||0,r=(st.per[S.name]||0)/Math.max(st.hrs,1e-9);
+  S._ptr=n;S._rate=r;S._proven=n>=PROOF_TRADES&&r>=PROOF_RATE;
+  if(autoHaltOn&&n>=PROOF_TRADES&&r<HALT_RATE){if(S.live){S.live=false;S._halted=true;}if(S.on&&!S.retired){S.on=false;S.demoted=true;}}}}   // circuit breaker: disarm + disable proven-losers
+function liveAllowed(S){return S.live&&liveArmed&&(!proofGate||S._proven);}   // live BUYS require proof; sells (exits) always allowed
+function toggleProofGate(){proofGate=!proofGate;localStorage.setItem('mchpai_proofgate',proofGate?'1':'0');renderTrade();}
+function toggleAutoHalt(){autoHaltOn=!autoHaltOn;localStorage.setItem('mchpai_autohalt',autoHaltOn?'1':'0');renderTrade();}
 /* autopromote: hands-off survival of the fittest on PAPER — brake clear losers, boost + breed the champion (never auto-arms live) */
 let autopromoteOn=localStorage.getItem('mchpai_autopromote')==='1';
 function autopromote(){if(!autopromoteOn||now()-SESSION_START<600)return;
@@ -475,7 +485,7 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
  let ep=f.price;if(S.requireHelius){const ap=await authPriceSol(mint);if(ap)ep=ap;}   // prefer Helius price; fall back to sanitized swap price (fresh tokens often have no DAS price yet — don't block the entry)
  if(Math.random()<COST.failP){b.missed++;return;}
- sOpen(S,mint,ep,ts,convSize,ctxOf(f),extra);if(S.live&&liveArmed)liveExecute('buy',mint,convSize,S);}
+ sOpen(S,mint,ep,ts,convSize,ctxOf(f),extra);if(liveAllowed(S))liveExecute('buy',mint,convSize,S);}   // live entry only if proven (safety gate)
 async function botTick(mint){if(junk.has(mint)){apiStats.skipped++;return;}const T=tokens.get(mint);if(!T)return;const f=feat(T);for(const S of strategies)if(S.on)await sTick(S,mint,T,f);}
 async function manageOpenPositions(){const ts=now();const held=new Set();strategies.forEach(S=>S.book.pos.forEach((_,m)=>held.add(m)));
  await Promise.all([...held].map(async m=>{const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}}));   // mark all held positions in parallel
@@ -683,7 +693,7 @@ function renderDist(){$('ch_multhist').innerHTML=histogram(tv().map(T=>T.maxMult
 
 function stratCard(S){const eq=bookEquity(S.book),chg=eq-S.book.start,up=chg>=0,wins=S.book.closed.filter(c=>c.pnl>0).length,n=S.book.closed.length;
  return `<div class=card style=margin-bottom:10px;padding:12px>
-  <div class=row style=border:none;align-items:center><span><b>${S.name}</b> <span class=tag>${S.entry}·${S.exitMode}</span>${S.alloc&&S.alloc!==1?' <span class=tag>×'+S.alloc+'</span>':''}${S.promoted?' <span class=tag style=color:var(--up)>✦ promoted</span>':''}${S.demoted&&!S.on?' <span class=tag style=color:#f5a623>demoted</span>':''}${S.live?' <span class=tag style=color:#ff4d4d>● LIVE</span>':''}${S.retired?' <span class=tag style=color:#f5a623>retired '+(S.retireReason||'')+'</span>':''}</span>
+  <div class=row style=border:none;align-items:center><span><b>${S.name}</b> <span class=tag>${S.entry}·${S.exitMode}</span>${S.alloc&&S.alloc!==1?' <span class=tag>×'+S.alloc+'</span>':''}${S.promoted?' <span class=tag style=color:var(--up)>✦ promoted</span>':''}${S.demoted&&!S.on?' <span class=tag style=color:#f5a623>demoted</span>':''}${S.live?' <span class=tag style=color:#ff4d4d>● LIVE</span>':''}${S.live&&proofGate?(S._proven?' <span class=tag style=color:var(--up)>✓ proven</span>':' <span class=tag style=color:#f5a623>gated: unproven ('+(S._ptr||0)+'/'+PROOF_TRADES+' trades)</span>'):''}${S._halted?' <span class=tag style=color:#ff4d4d>auto-halted</span>':''}${S.retired?' <span class=tag style=color:#f5a623>retired '+(S.retireReason||'')+'</span>':''}</span>
    <button class="mini ${S.on?'on':''}" onclick="toggleStrat('${S.id}')">${S.on?'● ON':'○ OFF'}</button></div>
   <div class=row style=border:none><span class=muted>equity</span><span class="${up?'up':'down'}">${eq.toFixed(3)}◎ ${fmtPct(S.book.start?chg/S.book.start*100:0)}</span></div>
   <div class=row style=border:none><span class=muted>realized·open·trades·win</span><span><span class="${S.book.realized>=0?'up':'down'}">${S.book.realized.toFixed(3)}</span>·${S.book.pos.size}·${n}·${n?(wins/n*100|0):0}%</span></div>
@@ -708,7 +718,8 @@ function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity
   const span=Math.max(1,(now()-SESSION_START)/3600);
   rm.innerHTML=`<div class=row><span class=muted>🎯 realized rate (last 60m)</span><span class="${cls}"><b>${r60.rate>=0?'+':''}${r60.rate.toFixed(2)} ◎/hr</b> · target ${RATE_TARGET[0]}–${RATE_TARGET[1]}</span></div>
    <div class=row><span class=muted>session realized · ◎/hr</span><span class="${pnlLog.reduce((s,e)=>s+e.pnl,0)>=0?'up':'down'}">${pnlLog.reduce((s,e)=>s+e.pnl,0).toFixed(3)}◎ · ${(pnlLog.reduce((s,e)=>s+e.pnl,0)/span).toFixed(2)}/hr</span></div>
-   <div class=row><span class=muted>autopilot · autopromote</span><span><button class="mini ${autopilot?'on':''}" onclick="toggleAutopilot()">${autopilot?'● pilot':'○ pilot'}</button><button class="mini ${autopromoteOn?'on':''}" onclick="toggleAutopromote()">${autopromoteOn?'● promote':'○ promote'}</button></span></div>`;}
+   <div class=row><span class=muted>autopilot · autopromote</span><span><button class="mini ${autopilot?'on':''}" onclick="toggleAutopilot()">${autopilot?'● pilot':'○ pilot'}</button><button class="mini ${autopromoteOn?'on':''}" onclick="toggleAutopromote()">${autopromoteOn?'● promote':'○ promote'}</button></span></div>
+   <div class=row><span class=muted>🛡 live safety · proven ${strategies.filter(s=>s._proven).length}/${strategies.length}</span><span><button class="mini ${proofGate?'on':''}" onclick="toggleProofGate()">${proofGate?'● proof-gate':'○ proof-gate'}</button><button class="mini ${autoHaltOn?'on':''}" onclick="toggleAutoHalt()">${autoHaltOn?'● auto-halt':'○ auto-halt'}</button></span></div>`;}
  const lens=strategies.map(S=>S.book.eqHist.length).filter(x=>x>0);const minL=lens.length?Math.min.apply(null,lens):0;
  if(minL>1){const sum=[];for(let i=0;i<minL;i++){let v=0;strategies.forEach(S=>{const h=S.book.eqHist;v+=h[h.length-minL+i]||0;});sum.push(v);}$('bot_chart').innerHTML=rhChart(sum,170,up);}else $('bot_chart').innerHTML='<div class=ctr>warming up…</div>';
  $('strat_list').innerHTML=strategies.map(stratCard).join('');renderLive();
@@ -814,7 +825,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  scanSignals();                                                                      // emit alpha/trend signals regardless of active tab
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%30===0)pruneWallets();   // grade, persist, evolve, allocate, autopromote, prune
+ refreshProof();gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, prune
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
