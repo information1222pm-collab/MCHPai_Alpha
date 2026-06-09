@@ -142,7 +142,7 @@ select{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--accen
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-pulse>Pulse</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
+  <a href=#s-hero class=on>Overview</a><a href=#s-pulse>Pulse</a><a href=#s-intel>Intel</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
   <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
@@ -210,12 +210,49 @@ select{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--accen
    The more data it sees, the sharper it gets. Paper by default. Patterns are a hypothesis, not a guarantee.</div>
 </section>
 
+<section id=s-intel>
+  <div class=h>🛰 Market Intel <span class=muted style=font-weight:400>structural analytics</span></div>
+  <div class=chips>
+    <div class=chip><div class=l>Launch velocity</div><div class=v id=i_launch>0</div></div>
+    <div class=chip><div class=l>Survival rate</div><div class=v id=i_surv>—</div></div>
+    <div class=chip><div class=l>Rug/dump rate</div><div class=v id=i_rug>—</div></div>
+    <div class=chip><div class=l>Smart-money net</div><div class=v id=i_smart>—</div></div>
+  </div>
+  <div class=h style=margin:16px 0 8px>Token lifecycle <span class=muted style=font-weight:400>where the market is</span></div><div id=i_funnel></div>
+  <div class=cols style=margin-top:14px>
+    <div><div class=h style=color:var(--dim);font-size:11px>Age → peak ×</div><div id=i_agepeak></div></div>
+    <div><div class=h style=color:var(--dim);font-size:11px>Time-to-peak (s)</div><div id=i_ttp></div></div>
+  </div>
+  <div class=h style=margin:16px 0 8px>Conviction calibration <span class=muted style=font-weight:400>alpha score → actual win%</span></div><div id=i_calib></div>
+  <div class=h style=margin:16px 0 8px>Signal effectiveness <span class=muted style=font-weight:400>median peak × after each signal</span></div><div id=i_sigeff></div>
+  <div class=h style=margin:16px 0 8px>DEX performance <span class=muted style=font-weight:400>median peak × by venue</span></div><div id=i_dexperf></div>
+  <div class=cols style=margin-top:14px>
+    <div><div class=h style=color:var(--dim);font-size:11px>Wallet ROI dist (%)</div><div id=i_walroi></div></div>
+    <div><div class=h style=color:var(--dim);font-size:11px>Price velocity (%/min)</div><div id=i_pvel></div></div>
+  </div>
+  <div class=h style=margin:16px 0 8px>Realized PnL distribution <span class=muted style=font-weight:400>your trades · fat tail visible</span></div><div id=i_pnldist></div>
+  <div class=cols style=margin-top:14px>
+    <div><div class=h style=color:var(--dim);font-size:11px>Hold-time → exit ×</div><div id=i_holdret></div></div>
+    <div><div class=h style=color:var(--dim);font-size:11px>Win% by entry age</div><div id=i_winage></div></div>
+  </div>
+  <div class=h style=margin:16px 0 8px>Volume acceleration leaders</div><div id=i_volacc></div>
+  <div class=h style=margin:16px 0 8px>Market imbalance oscillator <span class=muted style=font-weight:400>buy vs sell tilt</span></div><div id=i_osc></div>
+  <div class=note>Structural intelligence: where opportunity is concentrated, how lethal the market is (rug/survival),
+   whether your score actually calibrates to outcomes, which signals and venues precede runners, and how your
+   own trades distribute. This is the depth behind the trade.</div>
+</section>
+
 <section id=s-trade>
   <div class=h>Strategies <button class=mini onclick=addStrat()>+ New strategy</button></div>
   <div class=heroval id=bot_eq>—</div>
   <div class="chg up" id=bot_chg>—</div>
   <div id=bot_rate style=margin:6px 0></div>
   <div id=bot_chart style=margin:8px 0></div>
+  <div class=h style=margin:10px 0 4px;font-size:10px>Drawdown (underwater)</div><div id=bot_dd></div>
+  <div class=cols style=margin:12px 0>
+    <div><div class=h style=color:var(--dim);font-size:11px>Strategy ◎/hr (60m)</div><div id=strat_compare></div></div>
+    <div><div class=h style=color:var(--dim);font-size:11px>Capital exposure</div><div id=bot_expose></div></div>
+  </div>
   <div id=strat_list style=margin-top:10px></div>
   <div class=h style=margin:16px 0 8px>🔴 Live Execution <span class=muted style=font-weight:400>real funds · burner wallet only</span></div>
   <div id=live_panel><div class=ctr>disarmed</div></div>
@@ -343,7 +380,7 @@ let heroMetric='volume',heroWin=0;
 const seen=new Set(),tokens=new Map(),wallets=new Map(),walletFirst=new Map(),junk=new Set(),priceCache=new Map();
 const walletAlpha=new Map();let gradeQ=[];   // ALPHA: per-wallet forward-return grade + pending grade queue
 let signalFeed=[],sigCounts={};const sigSeen=new Map();   // SIGNALS: live multi-detector feed
-const tape=[];let bigBuys=0,bigSells=0;   // PULSE: rolling live trade tape + size tallies
+const tape=[];let bigBuys=0,bigSells=0;const tradeLog=[];   // PULSE/INTEL: live tape + closed-trade analytics
 let ws=null,wsSubs=new Map(),wsState='off',wsReconnect=null;const RT_CAP=300;   // REALTIME: Helius WebSocket
 let apiStats={q:0,cache:0,skipped:0};
 let cnt={swaps:0},flow={buys:0,sells:0,bvol:0,svol:0};const dexCount={};const hist=[];
@@ -395,7 +432,15 @@ function scatter(pts,xl='',yl='',h=170,logy=false){if(!pts||pts.length<3)return 
  return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}><line x1=8 y1=${h-14} x2=${w-8} y2=${h-14} stroke=#23272b/><line x1=8 y1=8 x2=8 y2=${h-14} stroke=#23272b/>${dots}<text x=${w-8} y=${h-3} fill=#5b6166 font-size=9 text-anchor=end>${xl}</text><text x=11 y=14 fill=#5b6166 font-size=9>${yl}</text></svg>`;}
 /* horizontal stacked flow strip (buy green / sell red over time) */
 function flowStrip(series,h=46){if(!series||series.length<2)return '<div class=ctr>—</div>';const w=620,bw=w/series.length;
- return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}>${series.map((s,i)=>{const tot=s.b+s.s||1,bh=(s.b/tot)*h;return `<rect x="${(i*bw).toFixed(1)}" y=0 width="${(bw+0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill=#00c805 opacity=.7/><rect x="${(i*bw).toFixed(1)}" y="${bh.toFixed(1)}" width="${(bw+0.5).toFixed(1)}" height="${(h-bh).toFixed(1)}" fill=#ff5000 opacity=.6/>`;}).join('')}</svg>`;}
+ return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}>${series.map((s,i)=>{const tot=s.b+s.s||1,bh=(s.b/tot)*h;return `<rect x="${(i*bw).toFixed(1)}" y=0 width="${(bw+0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill=#2fe6a0 opacity=.7/><rect x="${(i*bw).toFixed(1)}" y="${bh.toFixed(1)}" width="${(bw+0.5).toFixed(1)}" height="${(h-bh).toFixed(1)}" fill=#ff6a45 opacity=.55/>`;}).join('')}</svg>`;}
+/* linear gauge: value within [min,max], optional zones; marker + glow */
+function gauge(val,mn,mx,label,unit='',good=null){const p=Math.max(0,Math.min(1,(val-mn)/((mx-mn)||1))),col=good===null?'var(--accent)':(good?'var(--up)':'var(--down)');
+ return `<div style=margin:4px 0><div class=row style=border:none;padding:2px 0><span class=muted style=font-family:var(--mono);font-size:10px>${label}</span><span style=font-family:var(--mono);font-size:12px;color:${col}>${typeof val==='number'?val.toFixed(2):val}${unit}</span></div>
+  <div style="position:relative;height:7px;background:rgba(86,232,190,.08);border:1px solid var(--line)"><span style="position:absolute;left:0;top:0;bottom:0;width:${(p*100).toFixed(1)}%;background:${col};box-shadow:0 0 8px ${col};opacity:.8"></span></div></div>`;}
+/* underwater drawdown area (red, from 0 down) given an equity series */
+function underwater(eq,h=60){if(!eq||eq.length<2)return '<div class=ctr>—</div>';let pk=eq[0];const dd=eq.map(v=>{pk=Math.max(pk,v);return pk>0?(v-pk)/pk:0;});
+ const w=620,mn=Math.min(...dd,-1e-6),pts=dd.map((d,i)=>`${(i/(dd.length-1)*w).toFixed(1)},${(-d/(-mn||1)*(h-4)).toFixed(1)}`).join(' ');
+ return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h}><polygon points="0,0 ${pts} ${w},0" fill=rgba(255,106,69,.18)/><polyline points="${pts}" fill=none stroke=#ff6a45 stroke-width=1.4/><text x=4 y=${h-3} fill=#5f7d76 font-size=9>max DD ${(mn*100).toFixed(0)}%</text></svg>`;}
 
 /* ---- data ---- */
 async function rpc(m,p){const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})});
@@ -425,7 +470,7 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
  // PRICE SANITIZATION: reject dust (<0.005◎) + >5x outliers vs rolling median (kills parsing artifacts/phantom spikes)
  if(s.price>0&&s.sol>=0.005){let ok=true;if(T.med.length>=3){const m=median(T.med);if(m>0&&(s.price/m>5||s.price/m<0.2)){ok=false;T.rejected++;}}
   if(ok){if(!T.firstPrice)T.firstPrice=s.price;T.lastPrice=s.price;T.prices.push(s.price);if(T.prices.length>30)T.prices.shift();
-   T.med.push(s.price);if(T.med.length>12)T.med.shift();if(T.firstPrice)T.maxMult=Math.max(T.maxMult,s.price/T.firstPrice);}}
+   T.med.push(s.price);if(T.med.length>12)T.med.shift();if(T.firstPrice){const mm=s.price/T.firstPrice;if(mm>T.maxMult){T.maxMult=mm;T.peakTs=s.ts;}}}}
  T.vol+=s.sol;if(s.side==='buy'){T.buys++;T.buyers.add(s.wallet);if((walletFirst.get(s.wallet)||s.ts)<T.firstSeen)T.smart.add(s.wallet);T.netSol+=s.sol;flow.buys++;flow.bvol+=s.sol;}else{T.sells++;T.netSol-=s.sol;flow.sells++;flow.svol+=s.sol;}
  if(s.dex)dexCount[s.dex]=(dexCount[s.dex]||0)+1;const W=wal(s.wallet);W.swaps++;W.tokens.add(s.mint);W.lastMint=s.mint;W.lastTs=s.ts;
  if(s.side==='buy'){W.buys++;W.netSol-=s.sol;}else{W.sells++;W.netSol+=s.sol;}
@@ -434,7 +479,7 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
  const ls=T.bSamp[T.bSamp.length-1];if(!ls||s.ts-ls.ts>=4){T.bSamp.push({ts:s.ts,b:T.buyers.size,v:T.vol});if(T.bSamp.length>16)T.bSamp.shift();}
  if(s.side==='buy'&&s.price>0)gradeQ.push({wallet:s.wallet,mint:s.mint,entry:s.price,ts:s.ts});
  snapToken(T,s.ts);   // PATTERN DISCOVERY: capture early-feature snapshot for later labelling
- tape.unshift({mint:s.mint,side:s.side,sol:s.sol,dex:s.dex,ts:s.ts});if(tape.length>120)tape.pop();if(s.sol>=2){if(s.side==='buy')bigBuys++;else bigSells++;}   // PULSE: live trade tape
+ tape.unshift({mint:s.mint,side:s.side,sol:s.sol,dex:s.dex,ts:s.ts,wallet:s.wallet});if(tape.length>140)tape.pop();if(s.sol>=2){if(s.side==='buy')bigBuys++;else bigSells++;}   // PULSE: live trade tape
  // SIGNAL DETECTORS — multi-source live feed (deduped per token/type)
  if(s.side==='buy'){if(s.sol>=5)sig('whale',s.mint,{sol:+s.sol.toFixed(2)});const q=walletQ(s.wallet);if(q>0.3)sig('smart',s.mint,{q:+q.toFixed(2)});if(follows.has(s.wallet))sig('copy',s.mint,{});}
  const bs=T.bSamp;if(bs.length>=4){const lv=bs[bs.length-1],mv=bs[bs.length>>1];if(lv.v>mv.v*3&&lv.v-mv.v>3)sig('volsurge',s.mint,{});}
@@ -584,7 +629,9 @@ function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.rati
 const sSize=(P,liq)=>P.liqFrac>0?Math.max(0.08,Math.min(1.0,P.liqFrac*liq)):P.size;
 const trailForP=(ret,base)=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:base;
 function sOpen(S,mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;S.book.cash-=size;S.book.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
-function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying){tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});logPnl(S.name,pnl);}if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);if(S.live&&liveArmed&&!replaying)liveExecute('sell',mint,0,S);}
+function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying){tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});logPnl(S.name,pnl);
+  tradeLog.push({strat:S.name,ret:price/pos.entry-1,pnl,hold:now()-pos.openTs,entryAge:pos.openTs-(T?T.firstSeen:pos.openTs),dex:T?T.dex:'',alpha:pos.alpha||null,ts:now()});if(tradeLog.length>2000)tradeLog.shift();}
+ if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);if(S.live&&liveArmed&&!replaying)liveExecute('sell',mint,0,S);}
 /* scale-out: sell a fraction, bank partial profit, ratchet stop to breakeven — captures the fat tail */
 function sScale(S,mint,price,frac){const pos=S.book.pos.get(mint);if(!pos||frac<=0)return;const T=tokens.get(mint);
  const sellTok=pos.tokens*frac;let slip=COST.baseSlip+impactBps(sellTok*price,T?T.vol:1);const fill=price*(1-slip/1e4);
@@ -847,6 +894,32 @@ function renderPulse(){const el=$('p_tape');if(!el)return;
  $('p_vol').innerHTML=bars(tv().sort((a,b)=>b.vol-a.vol).slice(0,8).map(T=>({label:short(T.mint),value:+T.vol.toFixed(1),disp:T.vol.toFixed(1)+'◎',color:T.netSol>=0?'#00c805':'#ff5000',full:T.mint})));
  $('p_tape').innerHTML=tape.slice(0,50).map(t=>`<div class=row style=border-bottom:1px solid #15181b;padding:3px 0><span><span class="${t.side==='buy'?'up':'down'}">${t.side==='buy'?'▲':'▼'}</span> ${short(t.mint)} <span class=muted style=font-size:10px>${DEXSHORT(t.dex)}</span></span><span class="${t.side==='buy'?'up':'down'}">${t.sol.toFixed(3)}◎</span></div>`).join('')||'<div class=ctr>waiting for swaps…</div>';
  $('p_dex').innerHTML=donut(dexCount);}
+function med(a){if(!a||!a.length)return 0;const s=a.slice().sort((x,y)=>x-y);return s[s.length>>1];}
+function renderIntel(){if(!$('i_funnel'))return;const A=tv(),N=now();
+ $('i_launch').textContent=A.filter(T=>N-T.firstSeen<60).length+'/min';
+ const active=A.filter(T=>N-T.lastSeen<300).length;$('i_surv').textContent=A.length?Math.round(active/A.length*100)+'%':'—';
+ const mat=A.filter(T=>N-T.firstSeen>120&&T.maxMult>1.2&&T.firstPrice>0),rug=mat.filter(T=>T.lastPrice<=0.5*T.maxMult*T.firstPrice).length;
+ const re=$('i_rug');re.textContent=mat.length?Math.round(rug/mat.length*100)+'%':'—';re.className='v '+(mat.length&&rug/mat.length>0.5?'down':'');
+ let sflow=0;for(const t of tape)if(walletQ(t.wallet)>0.3)sflow+=t.side==='buy'?t.sol:-t.sol;const se=$('i_smart');se.textContent=(sflow>=0?'+':'')+sflow.toFixed(1)+'◎';se.className='v '+(sflow>=0?'up':'down');
+ const cats={fresh:0,heating:0,active:0,dumping:0,quiet:0};A.forEach(T=>{const c=category(T);cats[c]=(cats[c]||0)+1;});
+ $('i_funnel').innerHTML=bars([['fresh','#2fe6a0'],['heating','#8effe3'],['active','#4ee6b8'],['dumping','#f5b540'],['quiet','#5f7d76']].map(([k,c])=>({label:k,value:cats[k]||0,disp:String(cats[k]||0),color:c})));
+ $('i_agepeak').innerHTML=scatter(A.filter(T=>T.maxMult>1&&T.firstPrice>0).slice(-300).map(T=>({x:N-T.firstSeen,y:T.maxMult,up:T.maxMult>=2})),'age s →','peak × (log)',150,true);
+ $('i_ttp').innerHTML=histogram(A.filter(T=>T.maxMult>=1.5&&T.peakTs).map(T=>T.peakTs-T.firstSeen),'#4ee6b8',150);
+ const calmat=A.filter(T=>N-T.firstSeen>90&&T.lastPrice>0);
+ $('i_calib').innerHTML=bars([[0,20],[20,40],[40,60],[60,80],[80,100]].map(([lo,hi])=>{const b=calmat.filter(T=>{const sc=alphaCached(T).score;return sc>=lo&&sc<hi;}),win=b.length?b.filter(T=>T.maxMult>=1.5).length/b.length:0;return {label:lo+'-'+hi,value:+(win*100).toFixed(0),disp:(win*100|0)+'% ·'+b.length,color:win>=0.3?'#2fe6a0':win>0.15?'#f5b540':'#5f7d76'};}));
+ const sbt={};signalFeed.forEach(s=>{const T=tokens.get(s.mint);if(T&&T.maxMult>=1)(sbt[s.type]=sbt[s.type]||[]).push(T.maxMult);});
+ $('i_sigeff').innerHTML=bars(Object.keys(sbt).map(k=>({label:(SIG_ICON[k]||'')+' '+k,value:+med(sbt[k]).toFixed(2),disp:med(sbt[k]).toFixed(1)+'× ·'+sbt[k].length,color:'#4ee6b8'})).sort((a,b)=>b.value-a.value))||'<div class=ctr>—</div>';
+ const bd={};A.forEach(T=>{if(T.dex&&T.maxMult>=1)(bd[T.dex]=bd[T.dex]||[]).push(T.maxMult);});
+ $('i_dexperf').innerHTML=bars(Object.keys(bd).filter(d=>bd[d].length>=3).map(d=>({label:DEXSHORT(d),value:+med(bd[d]).toFixed(2),disp:med(bd[d]).toFixed(2)+'× ·'+bd[d].length,color:'#8effe3'})).sort((a,b)=>b.value-a.value).slice(0,8));
+ $('i_walroi').innerHTML=histogram([...walletAlpha.values()].filter(v=>v[1]>=2).map(v=>v[0]*100),'#2fe6a0',150);
+ $('i_pvel').innerHTML=histogram(A.filter(T=>T.prices.length>=2&&N-T.firstSeen>20).map(T=>Math.max(-200,Math.min(500,pct(T)/Math.max((N-T.firstSeen)/60,1)))),'#f5b540',150);
+ $('i_pnldist').innerHTML=histogram(pnlLog.map(e=>e.pnl),'#4ee6b8',150);
+ $('i_holdret').innerHTML=scatter(tradeLog.map(t=>({x:t.hold,y:Math.max(0.05,1+t.ret),up:t.ret>=0})),'hold s →','exit × (log)',150,true);
+ $('i_winage').innerHTML=bars([[0,30],[30,60],[60,120],[120,1e9]].map(([lo,hi])=>{const b=tradeLog.filter(t=>t.entryAge>=lo&&t.entryAge<hi),win=b.length?b.filter(t=>t.ret>0).length/b.length:0;return {label:(hi>1e8?lo+'+':lo+'-'+hi)+'s',value:+(win*100).toFixed(0),disp:(win*100|0)+'% ·'+b.length,color:win>=0.4?'#2fe6a0':'#f5b540'};}));
+ const acc=A.map(T=>{const s=T.bSamp;let g=0;if(s&&s.length>=4){const h=s.length>>1,m=s[h],l=s[s.length-1];g=(l.v-m.v)/Math.max(m.v,1);}return {T,g};}).filter(x=>x.g>0.05).sort((a,b)=>b.g-a.g).slice(0,8);
+ $('i_volacc').innerHTML=bars(acc.map(({T,g})=>({label:short(T.mint),value:+g.toFixed(2),disp:'+'+(g*100|0)+'%',color:'#2fe6a0',full:T.mint})))||'<div class=ctr>—</div>';
+ const osc=[];for(let i=1;i<hist.length;i++){const db=Math.max(0,hist[i].buys-hist[i-1].buys),ds=Math.max(0,hist[i].sells-hist[i-1].sells);osc.push((db-ds)/(db+ds||1));}
+ $('i_osc').innerHTML=osc.length>1?rhChart(osc.map(v=>v+1),140,osc[osc.length-1]>=0):'<div class=ctr>collecting…</div>';}
 function renderSignals(){const el=$('sig_feed');if(!el)return;
  const SR=findSignalStrat(),srb=$('sigresp_btn');if(srb){const on=SR&&SR.on;srb.textContent=on?'📡 Responding ON':'📡 Respond to all';srb.className='mini'+(on?' on':'');}
  const cc=$('sig_counts');if(cc)cc.innerHTML=Object.keys(SIG_ICON).filter(k=>sigCounts[k]).map(k=>`<span class=tag>${SIG_ICON[k]} ${k} <b>${sigCounts[k]}</b></span>`).join(' ')||'<span class=muted>warming up… signals appear as the stream flows</span>';
@@ -909,7 +982,9 @@ function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity
    <div class=row><span class=muted>autopilot · autopromote</span><span><button class="mini ${autopilot?'on':''}" onclick="toggleAutopilot()">${autopilot?'● pilot':'○ pilot'}</button><button class="mini ${autopromoteOn?'on':''}" onclick="toggleAutopromote()">${autopromoteOn?'● promote':'○ promote'}</button></span></div>
    <div class=row><span class=muted>🛡 live safety · proven ${strategies.filter(s=>s._proven).length}/${strategies.length}</span><span><button class="mini ${proofGate?'on':''}" onclick="toggleProofGate()">${proofGate?'● proof-gate':'○ proof-gate'}</button><button class="mini ${autoHaltOn?'on':''}" onclick="toggleAutoHalt()">${autoHaltOn?'● auto-halt':'○ auto-halt'}</button></span></div>`;}
  const lens=strategies.map(S=>S.book.eqHist.length).filter(x=>x>0);const minL=lens.length?Math.min.apply(null,lens):0;
- if(minL>1){const sum=[];for(let i=0;i<minL;i++){let v=0;strategies.forEach(S=>{const h=S.book.eqHist;v+=h[h.length-minL+i]||0;});sum.push(v);}$('bot_chart').innerHTML=rhChart(sum,170,up);}else $('bot_chart').innerHTML='<div class=ctr>warming up…</div>';
+ if(minL>1){const sum=[];for(let i=0;i<minL;i++){let v=0;strategies.forEach(S=>{const h=S.book.eqHist;v+=h[h.length-minL+i]||0;});sum.push(v);}$('bot_chart').innerHTML=rhChart(sum,170,up);if($('bot_dd'))$('bot_dd').innerHTML=underwater(sum);}else{$('bot_chart').innerHTML='<div class=ctr>warming up…</div>';if($('bot_dd'))$('bot_dd').innerHTML='';}
+ if($('strat_compare')){const rs=rateStats(60);$('strat_compare').innerHTML=bars(strategies.filter(s=>!s.retired).map(S=>{const r=(rs.per[S.name]||0)/Math.max(rs.hrs,1e-9);return {label:S.name.split(' ')[0],value:+r.toFixed(2),disp:(r>=0?'+':'')+r.toFixed(2)+'/hr',color:r>=0?'#2fe6a0':'#ff6a45',full:S.name};}))||'<div class=ctr>—</div>';
+  let dep=0,cash=0;strategies.forEach(S=>{S.book.pos.forEach(p=>dep+=p.cost);cash+=S.book.cash;});$('bot_expose').innerHTML=gauge(dep,0,(dep+cash)||1,'deployed / '+(dep+cash).toFixed(1)+'◎','◎');}
  $('strat_list').innerHTML=strategies.map(stratCard).join('');renderLive();
  $('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
  const allC=[].concat.apply([],strategies.map(S=>S.book.closed.map(c=>Object.assign({strat:S.name},c)))).sort((a,b)=>b.ts-a.ts).slice(0,14);
@@ -993,7 +1068,7 @@ function scanSignals(){const t=now(),AS=findAlphaStrat(),TS=findTrendStrat();
   const A=alphaCached(T);if(A.score>=thrA)sig('alpha',T.mint,{score:+A.score.toFixed(0)});
   const age=t-T.firstSeen;if(age>0&&T.buyers.size/age*60>=thrT)sig('trend',T.mint,{});}}
 /* render only the visible tab + one rotating section per cycle (was: all 13 every cycle, each scanning every token) */
-const SECT={'s-pulse':renderPulse,'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
+const SECT={'s-pulse':renderPulse,'s-intel':renderIntel,'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
 const SKEYS=Object.keys(SECT);let rrIdx=0,activeSection='s-hero';
 function render(){renderHero();renderChips();renderTrade();
  const af=SECT[activeSection];if(af)af();
