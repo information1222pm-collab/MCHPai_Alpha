@@ -74,7 +74,7 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
   <a href=#s-hero class=on>Overview</a><a href=#s-trade>Trading</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
-  <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-opps>Opportunities</a><a href=#s-dist>Stats</a>
+  <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-dist>Stats</a>
 </nav>
 <div class=wrap>
 
@@ -119,6 +119,20 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <div class=row><span class=muted>Buy / sell volume</span><span><span class=up id=f_bvol>0</span> / <span class=down id=f_svol>0</span> ◎</span></div>
   <div class=h style=margin:18px 0 10px>Net Flow over time</div><div id=ch_netflow></div>
   <div class=h style=margin:18px 0 10px>Activity by DEX</div><div id=ch_dex></div></section>
+
+<section id=s-trends>
+  <div class=h>Trend Tracker <button class=mini onclick=genStrategy()>🔮 Generate strategy from trends</button></div>
+  <div id=tr_summary></div>
+  <div class=h style=margin:16px 0 8px>Winner vs Loser profile <span class=muted style=font-weight:400>what ≥2× tokens look like early</span></div>
+  <div id=tr_profile></div>
+  <div class=h style=margin:16px 0 8px>What's working now <span class=muted style=font-weight:400>features separating winners</span></div>
+  <div id=tr_edge></div>
+  <div class=h style=margin:16px 0 8px>Trending now <span class=muted style=font-weight:400>fastest buyer growth</span></div>
+  <div class=list id=tr_lead></div>
+  <div class=note>Profiles all coins with a real trajectory (age &gt; 90s, ≥5 trades), splits ≥2× winners from
+   the rest, and shows their early fingerprint. <b>Generate strategy</b> creates a new momentum strategy
+   tuned to the current winner profile — then refine it in the Trading tab.</div>
+</section>
 
 <section id=s-opps><div class=h>⚡ Opportunity Watch <span class=muted style=font-weight:400>heuristic · not advice</span></div>
   <div class=list id=opps></div>
@@ -358,7 +372,35 @@ function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity
  $('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
  const allC=[].concat.apply([],strategies.map(S=>S.book.closed.map(c=>Object.assign({strat:S.name},c)))).sort((a,b)=>b.ts-a.ts).slice(0,14);
  $('bot_log').innerHTML=allC.map(c=>`<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.strat} · ${c.reason}</div></div><div class=rt><div class="badge ${c.pnl>=0?'up':'down'}">${(c.pnl>=0?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`).join('')||'<div class=ctr>no trades yet</div>';}
-function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderOpps();renderDist();
+/* ===== TREND TRACKER — profile winners across all coins, synthesize strategies ===== */
+function tProfile(arr){const med=f=>{const v=arr.map(f).filter(x=>x!=null&&isFinite(x)).sort((a,b)=>a-b);return v.length?v[v.length>>1]:0;};
+ const bv=T=>(T.vol+T.netSol)/2,sv=T=>(T.vol-T.netSol)/2;
+ return {n:arr.length,buyers:med(T=>T.buyers.size),smart:med(T=>T.smart.size),liq:med(T=>T.vol),ratio:med(T=>bv(T)/(sv(T)+1e-9)),netflow:med(T=>T.netSol/Math.max(T.vol,1e-9)),peak:med(T=>T.maxMult)};}
+function trends(){const mature=tv().filter(T=>(now()-T.firstSeen)>90&&(T.buys+T.sells)>=5&&T.firstPrice>0);
+ const W=mature.filter(T=>T.maxMult>=2),L=mature.filter(T=>T.maxMult<2);
+ return {mature:mature.length,winRate:mature.length?W.length/mature.length:0,winners:tProfile(W),losers:tProfile(L)};}
+const fmtNum=x=>x>=100?Math.round(x):x>=10?x.toFixed(1):x.toFixed(2);
+function renderTrends(){const t=trends();
+ $('tr_summary').innerHTML=`<div class=row><span class=muted>mature tokens analyzed</span><span>${t.mature}</span></div>
+  <div class=row><span class=muted>win rate (≥2×)</span><span class="${t.winRate>=0.2?'up':''}">${(t.winRate*100).toFixed(0)}% · ${t.winners.n} winners</span></div>
+  <div class=row><span class=muted>median winner peak</span><span class=up>${(t.winners.peak||0).toFixed(2)}×</span></div>`;
+ const feats=[['buyers','buyers'],['smart','smart wallets'],['liq','liquidity ◎'],['ratio','buy/sell ratio'],['netflow','net-flow frac']];
+ $('tr_profile').innerHTML=`<div class=row style=color:var(--dim)><span>feature</span><span>winners · losers</span></div>`+feats.map(([k,lab])=>`<div class=row><span class=muted>${lab}</span><span><span class=up>${fmtNum(t.winners[k])}</span> · <span class=down>${fmtNum(t.losers[k])}</span></span></div>`).join('');
+ const edges=feats.map(([k,lab])=>({lab,e:t.losers[k]>0?t.winners[k]/t.losers[k]:1})).sort((a,b)=>Math.abs(b.e-1)-Math.abs(a.e-1));
+ $('tr_edge').innerHTML=t.winners.n>=5?edges.map(x=>`<div class=row><span class=muted>${x.lab}</span><span class="${x.e>=1.25?'up':x.e<=0.8?'down':''}">${x.e>=1?'+':''}${((x.e-1)*100).toFixed(0)}% vs losers</span></div>`).join(''):'<div class=ctr>need more mature tokens…</div>';
+ const lead=tv().filter(T=>now()-T.lastSeen<120&&T.buyers.size>=4).map(T=>({T,rate:T.buyers.size/Math.max(now()-T.firstSeen,1)})).sort((a,b)=>b.rate-a.rate).slice(0,8);
+ $('tr_lead').innerHTML=lead.map(({T,rate})=>`<div class=item><div><div class=nm>${short(T.mint)}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div><div class=rt><div class="badge up">${(rate*60).toFixed(1)}/min</div><div class=sub>${T.maxMult.toFixed(2)}×</div></div></div>`).join('')||'<div class=ctr>scanning…</div>';}
+function genStrategy(){const w=trends().winners;
+ if(w.n<6){$('tr_edge').innerHTML='<div class=note>Not enough mature winners yet to synthesize — keep it running and try again.</div>';return;}
+ const S=newStrategy('Trend '+new Date().toLocaleTimeString(),'momentum');
+ S.params.minBuyers=Math.max(3,Math.round(w.buyers*0.8));
+ S.params.smartMin=Math.max(0,Math.round(w.smart*0.7));
+ S.params.minLiq=Math.max(3,+(w.liq*0.6).toFixed(1));
+ S.params.ratioIn=Math.max(1.5,+((w.ratio||2)*0.85).toFixed(2));
+ if((w.peak||2)>=4){S.params.spikeJump=0.3;S.params.spikeLevel=0.6;}else{S.params.trail=0.35;}
+ strategies.push(S);saveStrats();renderTrade();
+ $('tr_edge').innerHTML=`<div class=note style=color:var(--up)>✓ Created “${S.name}” → minBuyers ${S.params.minBuyers}, smart ≥${S.params.smartMin}, liq ≥${S.params.minLiq}◎, ratio ≥${S.params.ratioIn}. Tune/toggle it in the Trading tab.</div>`+$('tr_edge').innerHTML;}
+function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderTrends();renderOpps();renderDist();
  if(tokens.size>4000)tv().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
  if(seen.size>120000)seen.clear();}
