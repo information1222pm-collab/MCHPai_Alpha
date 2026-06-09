@@ -39,7 +39,8 @@ class StrategyParams:
     min_vol_sol: float = 1.0       # liquidity/interest floor
     min_age_s: int = 8             # avoid the first chaotic seconds
     max_age_s: int = 900
-    fee: float = 0.02              # round-trip fee + slippage estimate
+    fee: float = 0.02              # round-trip fee + slippage estimate (simple book)
+    smart_min: int = 0             # require >= N experienced wallets early (0=off)
 
 
 @dataclass
@@ -50,6 +51,7 @@ class Features:
     buyers: int
     age_s: float
     prices: list[float] = field(default_factory=list)
+    smart_buyers: int = 0          # experienced wallets (seen before this token) buying early
 
     def ratio(self) -> float:
         return self.buy_vol / (self.sell_vol + 1e-9)
@@ -79,11 +81,12 @@ def entry_signal(f: Features, p: StrategyParams) -> bool:
         and f.buyers >= p.min_buyers
         and (f.buy_vol + f.sell_vol) >= p.min_vol_sol
         and p.min_age_s <= f.age_s <= p.max_age_s
+        and f.smart_buyers >= p.smart_min     # unique edge: ride experienced money
         and f.price > 0
     )
 
 
-def exit_signal(pos: Position, f: Features, p: StrategyParams) -> tuple[bool, str]:
+def exit_signal(pos: Position, f: Features, p: StrategyParams, hold_s: float | None = None) -> tuple[bool, str]:
     if f.price <= 0:
         return (False, "")
     ret = f.price / pos.entry - 1.0
@@ -97,7 +100,8 @@ def exit_signal(pos: Position, f: Features, p: StrategyParams) -> tuple[bool, st
         return (True, "momentum_reversal")
     if f.ratio() < p.ratio_out:
         return (True, "sell_pressure")
-    if (f.age_s - 0) >= p.hold_max_s:
+    hold = hold_s if hold_s is not None else f.age_s
+    if hold >= p.hold_max_s:
         return (True, "timeout")
     return (False, "")
 
@@ -118,7 +122,7 @@ class PaperBook:
         pos = self.positions.get(mint)
         if pos:
             pos.peak = max(pos.peak, f.price)
-            do, reason = exit_signal(pos, f, self.p)
+            do, reason = exit_signal(pos, f, self.p, hold_s=ts - pos.opened_ts)
             if do:
                 proceeds = pos.tokens * f.price * (1 - self.p.fee)
                 pnl = proceeds - pos.size_sol

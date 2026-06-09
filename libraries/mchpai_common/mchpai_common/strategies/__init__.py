@@ -8,6 +8,7 @@ from .momentum import (
     entry_signal,
     exit_signal,
 )
+from .execution_model import CostModel, ExecutionModel, Fill
 
 __all__ = [
     "Features",
@@ -16,4 +17,7 @@ __all__ = [
     "StrategyParams",
     "entry_signal",
     "exit_signal",
+    "CostModel",
+    "ExecutionModel",
+    "Fill",
 ]

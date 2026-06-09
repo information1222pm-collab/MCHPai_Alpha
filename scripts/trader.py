@@ -87,33 +87,26 @@ def log_trade(db, mode, ev, size):
     db.commit()
 
 
-# --------------------------------------------------------------- backtest
+# --------------------------------------------------------------- backtest (realistic)
 def backtest(params: StrategyParams) -> None:
-    conn = sqlite3.connect(f"file:{ACQ_DB}?mode=ro", uri=True)
-    rows = conn.execute("SELECT mint, wallet, side, sol_amount, price, ts FROM swaps "
-                        "WHERE price IS NOT NULL ORDER BY ts, slot").fetchall()
-    conn.close()
+    """Realistic single-config backtest (delegates to the research engine, which
+    applies latency, slippage/impact, fees, and failures). For a parameter search
+    use: python scripts/research.py"""
+    import scripts.research as R
+    from mchpai_common.strategies import CostModel
+    rows, wfirst, ticks = R.load()
     if not rows:
         print("no swaps in acquisition.db — run scripts/acquire.py first")
         return
-    book = PaperBook(params, start_sol=10.0)
-    states: dict[str, TokenState] = {}
-    marks: dict[str, float] = {}
-    for mint, wallet, side, sol, price, ts in rows:
-        st = states.get(mint) or states.setdefault(mint, TokenState(ts))
-        st.update(side, sol, price, wallet, ts)
-        marks[mint] = price
-        book.on_tick(mint, st.features(ts), ts)
-    # mark-to-last for any still-open
-    eq = book.equity(marks)
-    s = book.stats()
-    print("=== BACKTEST (momentum + buy/sell ratio) ===")
-    print(f"swaps replayed : {len(rows)}   tokens: {len(states)}")
-    print(f"closed trades  : {s['trades']}   win-rate: {s['win_rate']*100:.0f}%")
-    print(f"realized PnL   : {s['realized']:+.3f} SOL")
-    print(f"equity (start 10.0) : {eq:.3f} SOL   ({(eq-10)/10*100:+.1f}%)")
-    print("NOTE: backtest fills at the observed trade price (optimistic — no")
-    print("      slippage/latency). Treat as an upper-ish bound, not a promise.")
+    m = R.backtest(rows, wfirst, ticks, params, CostModel())
+    print("=== REALISTIC BACKTEST (smart-money momentum, full costs) ===")
+    print(f"swaps replayed : {len(rows)}")
+    print(f"trades         : {m['trades']:.0f}   win-rate: {m['win_rate']*100:.0f}%")
+    print(f"net PnL        : {m['net_pnl']:+.3f} SOL   ({m['ret_pct']:+.1f}%)")
+    print(f"profit factor  : {min(m['profit_factor'],9.99):.2f}   sharpe: {m['sharpe']:.2f}   "
+          f"max DD: {m['max_dd_pct']:.1f}%")
+    print(f"avg slippage   : {m['avg_slip_bps']:.0f} bps")
+    print("Run `python scripts/research.py` to search parameters honestly.")
 
 
 # --------------------------------------------------------------- live execution (gated)
