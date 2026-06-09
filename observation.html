@@ -63,6 +63,10 @@ svg{display:block}.note{color:var(--dim);font-size:11px;margin-top:10px}
 #overlay input{width:100%;background:#16191c;border:1px solid var(--line);color:#fff;padding:13px;border-radius:12px;font:inherit;margin:12px 0}
 #overlay button{width:100%;background:var(--up);color:#000;border:none;padding:14px;border-radius:24px;font:inherit;font-weight:700;font-size:16px;cursor:pointer}
 a{color:var(--up)}.kf{display:none}
+.mini{background:#16191c;border:1px solid var(--line);color:var(--txt);padding:4px 9px;border-radius:9px;font:inherit;font-size:11px;font-weight:600;cursor:pointer;margin-right:5px}
+.mini.on{color:var(--up);border-color:#1f5c47}
+.pin{width:96px;background:#16191c;border:1px solid var(--line);color:#fff;border-radius:6px;padding:3px 6px;font:inherit;font-size:12px}
+select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:6px;padding:3px 6px;font:inherit;font-size:12px}
 </style>
 </head>
 <body>
@@ -89,25 +93,16 @@ a{color:var(--up)}.kf{display:none}
 </section>
 
 <section id=s-trade>
-  <div class=h>RL Trader · self-correcting <span class="tag" style=color:var(--up);background:var(--upbg)>PAPER</span></div>
+  <div class=h>Strategies <button class=mini onclick=addStrat()>+ New strategy</button></div>
   <div class=heroval id=bot_eq>—</div>
   <div class="chg up" id=bot_chg>—</div>
   <div id=bot_chart style=margin:8px 0></div>
-  <div class=chips>
-    <div class=chip><div class=l>Realized PnL</div><div class=v id=bot_real>0</div></div>
-    <div class=chip><div class=l>Open</div><div class=v id=bot_open>0</div></div>
-    <div class=chip><div class=l>Trades</div><div class=v id=bot_tr>0</div></div>
-    <div class=chip><div class=l>Win rate</div><div class=v id=bot_win>0%</div></div>
-  </div>
-  <div class=row style=margin-top:12px><span class=muted>🧠 policy</span><span id=bot_brain>learning…</span></div>
-  <div id=bot_learn></div>
+  <div id=strat_list style=margin-top:10px></div>
   <div class=row style=margin-top:8px><span class=muted>📡 data filter</span><span id=bot_api>—</span></div>
-  <div class=h style=margin:16px 0 8px>Open Positions</div><div class=list id=bot_pos></div>
-  <div class=h style=margin:16px 0 8px>Recent Trades</div><div class=list id=bot_log></div>
-  <div class=note><b>Every trade is priced from Helius</b> (getAsset) — entry and exit. Tokens Helius can't
-   price are <b>not traded</b> (no impure fills). A self-correcting bandit decides entries and learns from
-   realized PnL; exits on risk rules. Realistic costs (latency, slippage + impact, 1% fees, 12% failure).
-   Paper only. Fewer trades now (only Helius-priced tokens) but every one is on real data.</div>
+  <div class=h style=margin:16px 0 8px>Recent Trades · all strategies</div><div class=list id=bot_log></div>
+  <div class=note>Build strategies on the fly: pick an <b>entry</b> (rl · tiered · momentum), an <b>exit</b>
+   (risk rules · first-sell), toggle <b>Require Helius price</b>, and tune every parameter. Each strategy runs
+   its own paper book; toggle them independently. Saved to this browser. Realistic costs · paper only.</div>
 </section>
 
 <section id=s-movers><div class=h>Top Movers</div>
@@ -241,13 +236,21 @@ function oppScore(T){const age=now()-T.firstSeen,rec=now()-T.lastSeen,fi=T.vol>0
 const tv=()=>[...tokens.values()];
 
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
-const STRAT={size:0.5,liqFrac:0.05,minTicket:0.08,maxTicket:1.0,maxPos:6,tpHard:3.0,sl:-0.35,trail:0.4,spikeJump:0.35,spikeLevel:0.8,ratioIn:2.5,ratioOut:0.7,momIn:0.05,momOut:-0.02,momWin:5,holdMax:420,minBuyers:3,minVol:1,minLiq:8,minAge:8,maxAge:1200,smartMin:2,runner:true,newbornBuyers:15,newbornWindow:60};
-const botSize=liq=>STRAT.liqFrac>0?Math.max(STRAT.minTicket,Math.min(STRAT.maxTicket,STRAT.liqFrac*liq)):STRAT.size;
+/* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
+const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25]];
+const ENTRY_TYPES=['rl','tiered','momentum'],EXIT_MODES=['risk','firstSell'];
+function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
+function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0};}
+function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
+function loadStrats(){try{const raw=localStorage.getItem('mchpai_strats');if(raw)return JSON.parse(raw).map(s=>{const S=newStrategy(s.name,s.entry);if(s.id)S.id=s.id;S.on=s.on!==false;if(s.exitMode)S.exitMode=s.exitMode;S.requireHelius=!!s.requireHelius;Object.assign(S.params,s.params||{});return S;});}catch(e){}return [newStrategy('RL Trader','rl'),newStrategy('Tiered Newborn','tiered'),newStrategy('Momentum','momentum')];}
+let strategies=loadStrats();
+function saveStrats(){try{localStorage.setItem('mchpai_strats',JSON.stringify(strategies.map(s=>({id:s.id,name:s.name,on:s.on,entry:s.entry,exitMode:s.exitMode,requireHelius:s.requireHelius,params:s.params}))));}catch(e){}}
+function findS(id){return strategies.find(s=>s.id===id);}
 const COST={baseSlip:80,impactK:0.9,liqFloor:5,feeBps:100,fixed:0.0018,failP:0.12,exitGap:150};
-const bot={cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],enabled:true,missed:0};
+/* single bot replaced by strategies[] */
 const impactBps=(sz,liq)=>COST.impactK*(sz/Math.max(liq,COST.liqFloor))*1e4;
 function feat(T){const bv=(T.vol+T.netSol)/2,sv=(T.vol-T.netSol)/2,p=T.prices,
- mom=p.length>=2?(p[p.length-1]/p[Math.max(0,p.length-1-STRAT.momWin)]-1):0;
+ mom=p.length>=2?(p[p.length-1]/p[Math.max(0,p.length-6)]-1):0;
  return {price:T.lastPrice,ratio:bv/(sv+1e-9),mom,buyers:T.buyers.size,smart:T.smart.size,age:now()-T.firstSeen,vol:bv+sv,liq:T.vol,bv,sv};}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
 function makeBandit(dim,k){return {dim,k,w:Array.from({length:k},()=>new Float64Array(dim)),lr:0.05,eps:0.25,epsMin:0.02,epsMax:0.45,l2:1e-3,recent:[],updates:0,mean:new Float64Array(dim),M2:new Float64Array(dim).fill(1),n:0};}
@@ -260,50 +263,33 @@ function bRecent(b){return b.recent.length?b.recent.reduce((s,v)=>s+v,0)/b.recen
 const brain=makeBandit(8,2);
 function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.ratio,10)/10,Math.tanh(f.mom*5),Math.min(f.smart,5)/5,Math.log1p(f.liq)/5,Math.min(f.buyers,20)/20,Math.min(f.age,600)/600,Math.tanh(imb),1];}
 /* ratcheting trailing stop — tightens as profit grows so winners lock in gains */
-const trailFor=ret=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:STRAT.trail;
-function openPos(mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;bot.cash-=size;bot.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
-function closePos(mint,price,reason,adv){const pos=bot.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;bot.cash+=proc;bot.realized+=pnl;bUpdate(brain,1,pos.ctx,pnl/pos.cost);bot.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(bot.closed.length>60)bot.closed.pop();bot.pos.delete(mint);}
-function tryExit(mint,ts){const pos=bot.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;
+const sSize=(P,liq)=>P.liqFrac>0?Math.max(0.08,Math.min(1.0,P.liqFrac*liq)):P.size;
+const trailForP=(ret,base)=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:base;
+function sOpen(S,mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;S.book.cash-=size;S.book.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
+function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);}
+function sExit(S,mint,ts){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;const P=S.params;
  const price=T.lastPrice||pos.entry;pos.peak=Math.max(pos.peak,price);const ret=price/pos.entry-1;
- if(pos.mode==='firstSell'){                                                          // RULE: exit on first sell; stop/timeout = safety
-  if(T.sells>pos.sellsAtEntry){closePos(mint,price,'first sell',false);return;}
-  if(ret<=STRAT.sl){closePos(mint,price,'stop loss',true);return;}
-  if((ts-pos.openTs)>=STRAT.holdMax){closePos(mint,price,'timeout',ret<0);return;}
-  return;}
- const jump=ret-(pos.lastRet||0);pos.lastRet=ret;const tr=ret>0?trailFor(ret):STRAT.trail;
- if(ret<=STRAT.sl)closePos(mint,price,'stop loss',true);
- else if(ret>0&&(jump>=STRAT.spikeJump||ret>=STRAT.spikeLevel))closePos(mint,price,'spike take-profit',false);
- else if(price<=pos.peak*(1-tr))closePos(mint,price,ret>0?'take profit':'trail stop',ret<0);
- else if(ret>=STRAT.tpHard)closePos(mint,price,'take profit',false);
- else if((ts-pos.openTs)>=STRAT.holdMax)closePos(mint,price,'timeout',ret<0);}
-/* RULE: tiered buyer adoption — buy-dominant, escalating threshold by minute */
-function newbornQualifies(f,T){const b=T.buyers.size,s=T.sells,age=f.age;
- if(s>Math.max(2,b*0.25))return false;                 // must stay buy-dominant (not a wave of sells)
- if(age<=60)return b>=10;                              // minute 1: >=10 buyers
- if(age<=120)return b>=25;                             // minute 2: >=25 buyers
- if(age<=180)return b>=100;                            // minute 3: >=100 buyers
- return false;}
-async function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const ts=now(),pos=bot.pos.get(mint);
- if(pos){if(pos.mode==='firstSell'&&T.sells>pos.sellsAtEntry)closePos(mint,T.lastPrice||pos.entry,'first sell',false);return;}  // INSTANT first-sell exit
- if(junk.has(mint)){apiStats.skipped++;return;}                                       // FILTER: never spend API on blocklisted junk
- const f=feat(T);if(f.price<=0)return;
- // RULE: tiered buyer adoption (10/1m · 25/2m · 100/3m, buy-dominant) -> buy; exit on first new sell
- if(newbornQualifies(f,T)&&bot.pos.size<STRAT.maxPos&&bot.cash>=botSize(f.liq)){
-  if(Math.random()<COST.failP){bot.missed++;return;}
-  openPos(mint,f.price,ts,botSize(f.liq),ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});  // fresh token: clean print price, no wasted getAsset
-  return;}
- // RL entry (Helius-priced only)
- if(!(f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers))return;
- const ctx=ctxOf(f),a=bSelect(brain,ctx);if(a===0){bUpdate(brain,0,ctx,0);return;}
- if(bot.pos.size>=STRAT.maxPos||bot.cash<botSize(f.liq))return;
- const ep=await authPriceSol(mint);if(!ep){bot.skippedNoPrice=(bot.skippedNoPrice||0)+1;return;}  // PURE: no Helius price -> no trade
- if(Math.random()<COST.failP){bot.missed++;return;}
- openPos(mint,ep,ts,botSize(f.liq),ctx);}
-/* CRITICAL: manage every open position each cycle, even tokens that went quiet */
-async function manageOpenPositions(){const ts=now();for(const m of [...bot.pos.keys()]){
-  const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}   // mark at Helius authoritative price
-  tryExit(m,ts);}}
-function botEquity(){let o=0;bot.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return bot.cash+o;}
+ if(S.exitMode==='firstSell'){if(T.sells>pos.sellsAtEntry){sClose(S,mint,price,'first sell',false);return;}if(ret<=P.sl){sClose(S,mint,price,'stop loss',true);return;}if((ts-pos.openTs)>=P.holdMax){sClose(S,mint,price,'timeout',ret<0);return;}return;}
+ const jump=ret-(pos.lastRet||0);pos.lastRet=ret;const tr=ret>0?trailForP(ret,P.trail):P.trail;
+ if(ret<=P.sl)sClose(S,mint,price,'stop loss',true);
+ else if(ret>0&&(jump>=P.spikeJump||ret>=P.spikeLevel))sClose(S,mint,price,'spike take-profit',false);
+ else if(price<=pos.peak*(1-tr))sClose(S,mint,price,ret>0?'take profit':'trail stop',ret<0);
+ else if(ret>=P.tpHard)sClose(S,mint,price,'take profit',false);
+ else if((ts-pos.openTs)>=P.holdMax)sClose(S,mint,price,'timeout',ret<0);}
+function tieredQ(P,f,T){const b=T.buyers.size,s=T.sells,age=f.age;if(s>Math.max(2,b*P.maxSellRatio))return false;if(age<=60)return b>=P.tier1Buyers;if(age<=120)return b>=P.tier2Buyers;if(age<=180)return b>=P.tier3Buyers;return false;}
+async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
+ if(b.pos.has(mint)){if(S.exitMode==='firstSell'){const p=b.pos.get(mint);if(T.sells>p.sellsAtEntry)sClose(S,mint,T.lastPrice||p.entry,'first sell',false);}return;}
+ if(b.pos.size>=P.maxPos||f.price<=0)return;const size=sSize(P,f.liq);if(b.cash<size)return;
+ if(S.entry==='tiered'){if(tieredQ(P,f,T)){if(Math.random()<COST.failP){b.missed++;return;}sOpen(S,mint,f.price,ts,size,ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});}return;}
+ if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers))return;
+ if(S.entry==='momentum'){if(!(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin))return;}
+ else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
+ let ep=f.price;if(S.requireHelius){ep=await authPriceSol(mint);if(!ep)return;}
+ if(Math.random()<COST.failP){b.missed++;return;}
+ sOpen(S,mint,ep,ts,size,ctxOf(f));}
+async function botTick(mint){if(junk.has(mint)){apiStats.skipped++;return;}const T=tokens.get(mint);if(!T)return;const f=feat(T);for(const S of strategies)if(S.on)await sTick(S,mint,T,f);}
+async function manageOpenPositions(){const ts=now();const held=new Set();strategies.forEach(S=>S.book.pos.forEach((_,m)=>held.add(m)));for(const m of held){const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}}for(const S of strategies)if(S.on)for(const m of [...S.book.pos.keys()])sExit(S,m,ts);}
+const bookEquity=b=>{let o=0;b.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return b.cash+o;};
 
 /* ---- render ---- */
 function renderHero(){const ser=hist.map(METRICS[heroMetric].s);let w=ser;if(heroWin>0)w=ser.slice(-heroWin);
@@ -344,23 +330,34 @@ function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35
  $('regime').innerHTML=`<span class="${heat>=cold?'up':'down'}">${heat>=cold?'RISK-ON':'RISK-OFF'}</span> <span class=muted>(${heat} hot / ${cold} cold)</span>`;}
 function renderDist(){$('ch_multhist').innerHTML=histogram(tv().map(T=>T.maxMult),'#00c805');$('ch_volhist').innerHTML=histogram(tv().map(T=>T.vol).filter(v=>v>0),'#5aa9ff');}
 
-function renderTrade(){const eq=botEquity(),chg=eq-bot.start,p=chg/bot.start*100,up=chg>=0;
- $('bot_eq').textContent=eq.toFixed(3)+' ◎';const bc=$('bot_chg');bc.className='chg '+(up?'up':'down');
- bc.textContent=(up?'▲ ':'▼ ')+Math.abs(chg).toFixed(3)+'◎  '+fmtPct(p);
- $('bot_chart').innerHTML=rhChart(bot.eqHist.length>1?bot.eqHist:[bot.start,eq],170,up);
- const wins=bot.closed.filter(c=>c.pnl>0).length,n=bot.closed.length;
- $('bot_real').innerHTML=`<span class="${bot.realized>=0?'up':'down'}">${bot.realized>=0?'+':''}${bot.realized.toFixed(3)}</span>`;
- $('bot_open').textContent=bot.pos.size;$('bot_tr').textContent=n;$('bot_win').textContent=(n?(wins/n*100).toFixed(0):0)+'%';
- const rr=bRecent(brain);$('bot_brain').innerHTML=`${brain.updates} updates · explore <b>${(brain.eps*100).toFixed(0)}%</b> · recent reward <span class="${rr>=0?'up':'down'}">${(rr*100).toFixed(1)}%</span>`;
- let cum=0;const curve=brain.recent.map(v=>cum+=v);$('bot_learn').innerHTML=curve.length>1?spark(curve,rr>=0,620,40):'<span class=muted style=font-size:11px>policy warming up — decisions + rewards accruing</span>';
- const tot=apiStats.q+apiStats.cache+apiStats.skipped;$('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
- const pos=[...bot.pos.entries()].map(([m,po])=>{const T=tokens.get(m),cur=(T&&T.lastPrice)||po.entry,ret=(cur/po.entry-1)*100,up2=ret>=0;
-  return `<div class=item><div><div class=nm>${short(m)}</div><div class=sub>entry ${po.entry.toExponential(2)} · ${ageStr(now()-po.openTs)}</div></div>
-  <div class=rt><div class=px>${cur.toExponential(2)}</div><div class="badge ${up2?'up':'down'}">${fmtPct(ret)}</div></div></div>`;}).join('');
- $('bot_pos').innerHTML=pos||'<div class=ctr>no open positions</div>';
- $('bot_log').innerHTML=bot.closed.slice(0,12).map(c=>{const up2=c.pnl>=0;
-  return `<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.reason}</div></div>
-  <div class=rt><div class="badge ${up2?'up':'down'}">${(up2?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`;}).join('')||'<div class=ctr>no trades yet</div>';}
+function stratCard(S){const eq=bookEquity(S.book),chg=eq-S.book.start,up=chg>=0,wins=S.book.closed.filter(c=>c.pnl>0).length,n=S.book.closed.length;
+ return `<div class=card style=margin-bottom:10px;padding:12px>
+  <div class=row style=border:none;align-items:center><span><b>${S.name}</b> <span class=tag>${S.entry}·${S.exitMode}</span></span>
+   <button class="mini ${S.on?'on':''}" onclick="toggleStrat('${S.id}')">${S.on?'● ON':'○ OFF'}</button></div>
+  <div class=row style=border:none><span class=muted>equity</span><span class="${up?'up':'down'}">${eq.toFixed(3)}◎ ${fmtPct(S.book.start?chg/S.book.start*100:0)}</span></div>
+  <div class=row style=border:none><span class=muted>realized·open·trades·win</span><span><span class="${S.book.realized>=0?'up':'down'}">${S.book.realized.toFixed(3)}</span>·${S.book.pos.size}·${n}·${n?(wins/n*100|0):0}%</span></div>
+  <div style=margin-top:6px><button class=mini onclick="editStrat('${S.id}')">⚙ params</button><button class=mini onclick="dupStrat('${S.id}')">⧉ dup</button><button class=mini onclick="delStrat('${S.id}')">🗑</button></div>
+  <div id=edit_${S.id} style=display:none;margin-top:8px>${paramEditor(S)}</div></div>`;}
+function paramEditor(S){const sel=(lab,val,opts,fn)=>`<div class=row style=border:none><span class=muted>${lab}</span><select onchange="${fn}('${S.id}',this.value)">${opts.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
+ return `<div class=row style=border:none><span class=muted>Name</span><input value="${S.name}" onchange="setName('${S.id}',this.value)" class=pin></div>`+sel('Entry',S.entry,ENTRY_TYPES,'setEntry')+sel('Exit',S.exitMode,EXIT_MODES,'setExit')+`<div class=row style=border:none><span class=muted>Require Helius price</span><input type=checkbox ${S.requireHelius?'checked':''} onchange="setHelius('${S.id}',this.checked)"></div>`+PSCHEMA.map(([k,lab])=>`<div class=row style=border:none><span class=muted>${lab}</span><input type=number step=any value=${S.params[k]} onchange="setParam('${S.id}','${k}',this.value)" class=pin></div>`).join('');}
+function toggleStrat(id){const S=findS(id);S.on=!S.on;saveStrats();renderTrade();}
+function setParam(id,k,v){findS(id).params[k]=parseFloat(v);saveStrats();}
+function setEntry(id,v){const S=findS(id);S.entry=v;if(v==='rl'&&!S.brain)S.brain=makeBandit(8,2);saveStrats();renderTrade();}
+function setExit(id,v){findS(id).exitMode=v;saveStrats();}
+function setHelius(id,v){findS(id).requireHelius=v;saveStrats();}
+function setName(id,v){findS(id).name=v;saveStrats();}
+function editStrat(id){const e=$('edit_'+id);if(e)e.style.display=e.style.display==='none'?'block':'none';}
+function dupStrat(id){const S=findS(id),c=newStrategy(S.name+' copy',S.entry);c.exitMode=S.exitMode;c.requireHelius=S.requireHelius;c.params=Object.assign({},S.params);strategies.push(c);saveStrats();renderTrade();}
+function delStrat(id){if(strategies.length>1){strategies=strategies.filter(s=>s.id!==id);saveStrats();renderTrade();}}
+function addStrat(){strategies.push(newStrategy('New strategy','momentum'));saveStrats();renderTrade();}
+function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity(S.book);astart+=S.book.start;});const chg=aeq-astart,up=chg>=0;
+ $('bot_eq').textContent=aeq.toFixed(3)+' ◎';const bc=$('bot_chg');bc.className='chg '+(up?'up':'down');bc.textContent=(up?'▲ ':'▼ ')+Math.abs(chg).toFixed(3)+'◎  '+fmtPct(astart?chg/astart*100:0);
+ const lens=strategies.map(S=>S.book.eqHist.length).filter(x=>x>0);const minL=lens.length?Math.min.apply(null,lens):0;
+ if(minL>1){const sum=[];for(let i=0;i<minL;i++){let v=0;strategies.forEach(S=>{const h=S.book.eqHist;v+=h[h.length-minL+i]||0;});sum.push(v);}$('bot_chart').innerHTML=rhChart(sum,170,up);}else $('bot_chart').innerHTML='<div class=ctr>warming up…</div>';
+ $('strat_list').innerHTML=strategies.map(stratCard).join('');
+ $('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
+ const allC=[].concat.apply([],strategies.map(S=>S.book.closed.map(c=>Object.assign({strat:S.name},c)))).sort((a,b)=>b.ts-a.ts).slice(0,14);
+ $('bot_log').innerHTML=allC.map(c=>`<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.strat} · ${c.reason}</div></div><div class=rt><div class="badge ${c.pnl>=0?'up':'down'}">${(c.pnl>=0?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`).join('')||'<div class=ctr>no trades yet</div>';}
 function render(){renderHero();renderChips();renderTrade();renderMovers();renderTokens();renderWallets();renderFlow();renderOpps();renderDist();
  if(tokens.size>4000)tv().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
@@ -376,7 +373,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  if(pollN++%40===0)refreshSolUsd();                                                  // keep SOL/USD fresh for marks
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
- bot.eqHist.push(botEquity());if(bot.eqHist.length>150)bot.eqHist.shift();
+ strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
