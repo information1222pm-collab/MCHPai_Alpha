@@ -98,6 +98,12 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <div class="chg up" id=bot_chg>—</div>
   <div id=bot_chart style=margin:8px 0></div>
   <div id=strat_list style=margin-top:10px></div>
+  <div class=h style=margin:16px 0 8px>🔴 Live Execution <span class=muted style=font-weight:400>real funds · burner wallet only</span></div>
+  <div id=live_panel><div class=ctr>disarmed</div></div>
+  <div class=note>Paper by default. Flip a strategy's <b>🔴 LIVE</b> switch and <b>Arm</b> a burner key to route its
+   entries/exits through Jupiter on-chain. The key lives in memory only (never saved or transmitted except to
+   sign your own swaps) and is wiped on reload or disarm. A hot key in a browser is inherently risky — fund a
+   throwaway wallet with only what you can lose, or run the server-side <code>trader.py</code> for production.</div>
   <div class=row style=margin-top:8px><span class=muted>📡 data filter</span><span id=bot_api>—</span></div>
   <div class=h style=margin:16px 0 8px>Recent Trades · all strategies</div><div class=list id=bot_log></div>
   <div class=note>Build strategies on the fly: pick an <b>entry</b> (rl · tiered · momentum), an <b>exit</b>
@@ -142,6 +148,8 @@ select{background:#16191c;border:1px solid var(--line);color:#fff;border-radius:
   <div id=stor_bar></div>
   <div id=stor_info style=margin-top:8px><span class=muted>initializing storage…</span></div>
   <div style=margin-top:12px><button class=mini id=stor_export onclick=exportData()>⬇ Export dataset (NDJSON)</button><button class=mini onclick=clearData()>🗑 Clear</button></div>
+  <div class=h style=margin:18px 0 8px>Backtest <button class=mini id=bt_btn onclick=runBacktest()>▶ Backtest saved data</button></div>
+  <div id=bt_out><div class=ctr>replay your saved swaps through every strategy to rank them</div></div>
   <div class=note>Every swap and trade is preserved in IndexedDB (up to a 10 GB target; the browser grants
    quota from free disk, shown above). On reload, recent history is restored so Trends and strategies keep
    context, and the full dataset stays on disk. <b>Export</b> downloads everything as NDJSON for offline
@@ -285,13 +293,13 @@ async function clearData(){if(!DB||(typeof confirm!=='undefined'&&!confirm('Dele
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
 /* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
 const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25]];
-const ENTRY_TYPES=['rl','tiered','momentum'],EXIT_MODES=['risk','firstSell'];
+const ENTRY_TYPES=['rl','tiered','momentum','copywallet'],EXIT_MODES=['risk','firstSell'];
 function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
-function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0};}
-function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
-function loadStrats(){try{const raw=localStorage.getItem('mchpai_strats');if(raw)return JSON.parse(raw).map(s=>{const S=newStrategy(s.name,s.entry);if(s.id)S.id=s.id;S.on=s.on!==false;if(s.exitMode)S.exitMode=s.exitMode;S.requireHelius=!!s.requireHelius;Object.assign(S.params,s.params||{});return S;});}catch(e){}return [newStrategy('RL Trader','rl'),newStrategy('Tiered Newborn','tiered'),newStrategy('Momentum','momentum')];}
+function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0,peakEq:10};}
+function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',live:false,retired:false,params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
+function loadStrats(){try{const raw=localStorage.getItem('mchpai_strats');if(raw)return JSON.parse(raw).map(s=>{const S=newStrategy(s.name,s.entry);if(s.id)S.id=s.id;S.on=s.on!==false;if(s.exitMode)S.exitMode=s.exitMode;S.requireHelius=!!s.requireHelius;S.live=!!s.live;S.retired=!!s.retired;if(s.retireReason)S.retireReason=s.retireReason;if(s.retired)S.on=false;Object.assign(S.params,s.params||{});return S;});}catch(e){}return [newStrategy('RL Trader','rl'),newStrategy('Tiered Newborn','tiered'),newStrategy('Momentum','momentum')];}
 let strategies=loadStrats();
-function saveStrats(){try{localStorage.setItem('mchpai_strats',JSON.stringify(strategies.map(s=>({id:s.id,name:s.name,on:s.on,entry:s.entry,exitMode:s.exitMode,requireHelius:s.requireHelius,params:s.params}))));}catch(e){}}
+function saveStrats(){try{localStorage.setItem('mchpai_strats',JSON.stringify(strategies.map(s=>({id:s.id,name:s.name,on:s.on,entry:s.entry,exitMode:s.exitMode,requireHelius:s.requireHelius,live:s.live,retired:s.retired,retireReason:s.retireReason,params:s.params}))));}catch(e){}}
 function findS(id){return strategies.find(s=>s.id===id);}
 const COST={baseSlip:80,impactK:0.9,liqFloor:5,feeBps:100,fixed:0.0018,failP:0.12,exitGap:150};
 /* single bot replaced by strategies[] */
@@ -313,7 +321,7 @@ function ctxOf(f){const imb=(f.bv-f.sv)/(f.bv+f.sv+1e-9);return [Math.min(f.rati
 const sSize=(P,liq)=>P.liqFrac>0?Math.max(0.08,Math.min(1.0,P.liqFrac*liq)):P.size;
 const trailForP=(ret,base)=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:base;
 function sOpen(S,mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;S.book.cash-=size;S.book.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
-function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying)tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);}
+function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying)tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});if(S.brain)bUpdate(S.brain,1,pos.ctx,pnl/pos.cost);S.book.closed.unshift({mint,pnl,ret:price/pos.entry-1,reason,ts:now()});if(S.book.closed.length>40)S.book.closed.pop();S.book.pos.delete(mint);if(S.live&&liveArmed&&!replaying)liveExecute('sell',mint,0,S);}
 function sExit(S,mint,ts){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);if(!T)return;const P=S.params;
  const price=T.lastPrice||pos.entry;pos.peak=Math.max(pos.peak,price);const ret=price/pos.entry-1;
  if(S.exitMode==='firstSell'){if(T.sells>pos.sellsAtEntry){sClose(S,mint,price,'first sell',false);return;}if(ret<=P.sl){sClose(S,mint,price,'stop loss',true);return;}if((ts-pos.openTs)>=P.holdMax){sClose(S,mint,price,'timeout',ret<0);return;}return;}
@@ -329,14 +337,65 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  if(b.pos.size>=P.maxPos||f.price<=0)return;const size=sSize(P,f.liq);if(b.cash<size)return;
  if(S.entry==='tiered'){if(tieredQ(P,f,T)){if(Math.random()<COST.failP){b.missed++;return;}sOpen(S,mint,f.price,ts,size,ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});}return;}
  if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers))return;
- if(S.entry==='momentum'){if(!(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin))return;}
+ if(S.entry==='copywallet'){if(T.smart.size<Math.max(1,P.smartMin))return;}            // mirror experienced/cross-token money
+ else if(S.entry==='momentum'){if(!(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin))return;}
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
  let ep=f.price;if(S.requireHelius){ep=await authPriceSol(mint);if(!ep)return;}
  if(Math.random()<COST.failP){b.missed++;return;}
- sOpen(S,mint,ep,ts,size,ctxOf(f));}
+ sOpen(S,mint,ep,ts,size,ctxOf(f));if(S.live&&liveArmed)liveExecute('buy',mint,size,S);}
 async function botTick(mint){if(junk.has(mint)){apiStats.skipped++;return;}const T=tokens.get(mint);if(!T)return;const f=feat(T);for(const S of strategies)if(S.on)await sTick(S,mint,T,f);}
 async function manageOpenPositions(){const ts=now();const held=new Set();strategies.forEach(S=>S.book.pos.forEach((_,m)=>held.add(m)));for(const m of held){const ap=await authPriceSol(m);if(ap){const T=tokens.get(m);if(T)T.lastPrice=ap;}}for(const S of strategies)if(S.on)for(const m of [...S.book.pos.keys()])sExit(S,m,ts);}
 const bookEquity=b=>{let o=0;b.pos.forEach((p,m)=>{const T=tokens.get(m);o+=p.tokens*((T&&T.lastPrice)||p.entry);});return b.cash+o;};
+
+/* ===== LIVE EXECUTION — opt-in, heavily gated. Hot key held in memory ONLY (never persisted/sent). ===== */
+/* SECURITY: a browser-resident key is risky — use a BURNER wallet only; for production prefer server-side trader.py. */
+let liveArmed=false,WALLET=null,_web3=null,_bs58=null,liveLog=[];
+async function loadWeb3(){if(_web3)return _web3;_web3=await import('https://esm.sh/@solana/web3.js@1.95.3');_bs58=(await import('https://esm.sh/bs58@5')).default;return _web3;}
+async function armLive(){
+ const warn='⚠ LIVE TRADING — REAL FUNDS ⚠\n\nYou are about to paste a HOT private key into a browser tab. Anything with access to this page can drain the wallet. Use a BRAND-NEW BURNER wallet funded with only what you can afford to lose. For anything serious, run the server-side trader.py instead.\n\nThe key stays in memory only — never saved, never sent anywhere except to sign your own swaps. Reloading the page disarms it.\n\nPaste the BURNER private key (base58) to arm, or Cancel to abort.';
+ if(typeof prompt==='undefined')return;const pk=prompt(warn);if(!pk)return;
+ const sb=$('live_panel');if(sb)sb.innerHTML='<div class=ctr>loading signer…</div>';
+ try{await loadWeb3();const secret=_bs58.decode(pk.trim());WALLET=_web3.Keypair.fromSecretKey(secret);liveArmed=true;
+  liveLog.unshift({t:Date.now(),msg:'armed '+WALLET.publicKey.toBase58().slice(0,8)+'…'});}
+ catch(e){WALLET=null;liveArmed=false;liveLog.unshift({t:Date.now(),msg:'✗ bad key: '+e.message});}
+ renderLive();}
+function disarmLive(){WALLET=null;liveArmed=false;liveLog.unshift({t:Date.now(),msg:'disarmed (key wiped)'});renderLive();}
+async function tokenBalanceRaw(mint){try{const r=await rpc('getTokenAccountsByOwner',[WALLET.publicKey.toBase58(),{mint},{encoding:'jsonParsed'}]);let amt=0n;for(const a of (r&&r.value)||[])amt+=BigInt(a.account.data.parsed.info.tokenAmount.amount);return amt;}catch(e){return 0n;}}
+async function liveExecute(side,mint,sizeSol,S){
+ if(!liveArmed||!WALLET)return;const tag=((S&&S.name)||'live')+' '+side+' '+short(mint);
+ try{let inMint,outMint,amount;
+  if(side==='buy'){inMint=WSOL;outMint=mint;amount=Math.max(1,Math.floor(sizeSol*1e9)).toString();}
+  else{inMint=mint;outMint=WSOL;const bal=await tokenBalanceRaw(mint);if(bal<=0n){liveLog.unshift({t:Date.now(),msg:tag+' · no on-chain balance'});renderLive();return;}amount=bal.toString();}
+  const slip=300;
+  const q=await fetch(`https://lite-api.jup.ag/swap/v1/quote?inputMint=${inMint}&outputMint=${outMint}&amount=${amount}&slippageBps=${slip}`).then(r=>r.json());
+  if(!q||!q.outAmount){liveLog.unshift({t:Date.now(),msg:tag+' · no route'});renderLive();return;}
+  const sw=await fetch('https://lite-api.jup.ag/swap/v1/swap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteResponse:q,userPublicKey:WALLET.publicKey.toBase58(),wrapAndUnwrapSol:true,dynamicComputeUnitLimit:true})}).then(r=>r.json());
+  if(!sw||!sw.swapTransaction){liveLog.unshift({t:Date.now(),msg:tag+' · swap build failed'});renderLive();return;}
+  const buf=Uint8Array.from(atob(sw.swapTransaction),c=>c.charCodeAt(0));
+  const tx=_web3.VersionedTransaction.deserialize(buf);tx.sign([WALLET]);
+  const raw=btoa(String.fromCharCode.apply(null,tx.serialize()));
+  const sig=await rpc('sendTransaction',[raw,{encoding:'base64',skipPreflight:true,maxRetries:3}]);
+  liveLog.unshift({t:Date.now(),msg:tag+' ✓ '+String(sig).slice(0,10)+'…'});renderLive();return sig;
+ }catch(e){liveLog.unshift({t:Date.now(),msg:tag+' ✗ '+(e.message||e)});renderLive();}}
+function renderLive(){const el=$('live_panel');if(!el)return;const liveOn=strategies.filter(s=>s.live).length;
+ el.innerHTML=`<div class=row style=border:none><span class=muted>signer</span><span class="${liveArmed?'up':'down'}">${liveArmed?WALLET.publicKey.toBase58().slice(0,10)+'… ARMED':'disarmed'}</span></div>`+
+  `<div class=row style=border:none><span class=muted>strategies set to LIVE</span><span class="${liveOn?'up':''}">${liveOn}</span></div>`+
+  `<div style=margin-top:6px>${liveArmed?'<button class=mini onclick=disarmLive()>■ Disarm & wipe key</button>':'<button class=mini onclick=armLive()>🔑 Arm live trading…</button>'}</div>`+
+  `<div class=list style=margin-top:8px>`+(liveLog.slice(0,8).map(l=>`<div class=item><div class=sub>${new Date(l.t).toLocaleTimeString().replace(/:\d+ /,' ')}</div><div class=nm style=font-size:12px>${l.msg}</div></div>`).join('')||'<div class=ctr>no live actions yet</div>')+`</div>`;}
+
+/* ===== AUTO-EVOLVE — retire deep-drawdown strategies, breed mutated clones of the best ===== */
+function mutate(p){const q=Object.assign({},p),keys=['ratioIn','momIn','trail','sl','minLiq','minBuyers','smartMin','spikeLevel','holdMax'];
+ keys.forEach(k=>{if(Math.random()<0.5){const j=1+(Math.random()*0.3-0.15);q[k]=+(p[k]*j).toFixed(4);}});
+ q.sl=Math.max(-0.6,Math.min(-0.1,q.sl||-0.35));q.trail=Math.max(0.1,Math.min(0.6,q.trail||0.4));q.minBuyers=Math.max(2,Math.round(q.minBuyers||3));return q;}
+function evolve(){let changed=false;
+ for(const S of strategies){const eq=bookEquity(S.book);S.book.peakEq=Math.max(S.book.peakEq||S.book.start,eq);
+  const dd=S.book.peakEq>0?(S.book.peakEq-eq)/S.book.peakEq:0;
+  if(!S.retired&&S.on&&S.book.closed.length>=12&&dd>0.45){
+   S.on=false;S.retired=true;S.retireReason=`-${(dd*100).toFixed(0)}% DD`;changed=true;
+   const pool=strategies.filter(x=>!x.retired&&x.book.closed.length>=8&&x.book.realized>0).sort((a,b)=>b.book.realized-a.book.realized);
+   if(pool[0]&&strategies.length<10){const best=pool[0],c=newStrategy(best.name.replace(/ ⟂.*/,'')+' ⟂'+Math.random().toString(36).slice(2,4),best.entry);
+    c.exitMode=best.exitMode;c.requireHelius=best.requireHelius;c.params=mutate(best.params);strategies.push(c);}}}
+ if(changed){saveStrats();renderTrade();}return changed;}
 
 /* ---- render ---- */
 function renderHero(){const ser=hist.map(METRICS[heroMetric].s);let w=ser;if(heroWin>0)w=ser.slice(-heroWin);
@@ -379,19 +438,20 @@ function renderDist(){$('ch_multhist').innerHTML=histogram(tv().map(T=>T.maxMult
 
 function stratCard(S){const eq=bookEquity(S.book),chg=eq-S.book.start,up=chg>=0,wins=S.book.closed.filter(c=>c.pnl>0).length,n=S.book.closed.length;
  return `<div class=card style=margin-bottom:10px;padding:12px>
-  <div class=row style=border:none;align-items:center><span><b>${S.name}</b> <span class=tag>${S.entry}·${S.exitMode}</span></span>
+  <div class=row style=border:none;align-items:center><span><b>${S.name}</b> <span class=tag>${S.entry}·${S.exitMode}</span>${S.live?' <span class=tag style=color:#ff4d4d>● LIVE</span>':''}${S.retired?' <span class=tag style=color:#f5a623>retired '+(S.retireReason||'')+'</span>':''}</span>
    <button class="mini ${S.on?'on':''}" onclick="toggleStrat('${S.id}')">${S.on?'● ON':'○ OFF'}</button></div>
   <div class=row style=border:none><span class=muted>equity</span><span class="${up?'up':'down'}">${eq.toFixed(3)}◎ ${fmtPct(S.book.start?chg/S.book.start*100:0)}</span></div>
   <div class=row style=border:none><span class=muted>realized·open·trades·win</span><span><span class="${S.book.realized>=0?'up':'down'}">${S.book.realized.toFixed(3)}</span>·${S.book.pos.size}·${n}·${n?(wins/n*100|0):0}%</span></div>
   <div style=margin-top:6px><button class=mini onclick="editStrat('${S.id}')">⚙ params</button><button class=mini onclick="dupStrat('${S.id}')">⧉ dup</button><button class=mini onclick="delStrat('${S.id}')">🗑</button></div>
   <div id=edit_${S.id} style=display:none;margin-top:8px>${paramEditor(S)}</div></div>`;}
 function paramEditor(S){const sel=(lab,val,opts,fn)=>`<div class=row style=border:none><span class=muted>${lab}</span><select onchange="${fn}('${S.id}',this.value)">${opts.map(o=>`<option ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
- return `<div class=row style=border:none><span class=muted>Name</span><input value="${S.name}" onchange="setName('${S.id}',this.value)" class=pin></div>`+sel('Entry',S.entry,ENTRY_TYPES,'setEntry')+sel('Exit',S.exitMode,EXIT_MODES,'setExit')+`<div class=row style=border:none><span class=muted>Require Helius price</span><input type=checkbox ${S.requireHelius?'checked':''} onchange="setHelius('${S.id}',this.checked)"></div>`+PSCHEMA.map(([k,lab])=>`<div class=row style=border:none><span class=muted>${lab}</span><input type=number step=any value=${S.params[k]} onchange="setParam('${S.id}','${k}',this.value)" class=pin></div>`).join('');}
+ return `<div class=row style=border:none><span class=muted>Name</span><input value="${S.name}" onchange="setName('${S.id}',this.value)" class=pin></div>`+sel('Entry',S.entry,ENTRY_TYPES,'setEntry')+sel('Exit',S.exitMode,EXIT_MODES,'setExit')+`<div class=row style=border:none><span class=muted>Require Helius price</span><input type=checkbox ${S.requireHelius?'checked':''} onchange="setHelius('${S.id}',this.checked)"></div>`+`<div class=row style=border:none><span class=muted style=color:#ff4d4d>🔴 LIVE (real funds — arm signer below)</span><input type=checkbox ${S.live?'checked':''} onchange="setLive('${S.id}',this.checked)"></div>`+PSCHEMA.map(([k,lab])=>`<div class=row style=border:none><span class=muted>${lab}</span><input type=number step=any value=${S.params[k]} onchange="setParam('${S.id}','${k}',this.value)" class=pin></div>`).join('');}
 function toggleStrat(id){const S=findS(id);S.on=!S.on;saveStrats();renderTrade();}
 function setParam(id,k,v){findS(id).params[k]=parseFloat(v);saveStrats();}
 function setEntry(id,v){const S=findS(id);S.entry=v;if(v==='rl'&&!S.brain)S.brain=makeBandit(8,2);saveStrats();renderTrade();}
 function setExit(id,v){findS(id).exitMode=v;saveStrats();}
 function setHelius(id,v){findS(id).requireHelius=v;saveStrats();}
+function setLive(id,v){const S=findS(id);S.live=v;if(v){S.requireHelius=true;if(!liveArmed)liveLog.unshift({t:Date.now(),msg:S.name+' set LIVE — arm a signer to execute'});}saveStrats();renderTrade();}
 function setName(id,v){findS(id).name=v;saveStrats();}
 function editStrat(id){const e=$('edit_'+id);if(e)e.style.display=e.style.display==='none'?'block':'none';}
 function dupStrat(id){const S=findS(id),c=newStrategy(S.name+' copy',S.entry);c.exitMode=S.exitMode;c.requireHelius=S.requireHelius;c.params=Object.assign({},S.params);strategies.push(c);saveStrats();renderTrade();}
@@ -401,11 +461,42 @@ function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity
  $('bot_eq').textContent=aeq.toFixed(3)+' ◎';const bc=$('bot_chg');bc.className='chg '+(up?'up':'down');bc.textContent=(up?'▲ ':'▼ ')+Math.abs(chg).toFixed(3)+'◎  '+fmtPct(astart?chg/astart*100:0);
  const lens=strategies.map(S=>S.book.eqHist.length).filter(x=>x>0);const minL=lens.length?Math.min.apply(null,lens):0;
  if(minL>1){const sum=[];for(let i=0;i<minL;i++){let v=0;strategies.forEach(S=>{const h=S.book.eqHist;v+=h[h.length-minL+i]||0;});sum.push(v);}$('bot_chart').innerHTML=rhChart(sum,170,up);}else $('bot_chart').innerHTML='<div class=ctr>warming up…</div>';
- $('strat_list').innerHTML=strategies.map(stratCard).join('');
+ $('strat_list').innerHTML=strategies.map(stratCard).join('');renderLive();
  $('bot_api').innerHTML=`${apiStats.q} price queries · <span class=up>${apiStats.cache} cached</span> · <span class=up>${apiStats.skipped} junk-skipped</span> · ${junk.size} blocklisted`;
  const allC=[].concat.apply([],strategies.map(S=>S.book.closed.map(c=>Object.assign({strat:S.name},c)))).sort((a,b)=>b.ts-a.ts).slice(0,14);
  $('bot_log').innerHTML=allC.map(c=>`<div class=item><div><div class=nm>${short(c.mint)}</div><div class=sub>${c.strat} · ${c.reason}</div></div><div class=rt><div class="badge ${c.pnl>=0?'up':'down'}">${(c.pnl>=0?'+':'')+c.pnl.toFixed(3)}◎</div><div class=sub>${fmtPct(c.ret*100)}</div></div></div>`).join('')||'<div class=ctr>no trades yet</div>';}
-/* ===== TREND TRACKER — profile winners across all coins, synthesize strategies ===== */
+/* ===== BACKTESTER — replay the saved dataset through every strategy (realistic costs) ===== */
+const btMed=a=>{const s=[...a].sort((x,y)=>x-y);return s[s.length>>1];};
+function btState(birth){return {birth,last:0,first:0,bv:0,sv:0,buyers:new Set(),smart:new Set(),prices:[],med:[]};}
+function btUpdate(st,s,wfirst){if(s.price>0&&s.sol>=0.005){let ok=true;if(st.med.length>=3){const m=btMed(st.med);if(m>0&&(s.price/m>5||s.price/m<0.2))ok=false;}if(ok){if(!st.first)st.first=s.price;st.last=s.price;st.prices.push(s.price);if(st.prices.length>30)st.prices.shift();st.med.push(s.price);if(st.med.length>12)st.med.shift();}}
+ if(s.side==='buy'){st.bv+=s.sol;st.buyers.add(s.wallet);if((wfirst.get(s.wallet)||st.birth)<st.birth)st.smart.add(s.wallet);}else st.sv+=s.sol;}
+function btFeat(st,ts){const p=st.prices,mom=p.length>=2?(p[p.length-1]/p[Math.max(0,p.length-6)]-1):0;return {price:st.last,ratio:st.bv/(st.sv+1e-9),mom,buyers:st.buyers.size,smart:st.smart.size,age:ts-st.birth,vol:st.bv+st.sv,liq:st.bv+st.sv};}
+function backtestStrategy(S,all,wfirst){const P=S.params;let cash=10;const start=10,pos=new Map(),states=new Map(),closed=[];let peak=10,maxDD=0,seed=987654321;const rand=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
+ const eqv=()=>{let o=0;pos.forEach((p,m)=>{const st=states.get(m);o+=p.tokens*((st&&st.last)||p.entry);});return cash+o;};
+ const sz=liq=>P.liqFrac>0?Math.max(0.08,Math.min(1,P.liqFrac*liq)):P.size;
+ const open=(mint,price,ts,size,extra)=>{const st=states.get(mint);const slip=80+0.9*(size/Math.max(st.bv+st.sv,5))*1e4;const fill=price*(1+slip/1e4+0.015);const fee=size*0.01+0.0018,toks=(size-fee)/fill;if(toks<=0)return;cash-=size;pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,lastRet:0},extra||{}));};
+ const close=(mint,price,adv)=>{const p=pos.get(mint);if(!p)return;const st=states.get(mint);let slip=80+0.9*(p.tokens*price/Math.max(st.bv+st.sv,5))*1e4;if(adv)slip+=150;const fill=price*(1-slip/1e4),gross=p.tokens*fill,fee=gross*0.01+0.0018,proc=Math.max(0,gross-fee);cash+=proc;closed.push(proc-p.cost);pos.delete(mint);const e=eqv();peak=Math.max(peak,e);maxDD=Math.max(maxDD,peak>0?(peak-e)/peak:0);};
+ for(const s of all){let st=states.get(s.mint);if(!st){st=btState(s.ts);states.set(s.mint,st);}btUpdate(st,s,wfirst);const ts=s.ts,f=btFeat(st,ts),p=pos.get(s.mint);
+  if(p){const price=st.last||p.entry;p.peak=Math.max(p.peak,price);const ret=price/p.entry-1;const jump=ret-(p.lastRet||0);p.lastRet=ret;const tr=ret>0?(ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.3:P.trail):P.trail;
+   if(S.exitMode==='firstSell'){if(s.side==='sell'&&s.ts>p.openTs)close(s.mint,price,false);else if(ret<=P.sl)close(s.mint,price,true);else if((ts-p.openTs)>=P.holdMax)close(s.mint,price,ret<0);}
+   else{if(ret<=P.sl)close(s.mint,price,true);else if(ret>0&&(jump>=P.spikeJump||ret>=P.spikeLevel))close(s.mint,price,false);else if(price<=p.peak*(1-tr))close(s.mint,price,ret<0);else if(ret>=P.tpHard)close(s.mint,price,false);else if((ts-p.openTs)>=P.holdMax)close(s.mint,price,ret<0);}
+   continue;}
+  if(pos.size>=P.maxPos||f.price<=0)continue;const size=sz(f.liq);if(cash<size)continue;let go=false;
+  if(S.entry==='tiered'){const b=st.buyers.size;go=(st.sv<=Math.max(2,b*P.maxSellRatio))&&((f.age<=60&&b>=P.tier1Buyers)||(f.age<=120&&b>=P.tier2Buyers)||(f.age<=180&&b>=P.tier3Buyers));}
+  else if(S.entry==='copywallet'){go=st.smart.size>=Math.max(1,P.smartMin)&&s.side==='buy'&&(wfirst.get(s.wallet)||st.birth)<st.birth;}
+  else{if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers)){}else go=(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin);}
+  if(go){if(rand()<0.12)continue;open(s.mint,f.price,ts,size,S.exitMode==='firstSell'?{mode:'firstSell'}:null);}}
+ pos.forEach((p,m)=>{const st=states.get(m);close(m,st.last||p.entry,true);});
+ const wins=closed.filter(x=>x>0).length,net=cash-start,n=closed.length,w=closed.filter(x=>x>0).reduce((a,b)=>a+b,0),l=-closed.filter(x=>x<0).reduce((a,b)=>a+b,0);
+ return {name:S.name,entry:S.entry,exit:S.exitMode,net,ret:net/start*100,trades:n,win:n?wins/n:0,maxDD:maxDD*100,pf:l>0?w/l:(w>0?9.99:0)};}
+async function runBacktest(){const b=$('bt_btn');if(b)b.textContent='loading data…';if(!DB){if(b)b.textContent='no data';return;}
+ const all=[];await new Promise(r=>{try{const rq=DB.transaction('swaps','readonly').objectStore('swaps').index('ts').openCursor();rq.onsuccess=e=>{const c=e.target.result;if(c){all.push(c.value);c.continue();}else r();};rq.onerror=()=>r();}catch(e){r();}});
+ if(all.length<50){$('bt_out').innerHTML='<div class=ctr>need more saved swaps ('+all.length+') — let it run longer</div>';if(b)b.textContent='▶ Backtest saved data';return;}
+ if(b)b.textContent='running '+all.length.toLocaleString()+' swaps…';await new Promise(r=>setTimeout(r,20));
+ const wfirst=new Map();for(const s of all)if(!wfirst.has(s.wallet))wfirst.set(s.wallet,s.ts);
+ const res=strategies.map(S=>backtestStrategy(S,all,wfirst)).sort((a,b)=>b.net-a.net);
+ $('bt_out').innerHTML=`<div class=row style=color:var(--dim)><span>strategy</span><span>net◎ · ret · win · trades · DD</span></div>`+res.map(r=>`<div class=row><span><b>${r.name}</b> <span class=tag>${r.entry}</span></span><span><span class="${r.net>=0?'up':'down'}">${r.net.toFixed(2)}◎</span> · ${r.ret.toFixed(0)}% · ${(r.win*100).toFixed(0)}% · ${r.trades} · ${r.maxDD.toFixed(0)}%</span></div>`).join('')+`<div class=note>Replayed ${all.length.toLocaleString()} saved swaps · fills at next-print + slippage + 1% fee + 12% failure + 1.5% latency. Higher net◎ with a real trade count = the more trustworthy edge. Still a hypothesis, not a promise.</div>`;
+ if(b)b.textContent='▶ Backtest saved data';}
 function tProfile(arr){const med=f=>{const v=arr.map(f).filter(x=>x!=null&&isFinite(x)).sort((a,b)=>a-b);return v.length?v[v.length>>1]:0;};
  const bv=T=>(T.vol+T.netSol)/2,sv=T=>(T.vol-T.netSol)/2;
  return {n:arr.length,buyers:med(T=>T.buyers.size),smart:med(T=>T.smart.size),liq:med(T=>T.vol),ratio:med(T=>bv(T)/(sv(T)+1e-9)),netflow:med(T=>T.netSol/Math.max(T.vol,1e-9)),peak:med(T=>T.maxMult)};}
@@ -449,7 +540,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}
+ flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();   // auto-retire blowups, breed winners
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
