@@ -268,13 +268,20 @@ function tryExit(mint,ts){const pos=bot.pos.get(mint);if(!pos)return;const T=tok
  else if(price<=pos.peak*(1-tr))closePos(mint,price,ret>0?'take profit':'trail stop',ret<0);
  else if(ret>=STRAT.tpHard)closePos(mint,price,'take profit',false);
  else if((ts-pos.openTs)>=STRAT.holdMax)closePos(mint,price,'timeout',ret<0);}
+/* RULE: tiered buyer adoption — buy-dominant, escalating threshold by minute */
+function newbornQualifies(f,T){const b=T.buyers.size,s=T.sells,age=f.age;
+ if(s>Math.max(2,b*0.25))return false;                 // must stay buy-dominant (not a wave of sells)
+ if(age<=60)return b>=10;                              // minute 1: >=10 buyers
+ if(age<=120)return b>=25;                             // minute 2: >=25 buyers
+ if(age<=180)return b>=100;                            // minute 3: >=100 buyers
+ return false;}
 async function botTick(mint){if(!bot.enabled)return;const T=tokens.get(mint);if(!T)return;const ts=now(),pos=bot.pos.get(mint);
  if(pos){if(pos.mode==='firstSell'&&T.sells>pos.sellsAtEntry)closePos(mint,T.lastPrice||pos.entry,'first sell',false);return;}  // INSTANT first-sell exit
  const f=feat(T);if(f.price<=0)return;
- // RULE: newborn one-sided pressure — >15 buyers, 0 sells, first minute -> buy; exit on first sell
- if(f.age<STRAT.newbornWindow&&T.buyers.size>STRAT.newbornBuyers&&T.sells===0&&bot.pos.size<STRAT.maxPos&&bot.cash>=botSize(f.liq)){
+ // RULE: tiered buyer adoption (10/1m · 25/2m · 100/3m, buy-dominant) -> buy; exit on first new sell
+ if(newbornQualifies(f,T)&&bot.pos.size<STRAT.maxPos&&bot.cash>=botSize(f.liq)){
   if(Math.random()<COST.failP){bot.missed++;return;}
-  const ep=(await authPriceSol(mint))||f.price;if(ep>0)openPos(mint,ep,ts,botSize(f.liq),ctxOf(f),{mode:'firstSell',sellsAtEntry:0});
+  const ep=(await authPriceSol(mint))||f.price;if(ep>0)openPos(mint,ep,ts,botSize(f.liq),ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});
   return;}
  // RL entry (Helius-priced only)
  if(!(f.age>=STRAT.minAge&&f.age<=STRAT.maxAge&&f.liq>=STRAT.minLiq&&f.vol>=STRAT.minVol&&f.buyers>=STRAT.minBuyers))return;
@@ -352,9 +359,9 @@ function setMetric(m){heroMetric=m;renderHero();}
 function setWin(n){heroWin=n;renderHero();}
 
 async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
- for(const pid of Object.keys(PROGRAMS)){try{const sigs=await rpc('getSignaturesForAddress',[pid,{limit:25}]);
+ for(const pid of Object.keys(PROGRAMS)){try{const sigs=await rpc('getSignaturesForAddress',[pid,{limit:50}]);
   for(const s of sigs||[])if(s&&s.signature&&!s.err&&!seen.has(s.signature))pend.push(s.signature);}catch(e){$('status').textContent='⚠ '+e.message;busy=false;return;}}
- pend=pend.slice(0,18);let parsed=0;
+ pend=pend.slice(0,36);let parsed=0;
  for(const sig of pend){seen.add(sig);try{const res=await rpc('getTransaction',[sig,{maxSupportedTransactionVersion:0,encoding:'jsonParsed'}]);if(res){const s=parseSwapRPC(res);if(s){ingest(s);await botTick(s.mint);parsed++;}}}catch(e){}await sleep(35);}
  if(pollN++%40===0)refreshSolUsd();                                                  // keep SOL/USD fresh for marks
  await manageOpenPositions();                                                        // mark held @ Helius price, then exit
