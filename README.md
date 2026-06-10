@@ -68,3 +68,11 @@ for how to confirm names and IDs in-game.
 
 Nothing here is a cheat or a third-party login tool — it's hotkeys, MQ2 macros,
 and a local HTML overlay. Use it in line with your server's rules.
+
+**And you don't have to pay for any of it.** MacroQuest is free and open-source
+(macroquest.org). RedGuides' paid "Level 2" membership is *optional* and not
+required for anything in this package — don't buy it on my account. If you'd
+rather spend nothing and skip the install entirely, the in-game hotkeys in
+[`hotkeys/`](hotkeys/) give you most of the win for free. See the
+"You do NOT have to pay for any of this" section in
+[`docs/02-mq2-install-and-setup.md`](docs/02-mq2-install-and-setup.md).

@@ -20,14 +20,34 @@ Think of it as a scripting layer on top of EQ. For us it does three things:
    `/attack on`.
 3. **Macros (`.mac` files)** — saved sequences you run with `/mac name`.
 
-## Install (one time)
+## You do NOT have to pay for any of this
 
-Use the standard distribution for your server. The two common, well-supported routes:
+Let's be clear up front, because this trips people up:
 
-- **RedGuides "Very Vanilla" MQ** — the easiest, has an installer/launcher and a
-  plugin store. Best for a first-timer. (redguides.com)
-- **Server-provided MQ build** — many emu servers ship their own. If your server
-  has one, use *that* one (compatibility).
+- **MacroQuest is free and open-source.** The core project lives at
+  **macroquest.org** (source on GitHub) and costs nothing. Everything in this
+  package — all three macros — runs on the **free** MacroQuest.
+- You may have seen **RedGuides** mentioned around the community. RedGuides
+  packages a convenient one-click build ("Very Vanilla") and hosts some
+  *premium* plugins/scripts behind a paid "Level 2" membership. **That paid tier
+  is optional and not required for anything here.** Don't buy it unless you
+  later decide you want a specific paywalled convenience script.
+- **The cheapest path of all is zero MQ2:** the in-game social hotkeys in
+  [`hotkeys/`](../hotkeys/) give you a clean 2-key-ish setup that costs nothing,
+  needs no install, and works on every server. If money or hassle is a concern,
+  start (and honestly, you can stay) there.
+
+## Install (one time, free)
+
+Pick whichever is easiest for you — both are free:
+
+- **Free MacroQuest (macroquest.org / GitHub)** — the official open-source build.
+  Compile it or grab a free pre-built for your server. No account, no payment.
+- **Server-provided MQ build** — many emulator servers ship their own free build.
+  If your server has one, use *that* one (best compatibility), and it's free too.
+- **RedGuides "Very Vanilla"** — *optional* convenience installer. A free
+  RedGuides account covers the basics; you only ever pay if you specifically want
+  their premium scripts, which this package does not need.
 
 General steps (your distribution's installer will mostly do this for you):
 

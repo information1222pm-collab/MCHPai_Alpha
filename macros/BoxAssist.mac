@@ -63,9 +63,10 @@ Sub BoxCmd(string Cmd)
 
 | ---------------------------------------------------------------------
 | NOTE: Slow/malo casting logic lives mostly on the SHAMAN side. The
-| cleanest setup is a small heal/slow routine ON the Shaman (Very Vanilla
-| MQ ships class routines) and this macro just keeps the Shaman targeting
-| your kill target. If you use a full Shaman bot routine, you may only need
+| cleanest setup is a small heal/slow routine ON the Shaman (the free
+| MacroQuest plus a free community Shaman macro is enough - no paid product
+| needed) and this macro just keeps the Shaman targeting your kill target.
+| If you use a full Shaman bot routine, you may only need
 | the "/target id" line here and let the Shaman handle slow/malo/heals.
 | See docs/05-shaman-box-coordination.md.
 | ---------------------------------------------------------------------

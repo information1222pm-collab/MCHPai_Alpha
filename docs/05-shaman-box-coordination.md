@@ -48,8 +48,9 @@ shows the pattern. Core idea:
 
 ## Suggested Shaman "set it and forget it" loop
 
-For true hands-off, run a simple heal/buff loop on the Shaman (Very Vanilla MQ
-ships class routines, or use a community Shaman heal macro). Keep it to:
+For true hands-off, run a simple heal/buff loop on the Shaman. The free
+MacroQuest plus a free community Shaman heal macro (or a short one you write)
+does this fine — no paid product needed. Keep it to:
 
 1. **Heal** the Rogue (and tank in groups) below a threshold.
 2. **Slow + Malo** the assist target if missing.
