@@ -245,9 +245,9 @@ section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgb
 .up,.chg.up{text-shadow:0 0 9px rgba(52,236,170,.18)}.down,.chg.down{text-shadow:0 0 9px rgba(255,106,82,.16)}
 @media(prefers-reduced-motion:reduce){.appbar h1,.heroval,.vtitle,.hh,#overlay h3,.chip .v,.dstat .v{animation:none}}
 /* === streaming feed text: new rows type themselves in, char by char, the way a reply streams === */
-.ch{display:inline-block;opacity:0;filter:blur(5px);transform:translateY(2px);animation:chin .24s cubic-bezier(.2,.75,.25,1) both;will-change:opacity,filter,transform}
+.ch{display:inline-block;opacity:0;filter:blur(5px);transform:translateY(2px);animation:chin .16s cubic-bezier(.2,.75,.25,1) both;will-change:opacity,filter,transform}
 @keyframes chin{0%{opacity:0;filter:blur(5px);transform:translateY(2px)}55%{opacity:1;filter:blur(0)}100%{opacity:1;filter:none;transform:none}}
-.caret{display:inline-block;width:2px;height:.92em;margin-left:2px;vertical-align:-1px;border-radius:1px;background:linear-gradient(180deg,var(--ice),var(--mint));box-shadow:0 0 6px rgba(86,240,192,.7);opacity:0;animation:caret 1.15s ease forwards;pointer-events:none}
+.caret{display:inline-block;width:2px;height:.92em;margin-left:2px;vertical-align:-1px;border-radius:1px;background:linear-gradient(180deg,var(--ice),var(--mint));box-shadow:0 0 6px rgba(86,240,192,.7);opacity:0;animation:caret .9s ease forwards;pointer-events:none}
 @keyframes caret{0%{opacity:0}6%{opacity:1}40%{opacity:.15}54%{opacity:1}84%{opacity:1}100%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.ch{animation:none;opacity:1;filter:none;transform:none}.caret{display:none}}
 </style>
@@ -1329,36 +1329,48 @@ function renderQuant(){const el=$('quant_body');if(!el)return;const N=now(),act=
    +(disc?vcard('Discovered feature weights','what the model keys on',radar(DISC_FEATS,disc.w.map(Math.abs),200)):'')
    +(aucT.length>1?vcard('Model AUC trend','learning curve · >0.6 predictive',rhChart(aucT,150,aucT[aucT.length-1]>=0.6,{fmt:x=>(+x).toFixed(2)})):'')
   +'</div>';}
-/* ===== streamFeed: type newly-arrived feed rows in, char-by-char, like a streaming reply.
-   Diffs each container's rows by data-k so only NEW rows animate; old rows stay put. ===== */
+/* ===== glyph typewriter: text writes itself in char-by-char, like a streaming reply. ===== */
+const TYPE_STEP=6;                                         // ms per glyph — faster than normal
+const SKIP_TYPE={INPUT:1,SELECT:1,TEXTAREA:1,BUTTON:1,SCRIPT:1,STYLE:1};
 function typeLine(line,ctr,base){
+ if(base!=null)ctr.base=base; if(ctr.base==null)ctr.base=0;
+ if(ctr.max==null)ctr.max=600; if(ctr.step==null)ctr.step=TYPE_STEP;
  const walk=node=>{[...node.childNodes].forEach(n=>{
   if(n.nodeType===3){
    const frag=document.createDocumentFragment();
    for(const ch of n.nodeValue){
-    if(ch===' '||ch==='\n'){frag.appendChild(document.createTextNode(ch));continue;}
+    if(ch===' '||ch==='\n'||ctr.i>=ctr.max){frag.appendChild(document.createTextNode(ch));continue;}
     const s=document.createElement('span');s.className='ch';s.textContent=ch;
-    s.style.animationDelay=(base+(ctr.i++)*13)+'ms';frag.appendChild(s);
+    s.style.animationDelay=(ctr.base+(ctr.i++)*ctr.step)+'ms';frag.appendChild(s);
    }
    node.replaceChild(frag,n);
-  }else if(n.nodeType===1&&!n.classList.contains('ch')){walk(n);}
+  }else if(n.nodeType===1&&n.classList&&!n.classList.contains('ch')
+           &&!SKIP_TYPE[n.tagName]&&n.namespaceURI!=='http://www.w3.org/2000/svg'){walk(n);}  // never wrap SVG/inputs
  });};
  walk(line);
 }
+/* live feeds: diff rows by data-k so only NEW rows animate; old rows stay put. */
 function streamFeed(el){
  if(!el||reduce)return;
  const prev=el._seen,first=prev===undefined,seen=first?new Set():prev,next=new Set();let fresh=0;
  el.querySelectorAll('.item[data-k]').forEach((item,idx)=>{
   const k=item.getAttribute('data-k');next.add(k);
   if(seen.has(k)||(first&&idx>=10)||fresh>=12)return;   // already shown / cap page-load / cap work
-  const nm=item.querySelector('.nm'),sub=item.querySelector('.sub'),ctr={i:0},base=fresh*70;
+  const nm=item.querySelector('.nm'),sub=item.querySelector('.sub'),ctr={i:0},base=fresh*45;
   if(nm)typeLine(nm,ctr,base);
-  const caretAt=base+ctr.i*13;
+  const caretAt=base+ctr.i*TYPE_STEP;
   if(sub)typeLine(sub,ctr,base);
   if(nm){const c=document.createElement('span');c.className='caret';c.style.animationDelay=caretAt+'ms';nm.appendChild(c);}
   fresh++;
  });
  el._seen=next;
+}
+/* whole-app reveal: once on load, every section's text writes itself in (SVG/inputs left intact). */
+let typedApp=false;
+function typeApp(){
+ if(reduce||typedApp)return;const root=document.querySelector('.wrap');if(!root)return;typedApp=true;
+ let s=0;
+ root.querySelectorAll(':scope > section').forEach(sec=>{typeLine(sec,{i:0,base:s*40,max:700});s++;});
 }
 function renderSignals(){const el=$('sig_feed');if(!el)return;
  const SR=findSignalStrat(),srb=$('sigresp_btn');if(srb){const on=SR&&SR.on;srb.textContent=on?'📡 Responding ON':'📡 Respond to all';srb.className='mini'+(on?' on':'');}
@@ -1543,7 +1555,8 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
  refreshProof();gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
- render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
+ render();if(!typedApp)requestAnimationFrame(typeApp);   // first populated render → whole app writes itself in
+ $('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
 document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const h=a.getAttribute('href');if(h&&h[0]==='#')showPage(h.slice(1));}));
