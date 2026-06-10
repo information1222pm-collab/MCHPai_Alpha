@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MCHP — ISBoxer Multibox Command Center</title>
+<title>MCHP · ISBoxer Multibox Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
    THEME — Dark base, cyan accent (reads cleanest for
@@ -29,22 +32,39 @@
   --good:      #34d399;
   --mana:      #4f8cff;
   --xp:        #a78bfa;
-  --radius:    8px;
-  --mono:      "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
-  --sans:      system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --radius:    10px;
+  --mono:      "JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  --sans:      "Inter",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --display:   "Sora","Inter",system-ui,sans-serif;
+  --glow:      0 0 30px rgba(41,211,238,.22);
+  --shadow:    0 10px 40px rgba(0,0,0,.45);
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
   background:
-    radial-gradient(1200px 600px at 80% -10%, #0d2230 0%, transparent 55%),
+    radial-gradient(1100px 560px at 82% -12%, #0e2735 0%, transparent 55%),
+    radial-gradient(900px 500px at 8% 108%, #1a1230 0%, transparent 55%),
     var(--bg);
+  background-attachment:fixed;
   color:var(--txt);
   font-family:var(--sans);
   font-size:13px;
   line-height:1.45;
+  letter-spacing:.1px;
   -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
 }
+/* soft animated aurora behind everything */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background:
+    radial-gradient(600px 300px at 20% 30%, rgba(41,211,238,.06), transparent 60%),
+    radial-gradient(700px 320px at 85% 70%, rgba(167,139,250,.06), transparent 60%);
+  animation:aurora 18s ease-in-out infinite alternate;
+}
+@keyframes aurora{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(0,-18px,0) scale(1.05)}}
+.app,.topbar,.sidebar{position:relative;z-index:1}
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-track{background:var(--bg-2)}
 ::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px}
@@ -303,16 +323,176 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:22px 0}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--txt-dim);margin-top:6px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* ============================ PREMIUM LAYER ============================ */
+/* --- Cover / splash --- */
+#cover{
+  position:fixed;inset:0;z-index:200;display:grid;place-items:center;
+  background:
+    radial-gradient(900px 480px at 50% 18%, #0f3040 0%, transparent 60%),
+    radial-gradient(700px 400px at 70% 90%, #1c1338 0%, transparent 60%),
+    #06090f;
+  transition:opacity .7s ease, visibility .7s;
+  overflow:hidden;
+}
+#cover.gone{opacity:0;visibility:hidden}
+#cover .rings{position:absolute;width:680px;height:680px;border-radius:50%;
+  border:1px solid rgba(41,211,238,.12);box-shadow:0 0 120px rgba(41,211,238,.08) inset;
+  animation:spin 40s linear infinite}
+#cover .rings::after{content:"";position:absolute;inset:90px;border-radius:50%;border:1px solid rgba(167,139,250,.12)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cover-inner{position:relative;text-align:center;animation:rise .9s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.cover-mark{
+  width:84px;height:84px;margin:0 auto 22px;border-radius:22px;display:grid;place-items:center;
+  background:linear-gradient(145deg,#0e4f5c,#0a1a24);border:1px solid rgba(41,211,238,.4);
+  box-shadow:0 0 50px rgba(41,211,238,.3), inset 0 1px 0 rgba(255,255,255,.08);
+  position:relative;animation:floaty 4s ease-in-out infinite}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.cover-mark svg{width:46px;height:46px}
+.cover-kick{font:600 11px/1 var(--mono);letter-spacing:4px;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.cover-title{font-family:var(--display);font-weight:800;font-size:clamp(30px,5vw,52px);line-height:1.04;margin:0 0 12px;
+  background:linear-gradient(100deg,#eaf6ff 10%,var(--accent) 45%,var(--xp) 90%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.5px}
+.cover-sub{color:var(--txt-dim);max-width:560px;margin:0 auto 26px;font-size:14.5px;line-height:1.6}
+.cover-meta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:30px}
+.cover-chip{font:600 11px/1 var(--mono);letter-spacing:.5px;color:var(--txt-dim);
+  background:rgba(255,255,255,.03);border:1px solid var(--line-2);padding:8px 13px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:7px}
+.cover-chip .dot{width:6px;height:6px}
+.enter-btn{
+  font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.3px;color:#04222a;
+  background:linear-gradient(100deg,var(--accent),var(--accent-2));border:0;border-radius:30px;
+  padding:14px 38px;cursor:pointer;box-shadow:0 8px 30px rgba(41,211,238,.35);transition:.18s;
+  position:relative;overflow:hidden}
+.enter-btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(41,211,238,.5)}
+.enter-btn:active{transform:translateY(0)}
+.cover-foot{position:absolute;bottom:26px;left:0;right:0;text-align:center;color:var(--txt-faint);font-size:11px;letter-spacing:.5px}
+.cover-foot b{color:var(--txt-dim)}
+
+/* --- App entrance --- */
+.app{opacity:0;transition:opacity .6s ease .15s}
+.app.live-in{opacity:1}
+
+/* --- Logo mark in brand --- */
+.brand{display:flex;align-items:center;gap:11px}
+.brand .mk{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:0 0 auto;
+  background:linear-gradient(145deg,#0e4f5c,#0a1a24);border:1px solid rgba(41,211,238,.35);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), var(--glow)}
+.brand .mk svg{width:20px;height:20px}
+.brand .logo{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.3px}
+
+/* --- Glassy cards + accent corner --- */
+.card{backdrop-filter:blur(4px);box-shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 8px 24px rgba(0,0,0,.28);transition:.18s}
+.card:hover{border-color:var(--line-2);box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 12px 34px rgba(0,0,0,.4)}
+.section-title{position:relative}
+
+/* --- Topbar polish --- */
+.topbar h1{font-family:var(--display)}
+.team-toggle{box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}
+.team-toggle button.on{box-shadow:0 0 18px rgba(41,211,238,.35)}
+.team-toggle button.on.tlp{box-shadow:0 0 18px rgba(167,139,250,.4)}
+.pill{transition:.15s}
+.dot{animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 8px var(--good)}50%{box-shadow:0 0 16px var(--good)}}
+
+/* --- Page head accent --- */
+.page-head h2{font-family:var(--display);position:relative;display:inline-block}
+.page-head h2::after{content:"";position:absolute;left:0;bottom:-7px;width:46px;height:3px;border-radius:3px;
+  background:linear-gradient(90deg,var(--accent),transparent)}
+
+/* --- Hero stats band --- */
+.hero{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:1px;margin-bottom:20px;
+  background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  box-shadow:var(--shadow)}
+@media(max-width:1100px){.hero{grid-template-columns:repeat(2,1fr)}}
+.hero .cell{background:linear-gradient(180deg,var(--panel-2),var(--panel));padding:16px 18px;position:relative;overflow:hidden}
+.hero .cell::before{content:"";position:absolute;top:-20px;right:-20px;width:70px;height:70px;border-radius:50%;
+  background:radial-gradient(circle,var(--hc,rgba(41,211,238,.18)),transparent 70%)}
+.hero .n{font-family:var(--display);font-weight:800;font-size:28px;line-height:1;letter-spacing:-.5px}
+.hero .l{color:var(--txt-dim);font-size:11px;margin-top:6px;letter-spacing:.4px}
+.hero .s{color:var(--txt-faint);font-size:10.5px;margin-top:2px}
+
+/* --- Export button --- */
+.icon-btn{display:inline-flex;align-items:center;gap:7px}
+.icon-btn svg{width:14px;height:14px}
+
+/* --- nicer scrollbars on logs already; add fade-in to views --- */
+.view.on{animation:fade .35s ease}
+
+/* --- "prepared for" footer --- */
+.credit{margin-top:40px;padding:16px 0 0;border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:var(--txt-faint);font-size:11.5px}
+.credit .seal{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  background:linear-gradient(145deg,#0e4f5c,#0a1a24);border:1px solid rgba(41,211,238,.3)}
+.credit .seal svg{width:16px;height:16px}
+.credit b{color:var(--txt-dim)}
+.credit .price{margin-left:auto;font-family:var(--mono);color:var(--good);border:1px solid rgba(52,211,153,.3);
+  background:rgba(52,211,153,.08);padding:4px 11px;border-radius:14px;font-size:11px}
+
+/* ============================ PRINT / EXPORT ============================ */
+@media print{
+  @page{margin:14mm}
+  body{background:#fff;color:#111;font-size:11px}
+  body::before,#cover,.sidebar,.topbar,.toast-wrap,.team-toggle,.enter-btn,.cp,#hbChars,#macroChars,#gemChars{display:none !important}
+  .app{display:block;opacity:1}
+  .view{display:block !important;page-break-before:always;animation:none}
+  .view:first-of-type{page-break-before:avoid}
+  .content{max-width:none;padding:0}
+  .card,.code,.hero{box-shadow:none;border-color:#ccc;background:#fafafa !important;color:#111}
+  .card h3,.page-head h2,.hero .n{color:#0b5563}
+  .muted,.faint{color:#444 !important}
+  .code{background:#f4f6f8}.code pre{color:#222}
+  .cmd{color:#0b6}.arg{color:#a60}.cm{color:#888}
+  a{color:#0b5563}
+  .print-only{display:block !important}
+}
+.print-only{display:none}
 </style>
 </head>
 <body>
+
+<!-- ============================ COVER / SPLASH ============================ -->
+<div id="cover">
+  <div class="rings"></div>
+  <div class="cover-inner">
+    <div class="cover-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#29d3ee" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        <circle cx="6.5" cy="6.5" r="1.2" fill="#29d3ee" stroke="none"/>
+      </svg>
+    </div>
+    <div class="cover-kick">ISBoxer · Multibox Build</div>
+    <h1 class="cover-title">Multibox Command Center</h1>
+    <p class="cover-sub">A custom 8-box control suite for EverQuest — single-key burns, instant assist, panic healing and smart pulls, wired for both your Live (130) and TLP (65) teams. Built around ISBoxer. No MacroQuest.</p>
+    <div class="cover-meta">
+      <span class="cover-chip"><span class="dot"></span> 8-Box Live 130</span>
+      <span class="cover-chip"><span class="dot" style="background:var(--xp);box-shadow:0 0 8px var(--xp)"></span> 8-Box TLP 65</span>
+      <span class="cover-chip">Custom Hotbuttons</span>
+      <span class="cover-chip">Burn · Assist · Panic · Pull</span>
+    </div>
+    <button class="enter-btn" id="enterBtn">Enter Command Center →</button>
+  </div>
+  <div class="cover-foot">Prepared exclusively for <b>the client</b> · MCHP Boxing Services</div>
+</div>
+
 <div class="app">
 
   <!-- ============================ SIDEBAR ============================ -->
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo">MCHP · BOX OPS</div>
-      <div class="sub">ISBoxer Command Center</div>
+      <div class="mk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#29d3ee" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo">MCHP · BOX OPS</div>
+        <div class="sub">ISBoxer Command Center</div>
+      </div>
     </div>
     <nav class="nav" id="nav">
       <div class="grp">Command</div>
@@ -345,6 +525,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:22px 0}
       </div>
       <span class="pill"><span class="dot"></span> 8/8 windows online</span>
       <span class="pill" id="resPill">2560×1440 · Single · Medium UI</span>
+      <button class="btn pri sm icon-btn" id="exportBtn" title="Export this build as a PDF you can keep or print">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Build Sheet
+      </button>
     </header>
 
     <div class="content">
@@ -355,6 +539,15 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:22px 0}
           <h2>Group Dashboard</h2>
           <p>Whole-team status at a glance — HP / mana / endurance, xtarget load, and per-box role. Click any character to drive the Hotbutton Designer, burns, and macros for that box.</p>
         </div>
+
+        <div class="hero" id="hero">
+          <div class="cell" style="--hc:rgba(41,211,238,.22)"><div class="n" data-count="8">0</div><div class="l">Boxes coordinated</div><div class="s">one driver, full group</div></div>
+          <div class="cell" style="--hc:rgba(245,166,35,.22)"><div class="n" data-count="5">0</div><div class="l">Keys you press</div><div class="s">assist · burn · panic · pull · follow</div></div>
+          <div class="cell" style="--hc:rgba(255,77,79,.2)"><div class="n suffix-s" data-count="1">0</div><div class="l">Target swap time</div><div class="s">one tilde, every box</div></div>
+          <div class="cell" style="--hc:rgba(52,211,153,.22)"><div class="n" data-count="2">0</div><div class="l">Teams ready</div><div class="s">Live 130 · TLP 65</div></div>
+          <div class="cell" style="--hc:rgba(167,139,250,.22)"><div class="n" data-count="0">0</div><div class="l">MacroQuest used</div><div class="s">100% native ISBoxer</div></div>
+        </div>
+
         <div class="roster" id="roster"></div>
 
         <div class="grid g-3" style="margin-top:18px">
@@ -693,6 +886,18 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:22px 0}
 
         <div class="note" style="margin-top:18px"><b>This is a blueprint, not a working addon.</b> The macros and mapped-key recipes here are ready to paste into ISBoxer + EQ; tune spell/AA names to your exact levels (Live 130 names shown; TLP 65 era variants noted where they differ). Nothing here automates gameplay beyond native ISBoxer key broadcasting.</div>
       </section>
+
+      <!-- ===================== CREDIT FOOTER ===================== -->
+      <div class="credit">
+        <div class="seal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#29d3ee" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </div>
+        <div>
+          <b>MCHP Boxing Services</b> — custom ISBoxer multibox build, prepared exclusively for the client.<br>
+          <span class="faint">v1.0 · Live 130 + TLP 65 · single self-contained file · runs offline in any browser.</span>
+        </div>
+        <span class="price">$40 · delivered</span>
+      </div>
 
     </div>
   </div>
@@ -1436,6 +1641,46 @@ $$("#nav a").forEach(a=>a.onclick=()=>show(a.dataset.view));
 $$("#teamToggle button").forEach(b=>b.onclick=()=>switchTeam(b.dataset.team));
 $$("[data-jump]").forEach(a=>a.onclick=e=>{e.preventDefault();show(a.dataset.jump);});
 $("#simNamed").onclick=simNamed; $("#simProc").onclick=simProc; $("#simBuff").onclick=simBuff;
+
+/* ---------- cover / splash ---------- */
+function enterApp(){
+  const cv=$("#cover"); if(!cv||cv.classList.contains("gone")) return;
+  cv.classList.add("gone");
+  $(".app").classList.add("live-in");
+  setTimeout(()=>cv.remove(),750);
+  setTimeout(animateCounters,250);
+}
+$("#enterBtn").onclick=enterApp;
+// also enter on Enter/Space or click anywhere after a moment
+setTimeout(()=>{document.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" ")enterApp();},{once:true});},400);
+
+/* ---------- animated hero counters ---------- */
+function animateCounters(){
+  $$("#hero .n").forEach(el=>{
+    const target=+el.dataset.count, suf=el.classList.contains("suffix-s")?"s":"";
+    const pre=target<1?"<":""; const dur=900; const start=performance.now();
+    function step(t){
+      const p=Math.min((t-start)/dur,1), e=1-Math.pow(1-p,3);
+      el.textContent=pre+Math.round(target*e)+suf;
+      if(p<1)requestAnimationFrame(step);
+      else el.textContent=(target<1?"<1":target)+suf;
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+/* ---------- export build sheet (print to PDF) ---------- */
+$("#exportBtn").onclick=()=>{
+  toast("Opening print dialog — choose 'Save as PDF' for a keepable build sheet");
+  // make sure dependent views are populated so they print with content
+  ["burns","assist","heal","pull","isboxer","macros","gems"].forEach(v=>{
+    const fn={burns:renderBurns,assist:renderAssist,heal:renderHeal,pull:renderPull,
+      isboxer:renderISBoxer,macros:renderMacros,gems:renderGems}[v];
+    try{fn&&fn();}catch(e){}
+  });
+  renderHotbar();
+  setTimeout(()=>window.print(),350);
+};
 
 renderAlertToggles(); updateAudioState();
 renderRoster();
