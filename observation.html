@@ -45,14 +45,33 @@ body{margin:0;color:var(--txt);font:15px/1.6 var(--sans);padding-bottom:60px;
 .dot::after{content:'';position:absolute;inset:-5px;border-radius:50%;border:1px solid var(--mint);animation:ring 2s var(--ease) infinite}
 @keyframes pulse{50%{opacity:.4}}@keyframes ring{0%{transform:scale(.5);opacity:.7}100%{transform:scale(2);opacity:0}}
 .status{margin-left:auto;color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.3px;text-align:right;max-width:46%}
-.nav{display:flex;gap:0;overflow-x:auto;padding:6px 14px;position:sticky;top:48px;z-index:29;
- background:linear-gradient(180deg,rgba(7,11,14,.9),rgba(7,11,14,.5));backdrop-filter:blur(20px) saturate(150%);border-bottom:1px solid var(--hair);scrollbar-width:none}
-.nav::-webkit-scrollbar{display:none}
-.nav a{color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;text-decoration:none;
- padding:9px 4px;margin:0 11px;white-space:nowrap;position:relative;transition:color .26s var(--ease)}
-.nav a::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;
- background:linear-gradient(90deg,var(--mint),var(--ice));box-shadow:0 0 12px var(--mint);transform:scaleX(0);transform-origin:left;transition:transform .32s var(--ease)}
-.nav a:hover{color:var(--txt)}.nav a.on{color:#fff}.nav a.on::after{transform:scaleX(1)}
+.nav{display:flex;gap:2px;align-items:center;justify-content:center;flex-wrap:wrap;overflow:visible;padding:7px 12px;position:sticky;top:48px;z-index:29;
+ background:linear-gradient(180deg,rgba(7,11,14,.92),rgba(7,11,14,.55));backdrop-filter:blur(20px) saturate(150%);border-bottom:1px solid var(--hair)}
+.navlink,.navbtn{color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;text-decoration:none;font-weight:600;
+ background:none;border:none;cursor:pointer;padding:9px 11px;white-space:nowrap;position:relative;transition:color .26s var(--ease);display:inline-flex;align-items:center}
+.navlink:hover,.navbtn:hover{color:var(--txt)}
+.navlink.on,.navgroup.active .navbtn{color:#fff}
+.navlink::after,.navbtn::after{content:'';position:absolute;left:11px;right:11px;bottom:2px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--mint),var(--ice));box-shadow:0 0 12px var(--mint);transform:scaleX(0);transform-origin:left;transition:transform .32s var(--ease)}
+.navlink.on::after,.navgroup.active .navbtn::after{transform:scaleX(1)}
+.navbtn i{font-style:normal;margin-left:5px;font-size:9px;opacity:.7;transition:transform .32s var(--ease)}
+.navgroup{position:relative}
+.navgroup.open .navbtn{color:var(--mint)}
+.navgroup.open .navbtn i{transform:rotate(180deg);opacity:1}
+.navmenu{position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%) translateY(-12px) scale(.95);min-width:178px;z-index:55;padding:7px;transform-origin:top center;
+ background:linear-gradient(180deg,rgba(13,21,25,.98),rgba(8,13,16,.99));border:1px solid var(--line2);border-radius:15px;
+ box-shadow:var(--shadow),0 0 46px -12px rgba(86,240,192,.3);backdrop-filter:blur(22px) saturate(150%);
+ opacity:0;pointer-events:none;transition:opacity .32s var(--ease),transform .32s var(--ease);
+ -webkit-mask-image:linear-gradient(to bottom,#000 78%,transparent);mask-image:linear-gradient(to bottom,#000 78%,transparent)}
+.navmenu::before{content:'';position:absolute;inset:0;border-radius:15px;pointer-events:none;background:linear-gradient(180deg,rgba(86,240,192,.12),transparent 55%);opacity:0;transition:opacity .45s var(--ease)}
+.navgroup.open .navmenu{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0) scale(1)}
+.navgroup.open .navmenu::before{opacity:1}
+.navmenu a{display:block;padding:9px 14px;border-radius:10px;color:var(--dim);font-family:var(--mono);font-size:11.5px;letter-spacing:.5px;text-transform:none;text-decoration:none;white-space:nowrap;position:relative;
+ opacity:0;transform:translateY(-7px);transition:opacity .3s var(--ease),transform .3s var(--ease),background .2s var(--ease),color .2s}
+.navgroup.open .navmenu a{opacity:1;transform:none}
+.navmenu a:hover{color:var(--txt);background:linear-gradient(90deg,rgba(86,240,192,.15),transparent)}
+.navmenu a.on{color:var(--mint);background:linear-gradient(90deg,rgba(86,240,192,.2),transparent)}
+.navgroup.open .navmenu a:nth-child(1){transition-delay:.04s}.navgroup.open .navmenu a:nth-child(2){transition-delay:.08s}.navgroup.open .navmenu a:nth-child(3){transition-delay:.12s}.navgroup.open .navmenu a:nth-child(4){transition-delay:.16s}.navgroup.open .navmenu a:nth-child(5){transition-delay:.2s}.navgroup.open .navmenu a:nth-child(6){transition-delay:.24s}
+@media(prefers-reduced-motion:reduce){.navmenu,.navmenu a{transition:opacity .2s ease}.navmenu a{transition-delay:0s!important}}
 .wrap{max-width:880px;margin:0 auto;padding:0 20px;position:relative;z-index:2}
 /* hero — the showpiece */
 section{padding:34px 0 38px;border-bottom:1px solid var(--hair);position:relative;animation:rise .55s var(--ease) both}
@@ -232,8 +251,17 @@ section > .h:first-child .muted{font-weight:500;font-size:11px}
 <div class=appbar><span class=dot></span><h1>MCHPAI</h1>
   <input id=keyfield class=kf><span class=status id=status>connecting…</span></div>
 <nav class=nav id=nav>
-  <a href=#s-hero class=on>Overview</a><a href=#s-pulse>Pulse</a><a href=#s-flowscope>Flowscope</a><a href=#s-cohorts>Cohorts</a><a href=#s-quant>Quant</a><a href=#s-intel>Intel</a><a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a><a href=#s-trade>Trading</a><a href=#s-copy>Copy</a><a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a>
-  <a href=#s-wallets>Wallets</a><a href=#s-flow>Flow</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-data>Data</a><a href=#s-dist>Stats</a>
+  <a href=#s-hero class="navlink on">Overview</a>
+  <div class=navgroup><button class=navbtn onclick="toggleGroup(this)">Markets<i>▾</i></button><div class=navmenu>
+    <a href=#s-pulse>Pulse</a><a href=#s-flowscope>Flowscope</a><a href=#s-cohorts>Cohorts</a><a href=#s-intel>Intel</a></div></div>
+  <div class=navgroup><button class=navbtn onclick="toggleGroup(this)">Signals<i>▾</i></button><div class=navmenu>
+    <a href=#s-signals>Signals</a><a href=#s-patterns>Patterns</a></div></div>
+  <div class=navgroup><button class=navbtn onclick="toggleGroup(this)">Strategy<i>▾</i></button><div class=navmenu>
+    <a href=#s-trade>Trading</a><a href=#s-quant>Quant</a><a href=#s-copy>Copy</a></div></div>
+  <div class=navgroup><button class=navbtn onclick="toggleGroup(this)">Tokens<i>▾</i></button><div class=navmenu>
+    <a href=#s-movers>Movers</a><a href=#s-tokens>Tokens</a><a href=#s-wallets>Wallets</a><a href=#s-trends>Trends</a><a href=#s-opps>Opportunities</a><a href=#s-flow>Flow</a></div></div>
+  <div class=navgroup><button class=navbtn onclick="toggleGroup(this)">Data<i>▾</i></button><div class=navmenu>
+    <a href=#s-data>Data Vault</a><a href=#s-dist>Stats</a></div></div>
 </nav>
 <div class=wrap>
 
@@ -1427,8 +1455,11 @@ function render(){const r=PAGES[activeSection];if(r)r();
 function showPage(id){if(!id)return;activeSection=id;
  document.querySelectorAll('.wrap section').forEach(s=>s.classList.toggle('page-on',s.id===id));
  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+id));
+ document.querySelectorAll('.navgroup').forEach(g=>{g.classList.remove('open');g.classList.toggle('active',!!g.querySelector('a.on'));});
  try{window.scrollTo({top:0,behavior:'smooth'});}catch(e){try{window.scrollTo(0,0);}catch(_){}}
  render();}
+function toggleGroup(btn){const g=btn.parentElement,wasOpen=g.classList.contains('open');document.querySelectorAll('.navgroup.open').forEach(x=>x.classList.remove('open'));if(!wasOpen)g.classList.add('open');}
+if(typeof document!=='undefined'&&document.addEventListener)document.addEventListener('click',e=>{if(!(e.target.closest&&e.target.closest('.navgroup')))document.querySelectorAll('.navgroup.open').forEach(g=>g.classList.remove('open'));});
 function setMetric(m){heroMetric=m;renderHero();}
 function setWin(n){heroWin=n;renderHero();}
 
