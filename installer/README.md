@@ -17,13 +17,26 @@ Hand the client the whole `installer` folder (zip it). They just double-click `I
 
 1. Creates a clean `Documents\MCHP-Boxing\` install folder.
 2. **Backs up** the client's existing `ISBoxer Toolkit.xml` (never overwrites it).
-3. Writes **ready-to-paste EQ socials** — one `.txt` per character, both teams
+3. **Backs up the client's EverQuest UI files** — every `*_<server>.ini` layout/
+   config file plus the whole `uifiles\` custom-skin folder — into a timestamped
+   `Backups\EQ-UI-*` folder, and drops a **one-click `Restore-EQ-UI.bat`** in there
+   so he can roll back to his old UI any time he doesn't like the new one.
+   (EQ is auto-detected; if not found the installer asks for the path or you can
+   pass `-EQDir "C:\path\to\EverQuest"`. Skip with `-SkipUIBackup`.)
+4. Writes **ready-to-paste EQ socials** — one `.txt` per character, both teams
    (`EQ-Macros\Live` and `EQ-Macros\TLP`).
-4. Writes the **ISBoxer build recipe** (ATGs, mapped keys, steps) to
+5. Writes the **ISBoxer build recipe** (ATGs, mapped keys, steps) to
    `ISBoxer-Profiles\`.
-5. Writes the **EQ audio-trigger** list and **inventory layout**.
-6. Installs the **Command Center app** and a **Desktop shortcut**.
-7. Opens the `00-START-HERE.txt` guide and the install folder when done.
+6. Writes the **EQ audio-trigger** list and **inventory layout**.
+7. Installs the **Command Center app** and a **Desktop shortcut**.
+8. Opens the `00-START-HERE.txt` guide and the install folder when done.
+
+### Rolling back the UI
+
+Open the newest `Documents\MCHP-Boxing\Backups\EQ-UI-*` folder, close EverQuest,
+and double-click **`Restore-EQ-UI.bat`**. It copies his original `.ini` layout
+files and `uifiles\` skins back over the EQ install. Nothing is destructive —
+the new build mostly *adds* socials/hotbuttons, and his originals are preserved.
 
 Uninstall: `powershell -ExecutionPolicy Bypass -File Install-MCHP-Boxing.ps1 -Uninstall`
 

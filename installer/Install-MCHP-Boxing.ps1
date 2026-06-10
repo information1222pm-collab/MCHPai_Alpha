@@ -6,6 +6,7 @@
   What this does (fully automatic):
     * Creates a clean install folder in your Documents
     * Backs up your existing ISBoxer Toolkit config (never overwrites it)
+    * Backs up your EverQuest UI files + a one-click rollback script
     * Lays down every EQ social/macro as ready-to-paste .txt files
     * Drops in the ISBoxer build recipe + EQ audio-trigger list
     * Installs the Command Center app + a Desktop shortcut
@@ -25,7 +26,9 @@
 
 param(
   [switch]$Uninstall,
-  [string]$InstallRoot
+  [string]$InstallRoot,
+  [string]$EQDir,
+  [switch]$SkipUIBackup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,6 +61,38 @@ $Desktop = [Environment]::GetFolderPath('Desktop')
 if (-not $InstallRoot) { $InstallRoot = Join-Path $Docs 'MCHP-Boxing' }
 $IsboxerCfgDir = Join-Path $Docs 'Inner Space\Configuration'
 $IsboxerXml    = Join-Path $IsboxerCfgDir 'ISBoxer Toolkit.xml'
+
+# ---------- locate the EverQuest install (for UI backup) ----------
+function Find-EQDir {
+  param([string]$Hint)
+  $cands = @()
+  if ($Hint) { $cands += $Hint }
+  # registry hints (various EQ distributions)
+  foreach ($rk in @(
+      'HKLM:\SOFTWARE\WOW6432Node\Sony Online Entertainment\Installed Games\EverQuest',
+      'HKLM:\SOFTWARE\Sony Online Entertainment\Installed Games\EverQuest',
+      'HKLM:\SOFTWARE\WOW6432Node\Daybreak Game Company\Installed Games\EverQuest',
+      'HKLM:\SOFTWARE\Daybreak Game Company\Installed Games\EverQuest')) {
+    try {
+      $p = (Get-ItemProperty -Path $rk -ErrorAction SilentlyContinue).InstallPath
+      if ($p) { $cands += $p }
+    } catch {}
+  }
+  # common install locations
+  $cands += @(
+    'C:\Users\Public\Daybreak Game Company\Installed Games\EverQuest',
+    'C:\Users\Public\Sony Online Entertainment\Installed Games\EverQuest',
+    'C:\Program Files (x86)\Sony\EverQuest',
+    'C:\Program Files\Sony\EverQuest',
+    'C:\Program Files (x86)\Steam\steamapps\common\EverQuest F2P',
+    'C:\Program Files (x86)\Steam\steamapps\common\Everquest',
+    'C:\EverQuest', 'D:\EverQuest', 'C:\Games\EverQuest'
+  )
+  foreach ($c in $cands) {
+    if ($c -and (Test-Path (Join-Path $c 'eqgame.exe'))) { return (Resolve-Path $c).Path }
+  }
+  return $null
+}
 
 # =====================================================================
 #  UNINSTALL
@@ -205,7 +240,7 @@ $go = Read-Host '   Press ENTER to install (or type N to cancel)'
 if ($go -match '^[Nn]') { Info 'Cancelled.'; return }
 
 # ---------- 1. folders ----------
-Head '1/7  Creating install folders'
+Head '1/8  Creating install folders'
 $dirs = @('','ISBoxer-Profiles','EQ-Macros','EQ-Macros\Live','EQ-Macros\TLP','EQ-AudioTriggers','Inventory','CommandCenter','Backups')
 foreach ($d in $dirs) {
   $p = if ($d) { Join-Path $InstallRoot $d } else { $InstallRoot }
@@ -214,7 +249,7 @@ foreach ($d in $dirs) {
 Ok "Folder tree ready under $InstallRoot"
 
 # ---------- 2. backup existing ISBoxer config ----------
-Head '2/7  Backing up your existing ISBoxer config'
+Head '2/8  Backing up your existing ISBoxer config'
 if (Test-Path $IsboxerXml) {
   $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $bk = Join-Path $InstallRoot "Backups\ISBoxer Toolkit ($stamp).xml"
@@ -225,8 +260,73 @@ if (Test-Path $IsboxerXml) {
   Info 'No existing ISBoxer Toolkit.xml found - nothing to back up.'
 }
 
-# ---------- 3. EQ macro/social files ----------
-Head '3/7  Writing EQ social/macro files (ready to paste)'
+# ---------- 3. back up EverQuest UI files (so he can roll back) ----------
+Head '3/8  Backing up your EverQuest UI files'
+$EQDirFound = $null
+if (-not $SkipUIBackup) {
+  $EQDirFound = Find-EQDir -Hint $EQDir
+  if (-not $EQDirFound) {
+    Warn 'Could not auto-detect your EverQuest folder.'
+    Info 'Enter the full path to your EverQuest folder (the one with eqgame.exe),'
+    Info 'or just press ENTER to skip the UI backup.'
+    $typed = Read-Host '   EverQuest folder'
+    if ($typed) {
+      if (Test-Path (Join-Path $typed 'eqgame.exe')) { $EQDirFound = (Resolve-Path $typed).Path }
+      else { Warn "No eqgame.exe found in '$typed' - skipping UI backup." }
+    } else { Info 'Skipped UI backup by choice.' }
+  }
+}
+if ($EQDirFound) {
+  Ok "EverQuest found: $EQDirFound"
+  $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+  $uiBk  = Join-Path $InstallRoot "Backups\EQ-UI-$stamp"
+  New-Item -ItemType Directory -Force -Path $uiBk | Out-Null
+  $copied = 0
+
+  # (a) per-character + client UI/layout/keybind .ini files in the EQ root
+  Get-ChildItem -Path $EQDirFound -Filter '*.ini' -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $uiBk $_.Name) -Force; $copied++
+  }
+  # (b) the whole custom-UI skin folder, if present
+  $uifiles = Join-Path $EQDirFound 'uifiles'
+  if (Test-Path $uifiles) {
+    Copy-Item $uifiles (Join-Path $uiBk 'uifiles') -Recurse -Force
+    $skins = (Get-ChildItem $uifiles -Directory -ErrorAction SilentlyContinue).Count
+    Info "Backed up uifiles\ ($skins UI skin folder(s))"
+  }
+  Ok "Backed up $copied UI/layout .ini file(s) to Backups\EQ-UI-$stamp"
+
+  # (c) write a one-click restore script into the backup folder
+  $restore = @"
+<# Restore EverQuest UI to the state it was in before the MCHP install.
+   Double-click Restore-EQ-UI.bat (next to this file), or run this in PowerShell. #>
+`$src = `$PSScriptRoot
+`$eq  = '$EQDirFound'
+Write-Host ''
+Write-Host '  Restoring EverQuest UI from backup...' -ForegroundColor Cyan
+Write-Host "  Backup : `$src"
+Write-Host "  Into   : `$eq"
+Write-Host '  Make sure EverQuest is CLOSED first.' -ForegroundColor Yellow
+`$go = Read-Host '  Type YES to restore'
+if (`$go -ne 'YES') { Write-Host '  Cancelled.'; return }
+Get-ChildItem -Path `$src -Filter '*.ini' -File | ForEach-Object {
+  Copy-Item `$_.FullName (Join-Path `$eq `$_.Name) -Force
+}
+if (Test-Path (Join-Path `$src 'uifiles')) {
+  Copy-Item (Join-Path `$src 'uifiles') `$eq -Recurse -Force
+}
+Write-Host '  Done. Your previous UI has been restored.' -ForegroundColor Green
+"@
+  Set-Content -Path (Join-Path $uiBk 'Restore-EQ-UI.ps1') -Value $restore -Encoding UTF8
+  $rbat = "@echo off`r`ntitle MCHP - Restore EQ UI`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0Restore-EQ-UI.ps1`"`r`npause"
+  Set-Content -Path (Join-Path $uiBk 'Restore-EQ-UI.bat') -Value $rbat -Encoding ASCII
+  Ok 'Wrote one-click Restore-EQ-UI (rollback) into the backup folder'
+} else {
+  Info 'No UI backup taken. (You can re-run with -EQDir "C:\path\to\EverQuest".)'
+}
+
+# ---------- 4. EQ macro/social files ----------
+Head '4/8  Writing EQ social/macro files (ready to paste)'
 $macroCount = 0
 foreach ($t in $Teams) {
   foreach ($c in $t.Chars) {
@@ -257,7 +357,7 @@ foreach ($t in $Teams) {
 Ok "Wrote $macroCount per-character social files into EQ-Macros\Live and \TLP"
 
 # ---------- 4. ISBoxer build recipe ----------
-Head '4/7  Writing the ISBoxer build recipe'
+Head '5/8  Writing the ISBoxer build recipe'
 $isb = @'
 ====================================================================
   MCHP BOXING - ISBoxer Toolkit build recipe
@@ -333,7 +433,7 @@ Set-Content -Path (Join-Path $InstallRoot 'ISBoxer-Profiles\MCHP-ISBoxer-Build-R
 Ok 'Wrote ISBoxer-Profiles\MCHP-ISBoxer-Build-Recipe.txt'
 
 # ---------- 5. audio triggers + inventory ----------
-Head '5/7  Writing audio triggers + inventory layout'
+Head '6/8  Writing audio triggers + inventory layout'
 $trig = @'
 ====================================================================
   MCHP BOXING - EQ Audio Triggers  (add in-game: Alt+A > Audio Triggers)
@@ -387,7 +487,7 @@ Set-Content -Path (Join-Path $InstallRoot 'Inventory\Inventory-Layout.txt') -Val
 Ok 'Wrote audio-trigger list and inventory layout'
 
 # ---------- 6. Command Center app + Start-Here ----------
-Head '6/7  Installing the Command Center app'
+Head '7/8  Installing the Command Center app'
 $ccSource = $null
 foreach ($cand in @((Join-Path $ScriptDir 'CommandCenter.html'), (Join-Path $ScriptDir 'index.html'), (Join-Path (Split-Path $ScriptDir -Parent) 'index.html'))) {
   if (Test-Path $cand) { $ccSource = $cand; break }
@@ -413,7 +513,10 @@ WHAT'S IN THE BOX:
   EQ-Macros\Live + \TLP   Ready-to-paste socials, one file per character
   EQ-AudioTriggers\  Named/proc/buff-fade alert phrases for EQ
   Inventory\   Standard bag layout for all boxes
-  Backups\   A safe copy of your previous ISBoxer config
+  Backups\   Safe copies of your previous ISBoxer config AND your EverQuest
+             UI files. Don't like the new setup? Open the newest
+             Backups\EQ-UI-* folder and double-click Restore-EQ-UI.bat to
+             put your old UI back (close EverQuest first).
 
 DO THIS, IN ORDER:
   1. Open CommandCenter\MCHP-Command-Center.html (or the Desktop shortcut).
@@ -438,7 +541,7 @@ Set-Content -Path (Join-Path $InstallRoot '00-START-HERE.txt') -Value $start -En
 Ok 'Wrote 00-START-HERE.txt'
 
 # ---------- 7. desktop shortcut ----------
-Head '7/7  Creating Desktop shortcut'
+Head '8/8  Creating Desktop shortcut'
 if ($ccSource) {
   try {
     $wsh = New-Object -ComObject WScript.Shell
