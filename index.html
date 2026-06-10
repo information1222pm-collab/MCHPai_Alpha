@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MCHP — ISBoxer Multibox Command Center</title>
+<style>
+/* ============================================================
+   THEME — Dark base, cyan accent (reads cleanest for
+   high-information layouts), amber = caution, red = panic,
+   green = ready/online. Designed for at-a-glance group play.
+   ============================================================ */
+:root{
+  --bg:        #0a0e14;
+  --bg-2:      #0f1620;
+  --bg-3:      #141d29;
+  --panel:     #111a26;
+  --panel-2:   #16212f;
+  --line:      #1f2c3d;
+  --line-2:    #2a3a4f;
+  --txt:       #d7e1ec;
+  --txt-dim:   #8294a8;
+  --txt-faint: #5a6b7e;
+  --accent:    #29d3ee;   /* cyan — primary accent */
+  --accent-2:  #38bdf8;
+  --accent-dk: #0e4f5c;
+  --warn:      #f5a623;
+  --danger:    #ff4d4f;
+  --good:      #34d399;
+  --mana:      #4f8cff;
+  --xp:        #a78bfa;
+  --radius:    8px;
+  --mono:      "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  --sans:      system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 600px at 80% -10%, #0d2230 0%, transparent 55%),
+    var(--bg);
+  color:var(--txt);
+  font-family:var(--sans);
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:var(--bg-2)}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:#36506c}
+button{font-family:inherit;cursor:pointer}
+a{color:var(--accent-2);text-decoration:none}
+
+/* ============================== LAYOUT ============================== */
+.app{display:grid;grid-template-columns:218px 1fr;min-height:100vh}
+.sidebar{
+  background:linear-gradient(180deg,var(--bg-2),var(--bg));
+  border-right:1px solid var(--line);
+  position:sticky;top:0;height:100vh;overflow-y:auto;
+  display:flex;flex-direction:column;
+}
+.main{min-width:0;display:flex;flex-direction:column}
+
+/* ============================== TOPBAR ============================== */
+.topbar{
+  display:flex;align-items:center;gap:16px;
+  padding:10px 20px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(20,29,41,.9),rgba(15,22,32,.7));
+  backdrop-filter:blur(6px);position:sticky;top:0;z-index:30;
+}
+.topbar h1{font-size:14px;margin:0;letter-spacing:.3px;font-weight:600}
+.topbar h1 small{color:var(--txt-faint);font-weight:400;margin-left:6px}
+.spacer{flex:1}
+
+.team-toggle{display:flex;border:1px solid var(--line-2);border-radius:20px;overflow:hidden}
+.team-toggle button{
+  background:transparent;border:0;color:var(--txt-dim);
+  padding:6px 16px;font-size:12px;font-weight:600;letter-spacing:.4px;
+  transition:.15s;
+}
+.team-toggle button.on{background:var(--accent);color:#04222a}
+.team-toggle button.on.tlp{background:var(--xp);color:#1a0f33}
+
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:11px;color:var(--txt-dim);
+  background:var(--bg-3);border:1px solid var(--line);
+  padding:4px 10px;border-radius:14px;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 8px var(--good)}
+
+/* ============================== BRAND / NAV ============================== */
+.brand{padding:16px 18px 14px;border-bottom:1px solid var(--line)}
+.brand .logo{
+  font-weight:800;font-size:15px;letter-spacing:.5px;
+  background:linear-gradient(90deg,var(--accent),var(--xp));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.brand .sub{font-size:10.5px;color:var(--txt-faint);margin-top:2px;letter-spacing:.6px;text-transform:uppercase}
+
+.nav{padding:10px 10px 20px;flex:1}
+.nav .grp{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--txt-faint);margin:14px 10px 6px}
+.nav a{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 11px;border-radius:6px;color:var(--txt-dim);
+  font-size:12.5px;cursor:pointer;transition:.12s;border:1px solid transparent;
+}
+.nav a:hover{background:var(--bg-3);color:var(--txt)}
+.nav a.on{background:linear-gradient(90deg,rgba(41,211,238,.14),transparent);color:var(--txt);border-color:rgba(41,211,238,.25)}
+.nav a.on .ic{color:var(--accent)}
+.nav a .ic{width:16px;text-align:center;color:var(--txt-faint);font-size:13px}
+.nav .ver{margin:14px 12px 0;font-size:10px;color:var(--txt-faint)}
+
+/* ============================== CONTENT ============================== */
+.content{padding:20px 24px 60px;max-width:1500px}
+.view{display:none;animation:fade .2s ease}
+.view.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.page-head{margin-bottom:18px}
+.page-head h2{margin:0 0 4px;font-size:19px;letter-spacing:.2px}
+.page-head p{margin:0;color:var(--txt-dim);max-width:760px}
+
+/* cards & grids */
+.grid{display:grid;gap:14px}
+.g-auto{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.g-2{grid-template-columns:repeat(2,1fr)}
+.g-3{grid-template-columns:repeat(3,1fr)}
+.g-4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:1100px){.g-3,.g-4{grid-template-columns:repeat(2,1fr)}.g-2{grid-template-columns:1fr}}
+
+.card{
+  background:linear-gradient(180deg,var(--panel),var(--panel-2));
+  border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 15px;position:relative;
+}
+.card h3{margin:0 0 10px;font-size:13px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.card h3 .tag{margin-left:auto;font-size:10px;color:var(--txt-faint);font-weight:400}
+.section-title{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin:24px 0 10px;font-weight:600;border-left:2px solid var(--accent);padding-left:9px}
+
+.kbd{
+  font-family:var(--mono);font-size:11px;background:var(--bg);
+  border:1px solid var(--line-2);border-bottom-width:2px;border-radius:4px;
+  padding:2px 7px;color:var(--accent-2);white-space:nowrap;display:inline-block;
+}
+.muted{color:var(--txt-dim)}
+.faint{color:var(--txt-faint)}
+.role{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;letter-spacing:.3px}
+.r-tank{background:rgba(255,77,79,.15);color:#ff8a8c;border:1px solid rgba(255,77,79,.3)}
+.r-heal{background:rgba(52,211,153,.15);color:#5ee4b5;border:1px solid rgba(52,211,153,.3)}
+.r-dps {background:rgba(245,166,35,.15);color:#ffc163;border:1px solid rgba(245,166,35,.3)}
+.r-util{background:rgba(167,139,250,.15);color:#c4b1fb;border:1px solid rgba(167,139,250,.3)}
+
+/* ============================== ROSTER ============================== */
+.roster{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:1200px){.roster{grid-template-columns:repeat(2,1fr)}}
+.char{
+  background:linear-gradient(180deg,var(--panel),var(--panel-2));
+  border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;cursor:pointer;transition:.15s;position:relative;overflow:hidden;
+}
+.char::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--cc,var(--accent))}
+.char:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.char.sel{border-color:var(--cc,var(--accent));box-shadow:0 0 0 1px var(--cc,var(--accent)) inset}
+.char .top{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.char .av{
+  width:34px;height:34px;border-radius:7px;display:grid;place-items:center;
+  font-weight:800;font-size:13px;color:#04222a;background:var(--cc,var(--accent));flex:0 0 auto;
+}
+.char .nm{font-weight:700;font-size:13px;line-height:1.1}
+.char .cl{font-size:10.5px;color:var(--txt-dim)}
+.char .win{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--txt-faint);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+.bars{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.bar{height:7px;border-radius:4px;background:var(--bg);overflow:hidden;position:relative}
+.bar > i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.bar.hp > i{background:linear-gradient(90deg,#ff4d4f,#ff8a5c)}
+.bar.mp > i{background:linear-gradient(90deg,#2a5cff,#4f8cff)}
+.bar.en > i{background:linear-gradient(90deg,#a78bfa,#c4b1fb)}
+.char .meta{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.xtarget{margin-top:9px;font-size:10px;color:var(--txt-faint);display:flex;justify-content:space-between}
+
+/* ============================== HOTBAR ============================== */
+.hotbar{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+@media(max-width:900px){.hotbar{grid-template-columns:repeat(4,1fr)}}
+.hb{
+  background:linear-gradient(180deg,var(--bg-3),var(--bg-2));
+  border:1px solid var(--line-2);border-radius:7px;
+  padding:9px 8px;min-height:74px;display:flex;flex-direction:column;gap:4px;
+  position:relative;transition:.12s;overflow:hidden;cursor:pointer;user-select:none;
+}
+.hb:hover{border-color:var(--accent);transform:translateY(-1px)}
+.hb .hk{font-family:var(--mono);font-size:10px;color:var(--accent-2);font-weight:700}
+.hb .nm{font-size:11px;font-weight:600;line-height:1.15}
+.hb .ds{font-size:9.5px;color:var(--txt-faint);margin-top:auto;line-height:1.2}
+.hb.burn{border-color:rgba(245,166,35,.5)}
+.hb.burn .hk{color:var(--warn)}
+.hb.panic{border-color:rgba(255,77,79,.55)}
+.hb.panic .hk{color:var(--danger)}
+.hb.assist{border-color:rgba(41,211,238,.5)}
+.hb.pull{border-color:rgba(167,139,250,.5)}
+.hb.pull .hk{color:var(--xp)}
+/* cooldown sweep */
+.hb .cd{position:absolute;inset:0;background:rgba(4,14,20,.78);display:grid;place-items:center;
+  font-family:var(--mono);font-size:18px;font-weight:700;color:#fff;
+  transform-origin:bottom;transition:opacity .2s}
+.hb .cd.hidden{opacity:0;pointer-events:none}
+.hb .cd .ring{position:absolute;bottom:0;left:0;right:0;background:rgba(245,166,35,.18)}
+
+/* ============================== CODE ============================== */
+.code{
+  background:#070b11;border:1px solid var(--line);border-radius:7px;
+  font-family:var(--mono);font-size:11.5px;line-height:1.6;color:#bcd2e8;
+  position:relative;margin:8px 0;overflow:hidden;
+}
+.code .bar{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:var(--bg-3);border-bottom:1px solid var(--line);height:auto;border-radius:0;
+}
+.code .bar .ttl{font-size:10.5px;color:var(--txt-dim);letter-spacing:.5px}
+.code .bar .ttl b{color:var(--accent)}
+.code pre{margin:0;padding:11px 13px;overflow-x:auto;white-space:pre}
+.code .cp{
+  margin-left:auto;background:var(--bg);border:1px solid var(--line-2);
+  color:var(--txt-dim);font-size:10px;padding:3px 9px;border-radius:5px;transition:.12s;
+}
+.code .cp:hover{border-color:var(--accent);color:var(--accent)}
+.cm{color:#5a6b7e}.cmd{color:#7ee0ff}.arg{color:#ffc163}.str{color:#9be38a}.var{color:#c4b1fb}
+
+/* lists & steps */
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{position:relative;padding:10px 0 10px 38px;border-bottom:1px dashed var(--line)}
+.steps li:last-child{border-bottom:0}
+.steps li::before{
+  counter-increment:s;content:counter(s);position:absolute;left:0;top:9px;
+  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent-dk);color:var(--accent);border:1px solid var(--accent);
+  font-weight:700;font-size:11px;font-family:var(--mono);
+}
+.steps li b{color:var(--txt)}
+
+.note{
+  border-left:3px solid var(--accent);background:rgba(41,211,238,.06);
+  padding:9px 13px;border-radius:0 6px 6px 0;margin:10px 0;font-size:12px;color:var(--txt-dim);
+}
+.note.warn{border-color:var(--warn);background:rgba(245,166,35,.07)}
+.note.warn b{color:var(--warn)}
+.note b{color:var(--accent)}
+
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--txt-faint);font-size:10px;letter-spacing:.6px;text-transform:uppercase;font-weight:600}
+tr:hover td{background:rgba(41,211,238,.03)}
+td .kbd{font-size:10px}
+
+/* toggles */
+.tg{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.tg:last-child{border-bottom:0}
+.tg .txt{flex:1}.tg .txt b{font-size:12.5px}.tg .txt span{display:block;color:var(--txt-faint);font-size:11px}
+.sw{width:38px;height:21px;border-radius:12px;background:var(--bg-3);border:1px solid var(--line-2);position:relative;transition:.15s;flex:0 0 auto}
+.sw::after{content:"";position:absolute;width:15px;height:15px;border-radius:50%;background:var(--txt-faint);top:2px;left:2px;transition:.15s}
+.sw.on{background:var(--accent-dk);border-color:var(--accent)}
+.sw.on::after{background:var(--accent);left:19px}
+
+.btn{
+  background:var(--bg-3);border:1px solid var(--line-2);color:var(--txt);
+  padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;transition:.12s;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);color:#04222a;border-color:var(--accent)}
+.btn.pri:hover{background:var(--accent-2);color:#04222a}
+.btn.sm{padding:4px 10px;font-size:11px}
+
+.kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px}
+.kv:last-child{border-bottom:0}
+.kv .k{color:var(--txt-dim)}.kv .v{font-weight:600}
+
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0}
+.flow .node{background:var(--bg-3);border:1px solid var(--line-2);border-radius:6px;padding:7px 11px;font-size:11.5px}
+.flow .node.hi{border-color:var(--accent);color:var(--accent)}
+.flow .arrow{color:var(--txt-faint)}
+
+.badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:9px;text-transform:uppercase}
+.b-live{background:rgba(41,211,238,.14);color:var(--accent);border:1px solid rgba(41,211,238,.3)}
+.b-tlp{background:rgba(167,139,250,.14);color:var(--xp);border:1px solid rgba(167,139,250,.3)}
+
+.detail-empty{color:var(--txt-faint);text-align:center;padding:30px;border:1px dashed var(--line);border-radius:8px}
+
+/* alert log */
+.alog{font-family:var(--mono);font-size:11px;background:#070b11;border:1px solid var(--line);border-radius:7px;height:230px;overflow-y:auto;padding:8px 10px}
+.alog .ln{padding:2px 0;border-bottom:1px solid rgba(31,44,61,.5);display:flex;gap:8px}
+.alog .ln .t{color:var(--txt-faint)}
+.alog .ln.named{color:var(--warn)}
+.alog .ln.proc{color:var(--good)}
+.alog .ln.panic{color:var(--danger)}
+.alog .ln.buff{color:var(--accent-2)}
+
+.toast-wrap{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:100}
+.toast{background:var(--panel-2);border:1px solid var(--accent);border-left-width:3px;border-radius:6px;padding:9px 14px;font-size:12px;min-width:200px;animation:slidein .2s ease;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+@keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+hr.sep{border:0;border-top:1px solid var(--line);margin:22px 0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--txt-dim);margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">MCHP · BOX OPS</div>
+      <div class="sub">ISBoxer Command Center</div>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="grp">Command</div>
+      <a data-view="dash" class="on"><span class="ic">▦</span> Group Dashboard</a>
+      <a data-view="hotbuttons"><span class="ic">⌨</span> Hotbutton Designer</a>
+      <a data-view="burns"><span class="ic">✦</span> Burn Systems</a>
+      <a data-view="assist"><span class="ic">⊕</span> Assist &amp; Targeting</a>
+      <a data-view="heal"><span class="ic">✚</span> Healing &amp; Panic</a>
+      <a data-view="pull"><span class="ic">➹</span> Pull Systems</a>
+      <div class="grp">Configuration</div>
+      <a data-view="isboxer"><span class="ic">⧉</span> ISBoxer Mapped Keys</a>
+      <a data-view="macros"><span class="ic">❮❯</span> EQ Social Macros</a>
+      <a data-view="gems"><span class="ic">◈</span> Spell Gems &amp; Bars</a>
+      <a data-view="alerts"><span class="ic">◉</span> Alerts &amp; Audio</a>
+      <a data-view="inventory"><span class="ic">▤</span> Inventory UI</a>
+      <div class="grp">Reference</div>
+      <a data-view="setup"><span class="ic">✓</span> Build &amp; Setup Guide</a>
+      <div class="ver">v1.0 · Live 130 / TLP 65<br>ISBoxer-only · no MQ</div>
+    </nav>
+  </aside>
+
+  <!-- ============================ MAIN ============================ -->
+  <div class="main">
+    <header class="topbar">
+      <h1>Multibox Command Center <small id="teamLabel">Live Team · 8 boxes · lvl 130</small></h1>
+      <div class="spacer"></div>
+      <div class="team-toggle" id="teamToggle">
+        <button class="on" data-team="live">LIVE 130</button>
+        <button data-team="tlp">TLP 65</button>
+      </div>
+      <span class="pill"><span class="dot"></span> 8/8 windows online</span>
+      <span class="pill" id="resPill">2560×1440 · Single · Medium UI</span>
+    </header>
+
+    <div class="content">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="view on" id="view-dash">
+        <div class="page-head">
+          <h2>Group Dashboard</h2>
+          <p>Whole-team status at a glance — HP / mana / endurance, xtarget load, and per-box role. Click any character to drive the Hotbutton Designer, burns, and macros for that box.</p>
+        </div>
+        <div class="roster" id="roster"></div>
+
+        <div class="grid g-3" style="margin-top:18px">
+          <div class="card">
+            <h3>✦ Group State</h3>
+            <div class="kv"><span class="k">Main Assist (MA)</span><span class="v" id="maName">—</span></div>
+            <div class="kv"><span class="k">Main Tank (MT)</span><span class="v" id="mtName">—</span></div>
+            <div class="kv"><span class="k">Puller</span><span class="v" id="pullerName">—</span></div>
+            <div class="kv"><span class="k">Healers</span><span class="v" id="healCount">—</span></div>
+            <div class="kv"><span class="k">DPS boxes</span><span class="v" id="dpsCount">—</span></div>
+          </div>
+          <div class="card">
+            <h3>⌨ One-Key Command Rail <span class="tag">broadcast</span></h3>
+            <p class="muted" style="margin:0 0 10px">The five keys you actually press. Everything else is automated per-box by ISBoxer.</p>
+            <div class="kv"><span class="k"><span class="kbd">~</span> Assist + Attack</span><span class="v" style="color:var(--accent)">All DPS → MA target</span></div>
+            <div class="kv"><span class="k"><span class="kbd">F1</span> Burn</span><span class="v" style="color:var(--warn)">Class burns fire</span></div>
+            <div class="kv"><span class="k"><span class="kbd">F2</span> Panic</span><span class="v" style="color:var(--danger)">Emergency heals</span></div>
+            <div class="kv"><span class="k"><span class="kbd">G</span> Pull</span><span class="v" style="color:var(--xp)">Puller engages</span></div>
+            <div class="kv"><span class="k"><span class="kbd">\</span> Follow / Stick</span><span class="v">Reform on tank</span></div>
+          </div>
+          <div class="card">
+            <h3>◉ Live Alerts <span class="tag" id="alertMini">audio on</span></h3>
+            <div class="alog" id="dashLog"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== HOTBUTTONS ===================== -->
+      <section class="view" id="view-hotbuttons">
+        <div class="page-head">
+          <h2>Hotbutton Designer</h2>
+          <p>Per-character, context-sensitive hotbutton layout. Click a tile to fire it — burn/panic tiles show a live cooldown sweep so you can demo the cooldown-tracking behavior. Selected box: <b id="hbWho">—</b></p>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="hbChars"></div>
+        </div>
+        <div class="legend" style="margin-bottom:12px">
+          <span><i style="background:var(--accent)"></i> Assist / target</span>
+          <span><i style="background:var(--warn)"></i> Burn / cooldown</span>
+          <span><i style="background:var(--danger)"></i> Panic / emergency</span>
+          <span><i style="background:var(--xp)"></i> Pull / pet</span>
+          <span><i style="background:var(--line-2)"></i> Sustain / utility</span>
+        </div>
+        <div class="hotbar" id="hotbar"></div>
+        <div class="note"><b>Context-sensitive:</b> tiles that map to ISBoxer mapped keys broadcast across the team; tiles bound to in-game social buttons fire only on this box. The <span class="kbd">HK</span> label is the key ISBoxer presses inside this window — your physical key may differ (see Mapped Keys).</div>
+      </section>
+
+      <!-- ===================== BURNS ===================== -->
+      <section class="view" id="view-burns">
+        <div class="page-head">
+          <h2>Single-Key Burn Systems</h2>
+          <p>One press of <span class="kbd">F1</span> fires a staged, full-group burn. ISBoxer broadcasts the trigger; each box runs its own class burn social so cooldowns never collide and nothing is wasted on trash.</p>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <h3>✦ Burn Sequence (staged) <span class="tag">single key → whole group</span></h3>
+          <div class="flow">
+            <div class="node hi">F1 pressed</div><span class="arrow">→</span>
+            <div class="node">Tier 1 · long CDs &amp; epics</div><span class="arrow">→</span>
+            <div class="node">Tier 2 · class burn discs/AA</div><span class="arrow">→</span>
+            <div class="node">Tier 3 · nukes &amp; rotation</div>
+          </div>
+          <div class="note warn"><b>Stagger, don't dump.</b> ISBoxer Step keys fire Tier 1 on press 1, Tier 2 on press 2, Tier 3 on press 3 of the same key — so one button walks the whole burn instead of overwriting your own discs. Recipe in <a data-jump="isboxer">Mapped Keys</a>.</div>
+        </div>
+        <div class="grid g-2" id="burnCards"></div>
+      </section>
+
+      <!-- ===================== ASSIST ===================== -->
+      <section class="view" id="view-assist">
+        <div class="page-head">
+          <h2>Assist &amp; Auto-Targeting</h2>
+          <p>Kill slow target swapping. One key sets the kill target on every DPS box off your Warrior main assist, fires attack, and sends pets in — sub-second, no clicking between windows.</p>
+        </div>
+        <div class="grid g-2">
+          <div class="card">
+            <h3>⊕ The Assist Chain</h3>
+            <div class="flow" style="flex-direction:column;align-items:stretch">
+              <div class="node hi">You press <b>~</b> (tilde) on the Warrior window</div>
+              <span class="arrow" style="text-align:center">↓ ISBoxer broadcasts to all DPS boxes</span>
+              <div class="node">Each DPS box runs <span class="kbd">/assist Warmain</span></div>
+              <span class="arrow" style="text-align:center">↓</span>
+              <div class="node">Auto <span class="kbd">/attack on</span> + <span class="kbd">/pet attack</span></div>
+              <span class="arrow" style="text-align:center">↓</span>
+              <div class="node">Bard/casters fire their nuke/DoT opener off new target</div>
+            </div>
+            <div class="note"><b>Warrior stays MA &amp; MT.</b> Because your driver is the tank, the tank's target = the kill target. No separate "assist character" to babysit.</div>
+          </div>
+          <div class="card">
+            <h3>◎ Auto-Target &amp; Xtarget Setup</h3>
+            <p class="muted">Make every box agree on the target without you looking at them.</p>
+            <ol class="steps">
+              <li><b>Warrior</b> uses an Xtarget set to <i>Auto Hater</i> / <i>Nearest NPC</i> so it auto-acquires what's beating on the group.</li>
+              <li><b>DPS boxes</b> assist the Warrior by name — never by <span class="kbd">/target</span>, which is order-dependent and breaks.</li>
+              <li><b>Off-tank swaps:</b> a second mapped key sends <span class="kbd">/assist</span> off the <b>Monk</b> for split pulls / adds.</li>
+              <li><b>Re-assist on add death:</b> the same <span class="kbd">~</span> re-fires; pets re-acquire automatically.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="section-title">Per-box assist macros (current team)</div>
+        <div id="assistMacros"></div>
+      </section>
+
+      <!-- ===================== HEAL / PANIC ===================== -->
+      <section class="view" id="view-heal">
+        <div class="page-head">
+          <h2>Healing &amp; Emergency Panic</h2>
+          <p>Maximize healer output and survive spike damage. <span class="kbd">F2</span> is the group panic button — every healer dumps its biggest emergency heal on the tank or the lowest target at once.</p>
+        </div>
+        <div class="grid g-2">
+          <div class="card">
+            <h3>✚ Healing Doctrine</h3>
+            <div class="kv"><span class="k">Tank heals</span><span class="v">Cleric → Warrior (Xtarget slot 1)</span></div>
+            <div class="kv"><span class="k">Group heals</span><span class="v">Druid → reactive HoT + group</span></div>
+            <div class="kv"><span class="k">Assist priority</span><span class="v">MT &gt; self &gt; lowest box</span></div>
+            <div class="kv"><span class="k">Cleric default</span><span class="v">Single-target chain on MT name</span></div>
+            <div class="kv"><span class="k">Druid default</span><span class="v">HoT rotation + emergency nukes idle</span></div>
+            <div class="note"><b>Heal by name, not target.</b> Healers keep the Warrior locked via Xtarget slot 1 so a stray <span class="kbd">/assist</span> never points a heal at the mob.</div>
+          </div>
+          <div class="card">
+            <h3>⛨ Panic Button <span class="tag" style="color:var(--danger)">F2</span></h3>
+            <p class="muted">One key, two layers — fires on this box and broadcasts to healers.</p>
+            <div class="flow" style="flex-direction:column;align-items:stretch">
+              <div class="node" style="border-color:var(--danger);color:#ff8a8c">Cleric → <b>Divine Arbitration</b> (equalize group HP) + Burst heal</div>
+              <div class="node" style="border-color:var(--danger);color:#ff8a8c">Druid → <b>group HoT + heal</b> on the group</div>
+              <div class="node" style="border-color:var(--danger);color:#ff8a8c">Warrior → <b>defensive disc</b> + self heal AA</div>
+              <div class="node" style="border-color:var(--danger);color:#ff8a8c">Shaman/BST → <b>Group Bestial Alignment</b> off-heal</div>
+            </div>
+            <div class="note warn"><b>Reflex layer:</b> bind F2 to a <i>physical pinky key</i> (Mouse4 works great) so panic is muscle-memory, not a hunt across the keyboard.</div>
+          </div>
+        </div>
+        <div class="section-title">Per-healer panic &amp; heal socials (current team)</div>
+        <div id="healMacros"></div>
+      </section>
+
+      <!-- ===================== PULL ===================== -->
+      <section class="view" id="view-pull">
+        <div class="page-head">
+          <h2>Smart Pull Systems</h2>
+          <p>Clean single pulls for named hunting and farming. The puller engages, the group holds until the mob is parked on the tank, then the assist chain takes over.</p>
+        </div>
+        <div class="grid g-2">
+          <div class="card">
+            <h3>➹ Pull Flow</h3>
+            <div class="flow" style="flex-direction:column;align-items:stretch">
+              <div class="node hi">Press <b>G</b> — only the Puller acts</div>
+              <span class="arrow" style="text-align:center">↓</span>
+              <div class="node">Puller targets nearest / Xtarget, fires ranged pull</div>
+              <span class="arrow" style="text-align:center">↓ group on <b>/stick</b> hold — does NOT aggro</span>
+              <div class="node">Mob arrives → Warrior taunts &amp; parks</div>
+              <span class="arrow" style="text-align:center">↓</span>
+              <div class="node">Press <b>~</b> → full assist + burn window opens</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>⚙ Puller Assignment</h3>
+            <p class="muted">Best puller per team — ranged, survivable, splittable.</p>
+            <div class="kv"><span class="k"><span class="badge b-live">Live</span> Primary</span><span class="v">Monk — FD split pulling, Imitate Death</span></div>
+            <div class="kv"><span class="k"><span class="badge b-live">Live</span> Backup</span><span class="v">Beastlord — pet pull / ranged</span></div>
+            <div class="kv"><span class="k"><span class="badge b-tlp">TLP</span> Primary</span><span class="v">Bard — fade/snare pull + lull</span></div>
+            <div class="kv"><span class="k"><span class="badge b-tlp">TLP</span> Backup</span><span class="v">Rogue — ranged + evade</span></div>
+            <div class="note"><b>Split-pull key:</b> a second mapped key fires <span class="kbd">Feign Death</span> / <span class="kbd">Fade</span> on the puller only, to peel one mob off a pack.</div>
+          </div>
+        </div>
+        <div class="section-title">Pull macros</div>
+        <div id="pullMacros"></div>
+      </section>
+
+      <!-- ===================== ISBOXER MAPPED KEYS ===================== -->
+      <section class="view" id="view-isboxer">
+        <div class="page-head">
+          <h2>ISBoxer Mapped Keys</h2>
+          <p>The ISBoxer side of the build — the mapped keys, broadcasting, and key maps that turn one physical press into coordinated team actions. Configure these in <b>Character Set → Mapped Keys</b>. Copy any recipe below.</p>
+        </div>
+        <div class="note warn"><b>ISBoxer-only build — no MacroQuest.</b> Everything here uses native ISBoxer Mapped Keys, Action Target Groups (ATGs), Step keys, and Repeater/Broadcast. Nothing injects into the EQ client.</div>
+
+        <div class="grid g-2" id="mappedKeys"></div>
+
+        <div class="section-title">Action Target Groups (who receives what)</div>
+        <div class="card">
+          <table>
+            <thead><tr><th>ATG name</th><th>Members</th><th>Used by</th></tr></thead>
+            <tbody id="atgTable"></tbody>
+          </table>
+        </div>
+
+        <div class="section-title">Window layout &amp; swapping</div>
+        <div class="grid g-2">
+          <div class="card">
+            <h3>⊞ Recommended layout</h3>
+            <div class="kv"><span class="k">Main (Warrior)</span><span class="v">Full-screen / largest region</span></div>
+            <div class="kv"><span class="k">Healers</span><span class="v">Top swap-bar, always visible HP</span></div>
+            <div class="kv"><span class="k">DPS + utility</span><span class="v">Swap-bar thumbnails (Repeater region)</span></div>
+            <div class="note">Use a <b>Swap Group</b> so any box can be promoted to main view with a hotkey — handy when a healer needs hands-on.</div>
+          </div>
+          <div class="card">
+            <h3>⌨ Window swap keys</h3>
+            <table>
+              <tbody>
+                <tr><td><span class="kbd">Ctrl+1..8</span></td><td>Jump to box 1–8</td></tr>
+                <tr><td><span class="kbd">Tab</span></td><td>Cycle to next box</td></tr>
+                <tr><td><span class="kbd">`</span> hold</td><td>Repeater: broadcast to all</td></tr>
+                <tr><td><span class="kbd">Pause</span></td><td>Toggle key broadcasting on/off</td></tr>
+              </tbody>
+            </table>
+            <div class="note warn"><b>Safety:</b> always bind a master <b>broadcast-off</b> key. You never want movement keys echoing to all 8 while you reposition one box.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== EQ MACROS ===================== -->
+      <section class="view" id="view-macros">
+        <div class="page-head">
+          <h2>EQ Social Macros</h2>
+          <p>The in-game side — the 5-line social buttons each box runs when ISBoxer presses its key. Built per class for the current team. These live in your EQ <b>Socials</b> window; ISBoxer just presses the hotbar slot.</p>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="macroChars"></div>
+        </div>
+        <div id="macroBody"></div>
+      </section>
+
+      <!-- ===================== GEMS ===================== -->
+      <section class="view" id="view-gems">
+        <div class="page-head">
+          <h2>Spell Gems &amp; Hotbar Layout</h2>
+          <p>Optimized gem order and hotbar mapping per caster so socials always hit the right slot. Consistent slotting across boxes is what makes broadcast macros reliable.</p>
+        </div>
+        <div class="note"><b>Rule:</b> keep <span class="kbd">/cast 1..12</span> meaning the <i>same spell type</i> on every caster (e.g. slot 1 = primary nuke, slot 8 = emergency heal). Then one broadcast macro works across different classes.</div>
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="gemChars"></div>
+        </div>
+        <div id="gemBody"></div>
+      </section>
+
+      <!-- ===================== ALERTS ===================== -->
+      <section class="view" id="view-alerts">
+        <div class="page-head">
+          <h2>Alerts &amp; Audio Warnings</h2>
+          <p>Buff tracking, proc notifications, named spawn alerts, and audio warnings — surfaced on the main view so you react without reading 8 chat logs. Toggle systems on the left; watch the live feed on the right.</p>
+        </div>
+        <div class="grid g-2">
+          <div class="card">
+            <h3>◉ Alert Systems</h3>
+            <div id="alertToggles"></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn pri sm" id="simNamed">Simulate Named Spawn</button>
+              <button class="btn sm" id="simProc">Simulate Proc</button>
+              <button class="btn sm" id="simBuff">Buff Fade</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>▤ Live Alert Feed <span class="tag" id="audioState">audio: on</span></h3>
+            <div class="alog" id="alertLog"></div>
+          </div>
+        </div>
+        <div class="section-title">How alerts are wired (ISBoxer-native)</div>
+        <div class="grid g-3">
+          <div class="card"><h3>Named spawn</h3><p class="muted">EQ <b>Audio Triggers</b> match spawn text → play a sound. ISBoxer <b>Alert</b> pops the box to front so you see who has it.</p></div>
+          <div class="card"><h3>Proc / cooldown</h3><p class="muted">EQ filters + Audio Trigger on proc/recast text → distinct chime per box class. No MQ required.</p></div>
+          <div class="card"><h3>Buff fade</h3><p class="muted">Audio Trigger on "Your X has worn off" → audible cue + reminder to re-fire the buff broadcast key.</p></div>
+        </div>
+      </section>
+
+      <!-- ===================== INVENTORY ===================== -->
+      <section class="view" id="view-inventory">
+        <div class="page-head">
+          <h2>Inventory Organization UI</h2>
+          <p>A consistent bag layout across all 8 boxes so loot, consumables, and clickies live in the same slot everywhere — broadcast "use clicky" macros then always hit the right item.</p>
+        </div>
+        <div class="grid g-2">
+          <div class="card">
+            <h3>▤ Standard bag map (all boxes)</h3>
+            <table>
+              <thead><tr><th>Bag</th><th>Contents</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td>Bag 1</td><td>Clickies &amp; click-buffs</td><td>Broadcast clicky macros hit same slot</td></tr>
+                <tr><td>Bag 2</td><td>Consumables (food/drink/potions)</td><td>Auto-consume, easy restock</td></tr>
+                <tr><td>Bag 3</td><td>Class reagents / arrows / poisons</td><td>Pull &amp; nuke uptime</td></tr>
+                <tr><td>Bag 4</td><td>Tradeskill / collectibles</td><td>Out of the way</td></tr>
+                <tr><td>Bags 5–8</td><td>Loot (kept empty pre-farm)</td><td>Max farm capacity</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h3>⚙ Loot &amp; sell flow</h3>
+            <ol class="steps">
+              <li><b>Master looter</b> on the Warrior; <span class="kbd">/loot</span> broadcast where appropriate for AoE farming.</li>
+              <li><b>Autoinventory</b> macro on a mapped key to clear cursors across all 8 after a kill.</li>
+              <li><b>Vendor run:</b> consistent bag slots = a broadcast "sell junk" routine works on every box.</li>
+              <li><b>Clicky use:</b> <span class="kbd">/useitem N M</span> with fixed bag slots fires the same effect team-wide.</li>
+            </ol>
+            <div class="note"><b>Clicky example:</b> <span class="kbd">/useitem 1 1</span> = bag 1, slot 1 on every box. Keep that slot identical and one broadcast key pops all click-buffs.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SETUP ===================== -->
+      <section class="view" id="view-setup">
+        <div class="page-head">
+          <h2>Build &amp; Setup Guide</h2>
+          <p>End-to-end build order to get this ISBoxer command center running on both teams, plus the answers to your open spec questions.</p>
+        </div>
+
+        <div class="grid g-2">
+          <div class="card">
+            <h3>✓ Build order</h3>
+            <ol class="steps">
+              <li><b>Character Set</b> — create one per team (Live8, TLP8). Add all 8 EQ instances, assign slots 1–8 in roster order.</li>
+              <li><b>Window layout</b> — main + swap-bar; set Repeater region for broadcast. Bind <span class="kbd">Pause</span> = broadcast toggle.</li>
+              <li><b>Action Target Groups</b> — build <i>AllDPS</i>, <i>Healers</i>, <i>Casters</i>, <i>Everyone</i> (see Mapped Keys).</li>
+              <li><b>Mapped keys</b> — Assist (~), Burn (F1, stepped), Panic (F2), Pull (G), Follow (\), Buff, Broadcast-off.</li>
+              <li><b>In-game socials</b> — paste the per-class macros (EQ Social Macros tab) into each box's Socials, same hotbar slots.</li>
+              <li><b>Spell gems &amp; bars</b> — slot per the Gems tab so <span class="kbd">/cast N</span> is consistent across casters.</li>
+              <li><b>Audio triggers</b> — add named/proc/buff-fade triggers in EQ; map ISBoxer Alerts to pop the right box.</li>
+              <li><b>Inventory</b> — standardize bags across all boxes; set master looter on Warrior.</li>
+              <li><b>Dry run</b> — test assist → burn → panic → pull on green mobs before raiding your time on a named.</li>
+            </ol>
+          </div>
+          <div class="card">
+            <h3>◐ Recommendations for your open questions</h3>
+            <div class="kv"><span class="k">Accent color</span><span class="v" style="color:var(--accent)">Cyan on dark</span></div>
+            <p class="muted" style="margin:4px 0 10px">Cyan reads cleanest on a dark, information-dense layout: high contrast for status text without the eye-fatigue of pure white, and it never collides with EQ's own red(HP)/blue(mana)/yellow(caution) bars. Reserve <span style="color:var(--warn)">amber</span> for cooldowns and <span style="color:var(--danger)">red</span> strictly for panic.</p>
+            <div class="kv"><span class="k">Resolution (suggested)</span><span class="v">2560×1440</span></div>
+            <div class="kv"><span class="k">Monitor setup</span><span class="v">Single ultrawide or dual</span></div>
+            <p class="muted" style="margin:4px 0 10px">For 8-box at-a-glance: <b>single 1440p</b> main + swap-bar works; <b>ultrawide</b> is ideal (main view + always-visible healer column). Dual lets you park the swap-bar on monitor 2. <b>Medium UI scale</b> confirmed — keeps healer HP readable without eating the main view.</p>
+            <div class="kv"><span class="k">Tooling</span><span class="v">ISBoxer only ✓</span></div>
+            <p class="muted" style="margin:4px 0 0">Entire build is native ISBoxer — no MacroQuest anywhere, per your spec.</p>
+          </div>
+        </div>
+
+        <div class="section-title">Your goals → how this build delivers</div>
+        <div class="grid g-3">
+          <div class="card"><h3 style="color:var(--good)">1 · Max heals &amp; DPS, any comp</h3><p class="muted">Role-based ATGs (not name-based) mean burns/heals fire correctly regardless of which classes you load. Swap a box, the keys still work.</p></div>
+          <div class="card"><h3 style="color:var(--good)">2 · Smooth Live ↔ TLP</h3><p class="muted">Two Character Sets, identical key layout. Same physical keys do the same job on the 130 team and the 65 team — muscle memory carries over.</p></div>
+          <div class="card"><h3 style="color:var(--good)">3 · Fast swaps &amp; reliable burns</h3><p class="muted">Tilde-assist sets every box's target in &lt;1s; stepped F1 walks the burn without overwriting your own discs.</p></div>
+        </div>
+
+        <div class="note" style="margin-top:18px"><b>This is a blueprint, not a working addon.</b> The macros and mapped-key recipes here are ready to paste into ISBoxer + EQ; tune spell/AA names to your exact levels (Live 130 names shown; TLP 65 era variants noted where they differ). Nothing here automates gameplay beyond native ISBoxer key broadcasting.</div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+/* =====================================================================
+   DATA MODEL — both teams. Role-based so the UI is fully data-driven.
+   Spell/AA/disc names are era-appropriate (Live ~130, TLP ~65 classic-era).
+   ===================================================================== */
+const TEAMS = {
+  live: {
+    label:"Live Team · 8 boxes · lvl 130", lvl:130,
+    chars:[
+      {id:"war", nm:"Brunnar", cls:"Warrior", role:"tank", color:"#ff6b6b", win:"W1",
+        hp:96,mp:0,en:72, xt:"Auto-Hater · 4 adds",
+        actions:["Taunt","Aggro lock","Defensive disc","Pull park"],
+        hotbar:[
+          {hk:"~",  k:"assist", nm:"MA Assist", ds:"broadcast kill target"},
+          {hk:"1",  k:"util",   nm:"Roaring Shout", ds:"AoE taunt / aggro"},
+          {hk:"2",  k:"util",   nm:"Knee Strike", ds:"snap aggro"},
+          {hk:"F1", k:"burn",   nm:"Aggro Burn", ds:"Bazu Bellow + discs", cd:90},
+          {hk:"F2", k:"panic",  nm:"Brace for Death", ds:"defensive disc", cd:300},
+          {hk:"3",  k:"util",   nm:"Self Heal AA", ds:"Aggressive Defl."},
+          {hk:"\\", k:"assist", nm:"Hold / Park", ds:"stop, face group"},
+          {hk:"4",  k:"util",   nm:"Resolute Stand", ds:"big mitigation", cd:600},
+        ],
+        burn:["/disc Brace for Death","/alt activate 3699  | Blast of Anger (aggro)","/disc Forceful Rebuke","/wait 1","/disc Resplendent Glory"],
+        burnNote:"Aggro-first burn — keeps threat above the DPS burn so the kill target never wanders.",
+        panic:["/disc Brace for Death  | defensive","/alt activate 511  | Aggressive Deflection","/wait 5","/alt activate 1242 | Warlord's Tenacity"],
+        assist:["/target Brunnar","/xtarget 1 set"],
+        pull:null,
+        gems:["1 Taunt-proc click","2 —","3 —","4 —","5 —","6 —","7 —","8 Self-heal AA","—","—","—","—"],
+        spellNote:"Warrior runs discs/AA, not gems — keep slot 8 = self-heal AA for the panic broadcast."
+      },
+      {id:"clr", nm:"Aelith", cls:"Cleric", role:"heal", color:"#ffe066", win:"W2",
+        hp:88,mp:74,en:60, xt:"Warrior locked · slot 1",
+        actions:["Tank chain heal","Group heal","Divine Arб","Rez"],
+        hotbar:[
+          {hk:"1", k:"util",  nm:"Remedy → MT", ds:"fast tank heal"},
+          {hk:"2", k:"util",  nm:"Promised Heal", ds:"delayed big heal"},
+          {hk:"F2",k:"panic", nm:"Divine Arbitration", ds:"equalize group HP", cd:300},
+          {hk:"3", k:"util",  nm:"Group Heal", ds:"word of replenish"},
+          {hk:"4", k:"util",  nm:"Burst of Life", ds:"emergency AA", cd:60},
+          {hk:"F1",k:"burn",  nm:"Yaulp + nuke", ds:"idle dps when safe", cd:30},
+          {hk:"5", k:"util",  nm:"Celestial Regen", ds:"group HoT"},
+          {hk:"6", k:"util",  nm:"Rez", ds:"94% rez"},
+        ],
+        burn:["/cast 7  | when tank is safe: Yaulp","/cast 1  | filler nuke"],
+        burnNote:"Cleric only DPS-burns when the tank is topped — healing always preempts.",
+        panic:["/cast 8  | Divine Arbitration (group equalize)","/alt activate 416 | Burst of Life","/cast 2  | Promised Heal on MT"],
+        assist:["/target Brunnar","/xtarget 1 set  | lock MT, never assist mob"],
+        pull:null,
+        gems:["1 Remedy (fast)","2 Promised Heal","3 Group Heal","4 Celestial Regen","5 Remedy (big)","6 Rez","7 Yaulp","8 Divine Arb / panic","9 Cure","10 Aego buff","11 Symbol","12 Nuke"],
+        spellNote:"Slot 8 = panic heal on every healer so the F2 broadcast is class-agnostic."
+      },
+      {id:"dru", nm:"Sylwen", cls:"Druid", role:"heal", color:"#69db7c", win:"W3",
+        hp:84,mp:80,en:58, xt:"Group + Warrior",
+        actions:["Group HoT","Reactive heal","Spires DPS","Snare/root"],
+        hotbar:[
+          {hk:"1", k:"util",  nm:"Wildtender's HoT", ds:"reactive group HoT"},
+          {hk:"2", k:"util",  nm:"Healing Counterb.", ds:"fast heal"},
+          {hk:"F2",k:"panic", nm:"Group Heal + HoT", ds:"emergency group", cd:30},
+          {hk:"F1",k:"burn",  nm:"Spire + Nukes", ds:"DPS burn", cd:600},
+          {hk:"3", k:"util",  nm:"Convergence", ds:"rez/heal hybrid"},
+          {hk:"4", k:"util",  nm:"Snare", ds:"runner control"},
+          {hk:"5", k:"util",  nm:"Survival AA", ds:"self panic", cd:1200},
+          {hk:"6", k:"util",  nm:"SoW / buffs", ds:"group speed"},
+        ],
+        burn:["/alt activate 1468 | Spirit of the Wood","/alt activate 538  | Nature's Boon","/cast 12 | Fire nuke","/cast 11 | Ice nuke"],
+        burnNote:"Druid burns DPS when heals are covered by the Cleric — strong filler.",
+        panic:["/cast 8  | Group Heal","/cast 1  | Wildtender HoT on group","/alt activate 825 | Convergence (if down)"],
+        assist:["/target Brunnar","/xtarget 1 set"],
+        pull:null,
+        gems:["1 Wildtender HoT","2 Counterbias heal","3 Group Heal","4 Reactive heal","5 Convergence","6 Snare","7 Root","8 Group Heal / panic","9 SoW","10 Skin buff","11 Ice nuke","12 Fire nuke"],
+        spellNote:"Slot 8 = panic group heal — matches the Cleric so F2 broadcasts cleanly."
+      },
+      {id:"brd", nm:"Quillan", cls:"Bard", role:"util", color:"#9775fa", win:"W4",
+        hp:86,mp:0,en:90, xt:"Assist Warrior",
+        actions:["Melody DPS","Slow/mez","Haste song","Pull (backup)"],
+        hotbar:[
+          {hk:"1", k:"util",  nm:"DPS Melody", ds:"Cacophony/Dirge twist"},
+          {hk:"2", k:"util",  nm:"Aria/Haste", ds:"group melody"},
+          {hk:"F1",k:"burn",  nm:"Fierce Eye + Epic", ds:"crit burst", cd:600},
+          {hk:"3", k:"util",  nm:"Slow song", ds:"mob slow"},
+          {hk:"4", k:"util",  nm:"Mez", ds:"add control"},
+          {hk:"F2",k:"panic", nm:"Hymn of Restoration", ds:"emergency regen", cd:60},
+          {hk:"\\",k:"assist",nm:"Stick MT", ds:"follow warrior"},
+          {hk:"5", k:"util",  nm:"Selo's", ds:"run speed"},
+        ],
+        burn:["/alt activate 482  | Fierce Eye","/alt activate 3704 | Quick Time","/cast 1 | Epic 2.0 click  Spirit of Vesagran","/melody 1 2 3"],
+        burnNote:"Bard is the group DPS multiplier — Fierce Eye + Quick Time make every burn bigger.",
+        panic:["/twist stop","/cast 6 | Hymn of Restoration","/melody 1 2 6"],
+        assist:["/assist Brunnar","/attack on","/melody 1 2 3"],
+        pull:["/stand","/cast 7 | Lull song","/alt activate 209 | Fading Memories (split)"],
+        gems:["1 Cacophony (DD)","2 Dirge of Sorcerer","3 Aria (dmg)","4 Slow","5 Mez","6 Hymn regen","7 Lull","8 —","—","—","—","—"],
+        spellNote:"Bard uses song slots via /melody — keep DPS twist on 1-3, utility 4-7."
+      },
+      {id:"bs1", nm:"Grokk", cls:"Beastlord", role:"dps", color:"#ff922b", win:"W5",
+        hp:90,mp:62,en:84, xt:"Assist Warrior",
+        actions:["Pet + melee DPS","Slow proc","Burn","Pet tank adds"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Attack", ds:"target + /attack + pet"},
+          {hk:"1", k:"util",  nm:"Pet Attack", ds:"send pet"},
+          {hk:"F1",k:"burn",  nm:"Bestial Burn", ds:"Wrath+Spire+Frenzy", cd:300},
+          {hk:"2", k:"util",  nm:"Slow proc", ds:"bestial slow"},
+          {hk:"3", k:"util",  nm:"Pet Heal", ds:"keep pet up"},
+          {hk:"F2",k:"panic", nm:"Grp Bestial Align", ds:"off-heal group", cd:600},
+          {hk:"4", k:"util",  nm:"Maul / kick", ds:"melee disc"},
+          {hk:"\\",k:"assist",nm:"Pet Guard", ds:"pet hold adds"},
+        ],
+        burn:["/alt activate 1391 | Bestial Wrath","/alt activate 2982 | Spire of the Savage Lord","/disc Frenzied Swipes","/alt activate 1387 | Empathic Fury"],
+        burnNote:"Beastlord = top sustained + burst DPS, plus a pet that can hold an add.",
+        panic:["/alt activate 1389 | Group Bestial Alignment (off-heal)","/cast 6 | pet heal"],
+        assist:["/assist Brunnar","/attack on","/pet attack"],
+        pull:null,
+        gems:["1 Slow proc","2 Pet heal","3 Pet haste","4 DoT","5 Bestial buff","6 Self heal","7 Debuff","8 —","9 —","10 —","11 —","12 —"],
+        spellNote:"Both Beastlords slot identically so one broadcast macro drives both pets."
+      },
+      {id:"bs2", nm:"Thokk", cls:"Beastlord", role:"dps", color:"#fd7e14", win:"W6",
+        hp:91,mp:60,en:86, xt:"Assist Warrior",
+        actions:["Pet + melee DPS","Slow backup","Burn","Pet DPS"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Attack", ds:"target + /attack + pet"},
+          {hk:"1", k:"util",  nm:"Pet Attack", ds:"send pet"},
+          {hk:"F1",k:"burn",  nm:"Bestial Burn", ds:"Wrath+Spire+Frenzy", cd:300},
+          {hk:"2", k:"util",  nm:"Slow proc", ds:"bestial slow (backup)"},
+          {hk:"3", k:"util",  nm:"Pet Heal", ds:"keep pet up"},
+          {hk:"F2",k:"panic", nm:"Grp Bestial Align", ds:"off-heal group", cd:600},
+          {hk:"4", k:"util",  nm:"Maul / kick", ds:"melee disc"},
+          {hk:"\\",k:"assist",nm:"Pet Guard", ds:"pet hold adds"},
+        ],
+        burn:["/alt activate 1391 | Bestial Wrath","/alt activate 2982 | Spire of the Savage Lord","/disc Frenzied Swipes","/alt activate 1387 | Empathic Fury"],
+        burnNote:"Second Beastlord doubles pet DPS and gives a backup slow if the first misses.",
+        panic:["/alt activate 1389 | Group Bestial Alignment (off-heal)","/cast 6 | pet heal"],
+        assist:["/assist Brunnar","/attack on","/pet attack"],
+        pull:null,
+        gems:["1 Slow proc","2 Pet heal","3 Pet haste","4 DoT","5 Bestial buff","6 Self heal","7 Debuff","8 —","9 —","10 —","11 —","12 —"],
+        spellNote:"Identical to Grokk — one /bcst macro drives both."
+      },
+      {id:"mnk", nm:"Tsuro", cls:"Monk", role:"dps", color:"#f783ac", win:"W7",
+        hp:92,mp:0,en:88, xt:"Assist · Puller",
+        actions:["Melee DPS","FD split pull","Burn","Aggro dump"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Attack", ds:"target + /attack"},
+          {hk:"G", k:"pull",  nm:"Pull (FD split)", ds:"engage + Imitate Death"},
+          {hk:"F1",k:"burn",  nm:"Monk Burn", ds:"Crystalpalm+Heel", cd:300},
+          {hk:"1", k:"util",  nm:"Five Point Palm", ds:"big hit"},
+          {hk:"2", k:"util",  nm:"Eye of Storm", ds:"AoE dps disc"},
+          {hk:"F2",k:"panic", nm:"Feign Death", ds:"drop aggro / save", cd:0},
+          {hk:"3", k:"util",  nm:"Mend AA", ds:"self heal"},
+          {hk:"\\",k:"assist",nm:"Stick MT", ds:"follow warrior"},
+        ],
+        burn:["/disc Crystalpalm Discipline","/alt activate 511 | Infusion of Thunder","/disc Heel of Kanji","/disc Five Point Palm"],
+        burnNote:"Monk burst + the team's primary puller (FD split-pulling for clean named).",
+        panic:["/doability 5 | Feign Death","/alt activate 249 | Imitate Death"],
+        assist:["/assist Brunnar","/attack on"],
+        pull:["/target nearest","/alt activate 250 | ranged pull / Stunning Kick","/pause 10","/doability 5 | FD to split"],
+        gems:["—","—","—","—","—","—","—","—","—","—","—","—"],
+        spellNote:"Monk is disc/AA based — no gems. Doability 5 bound to Feign Death on every box that has it."
+      },
+      {id:"wiz", nm:"Pyralis", cls:"Wizard", role:"dps", color:"#4dabf7", win:"W8",
+        hp:74,mp:88,en:50, xt:"Assist Warrior",
+        actions:["Nuke DPS","Twincast burn","Rain on packs","Evac"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Cast", ds:"target + nuke"},
+          {hk:"1", k:"util",  nm:"Primary Nuke", ds:"chromatic/ice"},
+          {hk:"F1",k:"burn",  nm:"Wizard Burn", ds:"Twincast+Fury rotation", cd:600},
+          {hk:"2", k:"util",  nm:"Rain", ds:"AoE on packs"},
+          {hk:"3", k:"util",  nm:"Force nuke", ds:"big single"},
+          {hk:"F2",k:"panic", nm:"Harvest / shield", ds:"mana + defensive", cd:60},
+          {hk:"4", k:"util",  nm:"Evac", ds:"emergency port out"},
+          {hk:"5", k:"util",  nm:"Silent Casting", ds:"aggro reduce", cd:600},
+        ],
+        burn:["/alt activate 511  | Fury of Ro","/alt activate 1217 | Improved Twincast","/alt activate 215  | Frenzied Devastation","/cast 1 | spam Force/Ice nuke","/cast 3 | big nuke"],
+        burnNote:"Wizard is the nuke spike — Twincast window makes F1 hit hardest of anyone.",
+        panic:["/alt activate 250 | Silent Casting (shed aggro)","/cast 6 | Harvest (mana)"],
+        assist:["/assist Brunnar","/cast 1 | open with primary nuke"],
+        pull:null,
+        gems:["1 Primary nuke (ice)","2 Force nuke","3 Big single nuke","4 Rain","5 Chromatic","6 Harvest","7 Evac","8 Shield","9 Twincast spell","10 Debuff","11 Snare","12 Port"],
+        spellNote:"Slot 1 = primary nuke on the assist macro; keep heavy-mana nukes on 2-3 for the burn step."
+      },
+    ]
+  },
+  tlp: {
+    label:"TLP Team · 8 boxes · lvl 65", lvl:65,
+    chars:[
+      {id:"war", nm:"Brunnar", cls:"Warrior", role:"tank", color:"#ff6b6b", win:"T1",
+        hp:94,mp:0,en:70, xt:"Nearest NPC · 2 adds",
+        actions:["Taunt","Aggro lock","Defensive disc","Pull park"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"MA Assist", ds:"broadcast kill target"},
+          {hk:"1", k:"util",  nm:"Taunt", ds:"snap aggro"},
+          {hk:"2", k:"util",  nm:"Kick / Bash", ds:"aggro proc"},
+          {hk:"F1",k:"burn",  nm:"Aggro Burn", ds:"Provoke + jolt", cd:90},
+          {hk:"F2",k:"panic", nm:"Defensive Disc", ds:"PoP defensive", cd:600},
+          {hk:"3", k:"util",  nm:"Weapon shield", ds:"riposte disc", cd:300},
+          {hk:"\\",k:"assist",nm:"Hold / Park", ds:"stop, face group"},
+          {hk:"4", k:"util",  nm:"Fortitude", ds:"big mitigation", cd:1200},
+        ],
+        burn:["/disc Defensive","/disc Provoke","/wait 1","/disc Weaponshield"],
+        burnNote:"Classic-era Warrior: Defensive disc + taunt spam holds aggro for the burn.",
+        panic:["/disc Defensive  | PoP-era defensive","/disc Fortitude"],
+        assist:["/target Brunnar","/xtarget 1 set"],
+        pull:null,
+        gems:["—","—","—","—","—","—","—","—","—","—","—","—"],
+        spellNote:"Disc-based at 65 — keep a self-clicky on bag 1 slot 1 for the panic broadcast."
+      },
+      {id:"clr", nm:"Aelith", cls:"Cleric", role:"heal", color:"#ffe066", win:"T2",
+        hp:86,mp:78,en:55, xt:"Warrior locked · slot 1",
+        actions:["Complete Heal","Group heal","Divine Arб","Rez"],
+        hotbar:[
+          {hk:"1", k:"util",  nm:"Complete Heal → MT", ds:"7.5k tank heal"},
+          {hk:"2", k:"util",  nm:"Remedy", ds:"fast mid heal"},
+          {hk:"F2",k:"panic", nm:"Divine Arbitration", ds:"equalize group HP", cd:300},
+          {hk:"3", k:"util",  nm:"Group Heal", ds:"Word of Vivification"},
+          {hk:"4", k:"util",  nm:"Yaulp", ds:"melee when safe"},
+          {hk:"F1",k:"burn",  nm:"Hammer pet + nuke", ds:"idle dps", cd:30},
+          {hk:"5", k:"util",  nm:"Aego / Symbol", ds:"buffs"},
+          {hk:"6", k:"util",  nm:"Rez", ds:"96% rez"},
+        ],
+        burn:["/cast 4 | Yaulp","/pet attack | summoned hammer"],
+        burnNote:"CH-chain era Cleric — only idle-DPS when MT is full.",
+        panic:["/cast 8 | Divine Arbitration","/cast 1 | Complete Heal on MT"],
+        assist:["/target Brunnar","/xtarget 1 set"],
+        pull:null,
+        gems:["1 Complete Heal","2 Remedy","3 Group Heal","4 Yaulp","5 Aegolism","6 Symbol","7 Cure","8 Divine Arb / panic","9 Hammer pet","10 Stun","11 DA","12 Rez"],
+        spellNote:"Slot 8 = panic on both teams — the F2 broadcast is identical Live↔TLP."
+      },
+      {id:"dru", nm:"Sylwen", cls:"Druid", role:"heal", color:"#69db7c", win:"T3",
+        hp:82,mp:80,en:55, xt:"Group + Warrior",
+        actions:["Backup heal","HoT","Fire nuke DPS","Snare/SoW"],
+        hotbar:[
+          {hk:"1", k:"util",  nm:"Chloroblast", ds:"fast heal"},
+          {hk:"2", k:"util",  nm:"HoT", ds:"regrowth"},
+          {hk:"F2",k:"panic", nm:"Group Heal", ds:"emergency group", cd:30},
+          {hk:"F1",k:"burn",  nm:"Fire Burn", ds:"Wildfire + nukes", cd:60},
+          {hk:"3", k:"util",  nm:"Snare", ds:"runner control"},
+          {hk:"4", k:"util",  nm:"SoW", ds:"group speed"},
+          {hk:"5", k:"util",  nm:"Damage Shield", ds:"group DS"},
+          {hk:"6", k:"util",  nm:"Self panic", ds:"heal self"},
+        ],
+        burn:["/cast 11 | Wildfire / Sunstrike","/cast 12 | Ice Comet","/cast 11"],
+        burnNote:"At 65 the Druid is a strong fire-nuke DPS + backup heals.",
+        panic:["/cast 8 | Group Heal","/cast 2 | HoT on group"],
+        assist:["/target Brunnar","/xtarget 1 set"],
+        pull:null,
+        gems:["1 Chloroblast","2 Regrowth HoT","3 Group Heal","4 Heal","5 Snare","6 Root","7 SoW","8 Group Heal / panic","9 Damage Shield","10 Stun","11 Fire nuke","12 Ice Comet"],
+        spellNote:"Slot 8 = panic group heal, matching Cleric + Live Druid."
+      },
+      {id:"brd", nm:"Quillan", cls:"Bard", role:"util", color:"#9775fa", win:"T4",
+        hp:84,mp:0,en:88, xt:"Assist · Puller",
+        actions:["Melody DPS","Mez/charm","Haste","Primary puller"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Attack", ds:"target + /attack"},
+          {hk:"G", k:"pull",  nm:"Pull (fade)", ds:"lull + snare pull"},
+          {hk:"F1",k:"burn",  nm:"Epic + crit song", ds:"burst", cd:600},
+          {hk:"1", k:"util",  nm:"DPS Melody", ds:"dot/DD twist"},
+          {hk:"2", k:"util",  nm:"Slow", ds:"mob slow"},
+          {hk:"3", k:"util",  nm:"Mez", ds:"add control"},
+          {hk:"F2",k:"panic", nm:"Regen song", ds:"emergency regen", cd:0},
+          {hk:"\\",k:"assist",nm:"Stick MT", ds:"follow warrior"},
+        ],
+        burn:["/cast 1 | Epic click  Singing Steel / Vesagran","/melody 1 2 3"],
+        burnNote:"Bard is the TLP primary puller AND group DPS/haste engine.",
+        panic:["/twist stop","/melody 6 | regen song"],
+        assist:["/assist Brunnar","/attack on","/melody 1 2 3"],
+        pull:["/stand","/cast 5 | Lull","/cast 6 | Selo's fade pull"],
+        gems:["1 Chant DoT","2 DD song","3 Haste/Aria","4 Slow","5 Lull","6 Regen/Selo","7 Mez","8 —","—","—","—","—"],
+        spellNote:"Twist 1-3 for DPS; 4-7 utility/pull. Same layout as Live Bard."
+      },
+      {id:"bst", nm:"Grokk", cls:"Beastlord", role:"dps", color:"#ff922b", win:"T5",
+        hp:88,mp:64,en:82, xt:"Assist Warrior",
+        actions:["Pet + melee DPS","Slow proc","Pet tank adds","Burn"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Attack", ds:"target + /attack + pet"},
+          {hk:"1", k:"util",  nm:"Pet Attack", ds:"send pet"},
+          {hk:"F1",k:"burn",  nm:"Bestial Burn", ds:"Fury + Bloodlust", cd:600},
+          {hk:"2", k:"util",  nm:"Slow", ds:"bestial slow"},
+          {hk:"3", k:"util",  nm:"Pet Heal", ds:"keep pet up"},
+          {hk:"F2",k:"panic", nm:"Pet Guard + heal", ds:"pet hold add", cd:0},
+          {hk:"4", k:"util",  nm:"Pet haste/buff", ds:"empower pet"},
+          {hk:"\\",k:"assist",nm:"Pet Guard", ds:"pet hold adds"},
+        ],
+        burn:["/disc Bestial Fury","/cast 5 | Bloodlust","/pet attack"],
+        burnNote:"65 Beastlord = pet DPS + slow + a pet that can off-tank an add.",
+        panic:["/pet guard","/cast 6 | pet heal"],
+        assist:["/assist Brunnar","/attack on","/pet attack"],
+        pull:null,
+        gems:["1 Slow","2 Pet heal","3 Pet haste","4 DoT","5 Bloodlust","6 Self heal","7 Debuff","8 —","9 —","10 —","11 —","12 —"],
+        spellNote:"Slow on slot 1 — Beastlord is the TLP team's main slower."
+      },
+      {id:"mag", nm:"Emberon", cls:"Magician", role:"dps", color:"#ffa94d", win:"T6",
+        hp:72,mp:86,en:48, xt:"Assist Warrior",
+        actions:["Pet DPS","Nuke","Malo","Pet tank/swarm"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Cast", ds:"target + pet + nuke"},
+          {hk:"1", k:"util",  nm:"Pet Attack", ds:"send earth/air pet"},
+          {hk:"F1",k:"burn",  nm:"Mage Burn", ds:"Frenzied Burnout+nukes", cd:60},
+          {hk:"2", k:"util",  nm:"Primary Nuke", ds:"fire/magic"},
+          {hk:"3", k:"util",  nm:"Malo", ds:"resist debuff"},
+          {hk:"F2",k:"panic", nm:"Pet Guard + reclaim", ds:"hold add / save", cd:0},
+          {hk:"4", k:"util",  nm:"Pet Heal", ds:"keep pet up"},
+          {hk:"5", k:"util",  nm:"Summon pet", ds:"re-pet"},
+        ],
+        burn:["/cast 6 | Frenzied Burnout (pet haste)","/cast 2 | nuke","/pet attack"],
+        burnNote:"Mage = highest pet DPS + nukes; pet can off-tank or swarm-farm.",
+        panic:["/pet guard","/cast 7 | pet heal"],
+        assist:["/assist Brunnar","/pet attack","/cast 2 | open nuke"],
+        pull:null,
+        gems:["1 Pet (earth)","2 Fire nuke","3 Magic nuke","4 Malo","5 Pet heal","6 Frenzied Burnout","7 Pet haste","8 Shield","9 Summon item","10 Stun","11 Rain","12 Reclaim"],
+        spellNote:"Pet on slot 1 for fast re-summon; nuke on slot 2 matches the assist macro."
+      },
+      {id:"wiz", nm:"Pyralis", cls:"Wizard", role:"dps", color:"#4dabf7", win:"T7",
+        hp:70,mp:88,en:46, xt:"Assist Warrior",
+        actions:["Nuke spike","Twincast (era)","Evac","Mana harvest"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Cast", ds:"target + nuke"},
+          {hk:"1", k:"util",  nm:"Lure Nuke", ds:"low-resist big hit"},
+          {hk:"F1",k:"burn",  nm:"Wizard Burn", ds:"Fury + nuke chain", cd:600},
+          {hk:"2", k:"util",  nm:"Ice nuke", ds:"primary spam"},
+          {hk:"3", k:"util",  nm:"Manaburn", ds:"era burst", cd:600},
+          {hk:"F2",k:"panic", nm:"Concuss / shield", ds:"shed aggro", cd:60},
+          {hk:"4", k:"util",  nm:"Evac", ds:"port out"},
+          {hk:"5", k:"util",  nm:"Harvest", ds:"mana regen", cd:600},
+        ],
+        burn:["/alt activate Fury of Ro (if avail)","/cast 3 | Manaburn","/cast 1 | Lure nuke","/cast 2 | Ice nuke spam"],
+        burnNote:"65 Wizard = burst nuke; Manaburn is the single-key spike for named.",
+        panic:["/cast 6 | Concussion (shed aggro)","/cast 5 | Harvest"],
+        assist:["/assist Brunnar","/cast 2 | open ice nuke"],
+        pull:null,
+        gems:["1 Lure nuke","2 Ice nuke","3 Manaburn","4 Fire nuke","5 Harvest","6 Concussion","7 Evac","8 Shield","9 Snare","10 Stun","11 Root","12 Gate"],
+        spellNote:"Ice nuke on slot 2 = assist opener; Manaburn on 3 for the burn step."
+      },
+      {id:"rog", nm:"Vesk", cls:"Rogue", role:"dps", color:"#e599f7", win:"T8",
+        hp:84,mp:0,en:90, xt:"Assist Warrior",
+        actions:["Backstab DPS","Evade","Ranged pull (backup)","Burn"],
+        hotbar:[
+          {hk:"~", k:"assist",nm:"Assist + Attack", ds:"target + /attack + BS"},
+          {hk:"1", k:"util",  nm:"Backstab", ds:"positional burst"},
+          {hk:"F1",k:"burn",  nm:"Rogue Burn", ds:"Fury disc + BS spam", cd:600},
+          {hk:"2", k:"util",  nm:"Evade", ds:"drop aggro"},
+          {hk:"3", k:"util",  nm:"Apply poison", ds:"proc dmg"},
+          {hk:"F2",k:"panic", nm:"Hide / Evade", ds:"shed aggro", cd:0},
+          {hk:"4", k:"util",  nm:"Ranged throw", ds:"backup pull"},
+          {hk:"\\",k:"assist",nm:"Stick behind MT", ds:"positioning"},
+        ],
+        burn:["/disc Rogue's Fury","/doability Backstab","/attack on"],
+        burnNote:"Rogue = top melee single-target; needs to stay behind the mob (stick to MT).",
+        panic:["/doability Evade","/doability Hide"],
+        assist:["/assist Brunnar","/attack on","/doability Backstab"],
+        pull:null,
+        gems:["—","—","—","—","—","—","—","—","—","—","—","—"],
+        spellNote:"No gems — disc + doabilities. Keep Backstab/Evade/Hide on fixed doability slots for broadcast."
+      },
+    ]
+  }
+};
+
+/* ===================== ISBoxer mapped-key recipes (shared) ===================== */
+const MAPPED_KEYS = [
+  {title:"Assist + Attack", phys:"~ (tilde)", color:"assist",
+   desc:"One key sets the kill target on every DPS box and starts attacking. The core anti-target-swap key.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Assist"</span>
+<span class="cm">// Trigger: ~  (Hotkey, while EQ has focus)</span>
+<span class="cm">// Target: Action Target Group = AllDPS</span>
+Action 1 → Keystroke <span class="arg">~</span> to <span class="var">AllDPS</span>
+  <span class="cm">(each box's ~ runs its /assist Warmain social)</span>
+Action 2 → Keystroke <span class="arg">~</span> to <span class="var">Self (Bard)</span> melody refresh
+<span class="cm">// In EQ, the ~ social on each box = /assist Brunnar /attack on /pet attack</span>`},
+
+  {title:"Single-Key Burn (stepped)", phys:"F1", color:"burn",
+   desc:"Walks the whole-group burn in 3 stages so you never overwrite your own discs. Press once per tier.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Burn" — STEPS enabled</span>
+<span class="cm">// Trigger: F1</span>
+Step 1 → Keystroke <span class="arg">F1</span> to <span class="var">Everyone</span>
+   <span class="cm">box fires Tier-1 social: epics, long CDs</span>
+Step 2 → Keystroke <span class="arg">F1</span> to <span class="var">Everyone</span>
+   <span class="cm">box fires Tier-2 social: class burn discs/AA</span>
+Step 3 → Keystroke <span class="arg">F1</span> to <span class="var">Everyone</span>
+   <span class="cm">box fires Tier-3 social: nuke/rotation spam</span>
+<span class="cm">// "Reset steps after 12s of inactivity" so it re-arms for next fight</span>`},
+
+  {title:"Emergency Panic", phys:"F2  (bind to Mouse4)", color:"panic",
+   desc:"Every healer dumps its biggest emergency heal; tank pops a defensive. Reflex key — put it under your pinky/thumb.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Panic"</span>
+<span class="cm">// Trigger: F2  (also map Mouse Button 4 → same key)</span>
+Action 1 → Keystroke <span class="arg">F2</span> to <span class="var">Healers</span>
+   <span class="cm">Cleric: /cast 8 Divine Arbitration · Druid: /cast 8 Group Heal</span>
+Action 2 → Keystroke <span class="arg">F2</span> to <span class="var">Tank</span>
+   <span class="cm">Warrior: /disc Defensive + self-heal AA</span>
+Action 3 → Keystroke <span class="arg">F2</span> to <span class="var">Beastlords</span>
+   <span class="cm">Group Bestial Alignment off-heal</span>`},
+
+  {title:"Smart Pull", phys:"G", color:"pull",
+   desc:"Only the assigned puller acts; the rest of the group holds on stick and does NOT aggro.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Pull"</span>
+<span class="cm">// Trigger: G</span>
+Action 1 → Keystroke <span class="arg">G</span> to <span class="var">Puller only</span>
+   <span class="cm">Live: Monk (FD split) · TLP: Bard (lull/fade)</span>
+<span class="cm">// group stays on /stick to Warrior, broadcast-attack OFF until ~</span>
+<span class="cm">// Split key (optional): Shift+G → FD/Fade on puller only</span>`},
+
+  {title:"Follow / Reform", phys:"\\ (backslash)", color:"assist",
+   desc:"Whole team sticks to the Warrior. Tap to reform after a wipe-save or repositioning.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Follow"</span>
+<span class="cm">// Trigger: \\</span>
+Action 1 → Keystroke <span class="arg">\\</span> to <span class="var">Everyone except Tank</span>
+   <span class="cm">each box runs: /stick Brunnar  (or /follow)</span>
+<span class="cm">// Tap again or move tank to break — bind a "stop follow" to Shift+\\</span>`},
+
+  {title:"Buff Refresh", phys:"F5", color:"assist",
+   desc:"Re-fires the group buff rotation — clickies, songs, symbols, pet buffs — when the buff-fade alert chimes.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Buff"</span>
+<span class="cm">// Trigger: F5  (STEPS for multi-buff classes)</span>
+Action 1 → Keystroke <span class="arg">F5</span> to <span class="var">Everyone</span>
+   <span class="cm">Cleric: Aego/Symbol · Druid: Skin/DS · Bard: refresh melody</span>
+   <span class="cm">BST: pet haste · Mage: pet buffs · clickies via /useitem 1 1</span>`},
+
+  {title:"Broadcast Toggle (safety)", phys:"Pause", color:"assist",
+   desc:"Master on/off for key broadcasting. Hit it before repositioning a single box so movement doesn't echo to all 8.",
+   code:`<span class="cm">// ISBoxer Mapped Key: "Broadcast Toggle"</span>
+<span class="cm">// Trigger: Pause</span>
+Action → Toggle <span class="var">Repeater / Broadcast</span> ON/OFF
+<span class="cm">// Pair with a Repeater HOLD key (`+"`"+`) for momentary broadcast</span>`},
+];
+
+const ATGS = [
+  {nm:"Everyone", mem:"All 8 boxes", use:"Burn (F1), Buff (F5), Follow (\\)"},
+  {nm:"AllDPS", mem:"Beastlords, Monk/Rogue, Wizard, Mage, Bard", use:"Assist (~)"},
+  {nm:"Healers", mem:"Cleric + Druid", use:"Panic (F2) heal layer"},
+  {nm:"Casters", mem:"Wizard, Mage, Druid, Cleric", use:"Mana-conscious burn step"},
+  {nm:"Tank", mem:"Warrior", use:"Panic defensive, pull-park"},
+  {nm:"Puller", mem:"Monk (Live) / Bard (TLP)", use:"Pull (G), split (Shift+G)"},
+];
+
+/* =====================================================================
+   STATE + RENDER
+   ===================================================================== */
+let team = "live";
+let sel = 0;
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const data = () => TEAMS[team];
+const cur  = () => data().chars[sel];
+
+function roleClass(r){return {tank:"r-tank",heal:"r-heal",dps:"r-dps",util:"r-util"}[r];}
+function roleLabel(r){return {tank:"TANK",heal:"HEAL",dps:"DPS",util:"UTIL"}[r];}
+
+/* ---------- Dashboard roster ---------- */
+function renderRoster(){
+  const d = data();
+  $("#roster").innerHTML = d.chars.map((c,i)=>`
+    <div class="char ${i===sel?'sel':''}" style="--cc:${c.color}" data-i="${i}">
+      <div class="top">
+        <div class="av">${esc(c.cls[0])}</div>
+        <div><div class="nm">${esc(c.nm)}</div><div class="cl">${esc(c.cls)}</div></div>
+        <div class="win">${c.win}</div>
+      </div>
+      <div class="bars">
+        <div class="bar hp"><i style="width:${c.hp}%"></i></div>
+        ${c.mp>0?`<div class="bar mp"><i style="width:${c.mp}%"></i></div>`:""}
+        <div class="bar en"><i style="width:${c.en}%"></i></div>
+      </div>
+      <div class="meta"><span class="role ${roleClass(c.role)}">${roleLabel(c.role)}</span>
+        ${c.actions.slice(0,2).map(a=>`<span class="role" style="background:var(--bg-3);color:var(--txt-dim);border:1px solid var(--line)">${esc(a)}</span>`).join("")}</div>
+      <div class="xtarget"><span>Xtarget</span><span>${esc(c.xt)}</span></div>
+    </div>`).join("");
+  // group state
+  const find = r => d.chars.filter(c=>c.role===r);
+  $("#maName").textContent = d.chars.find(c=>c.role==="tank").nm + " (Warrior)";
+  $("#mtName").textContent = d.chars.find(c=>c.role==="tank").nm;
+  $("#pullerName").textContent = team==="live" ? "Tsuro (Monk · FD split)" : "Quillan (Bard · fade)";
+  $("#healCount").textContent = find("heal").map(c=>c.cls).join(" + ");
+  $("#dpsCount").textContent = find("dps").length + " melee/caster + 1 bard";
+  $$("#roster .char").forEach(el=>el.onclick=()=>{sel=+el.dataset.i;selectChar();});
+}
+
+/* ---------- Hotbutton designer ---------- */
+function renderHotChips(containerSel, onClick){
+  const d=data();
+  $(containerSel).innerHTML = d.chars.map((c,i)=>`
+    <button class="btn sm ${i===sel?'pri':''}" data-i="${i}" style="${i===sel?'':'border-color:'+c.color+'33'}">
+      ${esc(c.nm)} · ${esc(c.cls)}</button>`).join("");
+  $$(containerSel+" button").forEach(b=>b.onclick=()=>{sel=+b.dataset.i; onClick&&onClick();});
+}
+
+function renderHotbar(){
+  const c=cur();
+  $("#hbWho").textContent = `${c.nm} · ${c.cls}`;
+  $("#hotbar").innerHTML = c.hotbar.map((h,i)=>`
+    <div class="hb ${h.k}" data-cd="${h.cd||0}" data-i="${i}">
+      <div class="hk">${esc(h.hk)}</div>
+      <div class="nm">${esc(h.nm)}</div>
+      <div class="ds">${esc(h.ds)}</div>
+      <div class="cd hidden"><span class="ring"></span><span class="num"></span></div>
+    </div>`).join("");
+  $$("#hotbar .hb").forEach(el=>el.onclick=()=>fireTile(el));
+  renderHotChips("#hbChars", ()=>{renderHotbar();});
+}
+function fireTile(el){
+  const cd=+el.dataset.cd, nm=el.querySelector(".nm").textContent;
+  if(cd>0){
+    const ov=el.querySelector(".cd"), num=ov.querySelector(".num"), ring=ov.querySelector(".ring");
+    if(!ov.classList.contains("hidden")) return;
+    ov.classList.remove("hidden");
+    let t=cd, shown=cd>60?Math.round(cd/60)+"m":cd+"s";
+    num.textContent=shown;
+    const start=Date.now(), dur=Math.min(cd,8)*1000; // compress long CDs to <=8s demo
+    const iv=setInterval(()=>{
+      const e=(Date.now()-start)/dur, left=Math.ceil((1-e)*Math.min(cd,8));
+      ring.style.height=(100*(1-e))+"%";
+      num.textContent = cd>8 ? left+"·("+shown+")" : left+"s";
+      if(e>=1){clearInterval(iv);ov.classList.add("hidden");ring.style.height="";}
+    },80);
+    toast(`${nm} fired — cooldown tracking ${shown}`);
+  } else {
+    flash(el); toast(`${nm} fired`);
+  }
+}
+function flash(el){el.style.borderColor="var(--accent)";el.style.transform="scale(.96)";setTimeout(()=>{el.style.transform="";el.style.borderColor="";},140);}
+
+/* ---------- generic macro card ---------- */
+function macroCard(title,sub,lines,tag){
+  return `<div class="code">
+    <div class="bar"><span class="ttl"><b>${esc(title)}</b> ${sub?'· '+esc(sub):''}</span>
+      ${tag?`<span class="badge ${tag.cls}">${tag.t}</span>`:''}
+      <button class="cp">copy</button></div>
+    <pre>${lines.map(colorMacro).join("\n")}</pre></div>`;
+}
+function colorMacro(l){
+  l=esc(l);
+  // comment after |
+  l=l.replace(/\|(.*)$/,'<span class="cm">|$1</span>');
+  l=l.replace(/(\/[a-z]+)/g,'<span class="cmd">$1</span>');
+  return l;
+}
+
+/* ---------- Burns view ---------- */
+function renderBurns(){
+  const d=data();
+  $("#burnCards").innerHTML = d.chars.map(c=>`
+    <div class="card">
+      <h3><span style="color:${c.color}">●</span> ${esc(c.nm)} <span class="muted">· ${esc(c.cls)}</span>
+        <span class="tag">${roleLabel(c.role)}</span></h3>
+      <p class="muted" style="margin:0 0 8px">${esc(c.burnNote)}</p>
+      ${macroCard("F1 burn social","slot bound to ISBoxer Burn key",c.burn,{cls:team==="live"?"b-live":"b-tlp",t:team})}
+    </div>`).join("");
+  bindCopy();
+}
+
+/* ---------- Assist view ---------- */
+function renderAssist(){
+  const d=data();
+  $("#assistMacros").innerHTML = `<div class="grid g-2">`+ d.chars.filter(c=>c.assist).map(c=>
+    `<div>${macroCard(c.nm+" — ~ assist", c.cls, c.assist)}</div>`).join("") + `</div>`;
+  bindCopy();
+}
+
+/* ---------- Heal view ---------- */
+function renderHeal(){
+  const d=data();
+  const healers=d.chars.filter(c=>c.role==="heal"||c.panic);
+  $("#healMacros").innerHTML = `<div class="grid g-2">`+ healers.map(c=>
+    `<div>${macroCard(c.nm+" — F2 panic", c.cls, c.panic, {cls:c.role==='heal'?'b-tlp':'b-live',t:roleLabel(c.role)})}</div>`).join("") + `</div>`;
+  bindCopy();
+}
+
+/* ---------- Pull view ---------- */
+function renderPull(){
+  const d=data();
+  const pullers=d.chars.filter(c=>c.pull);
+  $("#pullMacros").innerHTML = pullers.length? `<div class="grid g-2">`+ pullers.map(c=>
+    `<div>${macroCard(c.nm+" — G pull", c.cls+" · puller", c.pull)}</div>`).join("")+`</div>`
+    : `<div class="detail-empty">No dedicated puller macro on this team view.</div>`;
+  bindCopy();
+}
+
+/* ---------- ISBoxer view ---------- */
+function renderISBoxer(){
+  $("#mappedKeys").innerHTML = MAPPED_KEYS.map(m=>`
+    <div class="card">
+      <h3><span class="kbd">${esc(m.phys)}</span> ${esc(m.title)}</h3>
+      <p class="muted" style="margin:0 0 4px">${esc(m.desc)}</p>
+      <div class="code"><div class="bar"><span class="ttl">ISBoxer Mapped Key</span><button class="cp">copy</button></div><pre>${m.code}</pre></div>
+    </div>`).join("");
+  $("#atgTable").innerHTML = ATGS.map(a=>`<tr><td><b>${esc(a.nm)}</b></td><td class="muted">${esc(a.mem)}</td><td class="muted">${esc(a.use)}</td></tr>`).join("");
+  bindCopy();
+}
+
+/* ---------- Macros view ---------- */
+function renderMacros(){
+  renderHotChips("#macroChars", renderMacroBody);
+  renderMacroBody();
+}
+function renderMacroBody(){
+  const c=cur();
+  const blocks=[];
+  if(c.assist) blocks.push(macroCard("~ Assist", c.cls, c.assist, {cls:"b-live",t:"broadcast"}));
+  blocks.push(macroCard("F1 Burn (staged)", c.cls, c.burn, {cls:"b-live",t:"burn"}));
+  if(c.panic) blocks.push(macroCard("F2 Panic", c.cls, c.panic, {cls:"b-live",t:"panic"}));
+  if(c.pull) blocks.push(macroCard("G Pull", c.cls, c.pull, {cls:"b-live",t:"pull"}));
+  $("#macroBody").innerHTML = `
+    <div class="card" style="margin-bottom:14px">
+      <h3><span style="color:${c.color}">●</span> ${esc(c.nm)} · ${esc(c.cls)} <span class="tag">${data().label}</span></h3>
+      <p class="muted" style="margin:0">${esc(c.burnNote)}</p>
+    </div>
+    <div class="grid g-2">${blocks.map(b=>`<div>${b}</div>`).join("")}</div>`;
+  bindCopy();
+}
+
+/* ---------- Gems view ---------- */
+function renderGems(){
+  renderHotChips("#gemChars", renderGemBody);
+  renderGemBody();
+}
+function renderGemBody(){
+  const c=cur();
+  const hasGems = c.gems.some(g=>g!=="—");
+  $("#gemBody").innerHTML = `
+    <div class="card" style="margin-bottom:14px">
+      <h3><span style="color:${c.color}">●</span> ${esc(c.nm)} · ${esc(c.cls)}</h3>
+      <p class="muted" style="margin:0 0 4px">${esc(c.spellNote)}</p>
+    </div>` +
+    (hasGems? `<div class="card"><div class="grid g-4">${c.gems.map((g,i)=>{
+      const empty=g==="—";
+      return `<div class="hb" style="cursor:default;min-height:54px;${empty?'opacity:.4':''}">
+        <div class="hk">Gem ${i+1}</div><div class="nm" style="font-size:11px">${esc(g.replace(/^\d+\s*/,''))}</div></div>`;
+    }).join("")}</div></div>`
+    : `<div class="detail-empty">${esc(c.cls)} is disc/AA based — no spell gems. See the note above for the broadcast-slot convention.</div>`);
+}
+
+/* ---------- Alerts ---------- */
+const ALERT_DEFS=[
+  {id:"named", b:"Named spawn alerts", s:"Audio trigger on spawn text, pop box to front", on:true},
+  {id:"proc",  b:"Proc notifications", s:"Distinct chime per class on key procs", on:true},
+  {id:"buff",  b:"Buff-fade tracking", s:"Audible cue when a buff wears off", on:true},
+  {id:"audio", b:"Master audio warnings", s:"Web-audio beeps for all alerts", on:true},
+  {id:"overlay", b:"Class-specific overlays", s:"Per-box status overlay on swap-bar", on:true},
+];
+let alertState={}; ALERT_DEFS.forEach(a=>alertState[a.id]=a.on);
+function renderAlertToggles(){
+  $("#alertToggles").innerHTML = ALERT_DEFS.map(a=>`
+    <div class="tg"><div class="txt"><b>${esc(a.b)}</b><span>${esc(a.s)}</span></div>
+      <div class="sw ${alertState[a.id]?'on':''}" data-id="${a.id}"></div></div>`).join("");
+  $$("#alertToggles .sw").forEach(sw=>sw.onclick=()=>{
+    const id=sw.dataset.id; alertState[id]=!alertState[id]; sw.classList.toggle("on",alertState[id]);
+    updateAudioState();
+  });
+}
+function updateAudioState(){
+  const on=alertState.audio;
+  $("#audioState").textContent="audio: "+(on?"on":"off");
+  $("#alertMini").textContent=on?"audio on":"audio off";
+}
+function beep(freq,dur){
+  if(!alertState.audio) return;
+  try{
+    const ac=beep.ac||(beep.ac=new (window.AudioContext||window.webkitAudioContext)());
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.frequency.value=freq;o.type="sine";o.connect(g);g.connect(ac.destination);
+    g.gain.setValueAtTime(.0001,ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(.18,ac.currentTime+.01);
+    g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+dur);
+    o.start();o.stop(ac.currentTime+dur);
+  }catch(e){}
+}
+function logLine(target,cls,txt){
+  const el=$(target); if(!el) return;
+  const t=new Date().toLocaleTimeString([], {hour12:false});
+  const div=document.createElement("div");
+  div.className="ln "+cls;
+  div.innerHTML=`<span class="t">${t}</span><span>${esc(txt)}</span>`;
+  el.insertBefore(div,el.firstChild);
+  while(el.children.length>40) el.removeChild(el.lastChild);
+}
+function pushAlert(cls,txt,freq){
+  logLine("#alertLog",cls,txt);
+  logLine("#dashLog",cls,txt);
+  beep(freq, .16);
+}
+const NAMEDS=["Vis'gar the Decayed","Overlord Mata Muram","Bretwockan","Sontalak","a shadowed reaver","Yael Thunderhoof"];
+function simNamed(){ if(!alertState.named) return toast("Named alerts are off");
+  pushAlert("named","◆ NAMED UP: "+NAMEDS[Math.floor(Math.random()*NAMEDS.length)]+" — "+cur().win,880); }
+function simProc(){ if(!alertState.proc) return toast("Proc alerts are off");
+  const c=cur(); pushAlert("proc","✦ Proc: "+c.cls+" "+(c.role==='heal'?'divine intervention':'weapon proc fired')+" — "+c.win,660); }
+function simBuff(){ if(!alertState.buff) return toast("Buff tracking is off");
+  pushAlert("buff","⟳ Buff faded: group Aego — re-fire F5",520); }
+
+/* ---------- copy + toast ---------- */
+function bindCopy(){
+  $$(".cp").forEach(b=>{
+    if(b._b) return; b._b=1;
+    b.onclick=()=>{
+      const pre=b.closest(".code").querySelector("pre");
+      const txt=pre.innerText;
+      navigator.clipboard&&navigator.clipboard.writeText(txt);
+      const o=b.textContent;b.textContent="copied ✓";b.style.color="var(--good)";
+      setTimeout(()=>{b.textContent=o;b.style.color="";},1200);
+    };
+  });
+}
+function toast(msg){
+  const t=document.createElement("div");t.className="toast";t.textContent=msg;
+  $("#toasts").appendChild(t);
+  setTimeout(()=>{t.style.opacity="0";t.style.transform="translateX(20px)";setTimeout(()=>t.remove(),250);},1800);
+}
+
+/* ---------- navigation ---------- */
+function show(view){
+  $$(".view").forEach(v=>v.classList.remove("on"));
+  $("#view-"+view).classList.add("on");
+  $$("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.view===view));
+  const r={dash:renderRoster,hotbuttons:renderHotbar,burns:renderBurns,assist:renderAssist,
+    heal:renderHeal,pull:renderPull,isboxer:renderISBoxer,macros:renderMacros,gems:renderGems}[view];
+  r&&r();
+}
+function selectChar(){
+  renderRoster();
+  // keep dependent views fresh if visible
+  if($("#view-hotbuttons").classList.contains("on")) renderHotbar();
+}
+
+/* ---------- team switch ---------- */
+function switchTeam(t){
+  team=t; sel=0;
+  $("#teamLabel").textContent=data().label;
+  $$("#teamToggle button").forEach(b=>{
+    const on=b.dataset.team===t; b.classList.toggle("on",on); b.classList.toggle("tlp",t==="tlp"&&on);
+  });
+  // re-render whatever's visible
+  const active=$(".view.on").id.replace("view-","");
+  show(active);
+}
+
+/* ---------- wire up ---------- */
+$$("#nav a").forEach(a=>a.onclick=()=>show(a.dataset.view));
+$$("#teamToggle button").forEach(b=>b.onclick=()=>switchTeam(b.dataset.team));
+$$("[data-jump]").forEach(a=>a.onclick=e=>{e.preventDefault();show(a.dataset.jump);});
+$("#simNamed").onclick=simNamed; $("#simProc").onclick=simProc; $("#simBuff").onclick=simBuff;
+
+renderAlertToggles(); updateAudioState();
+renderRoster();
+
+// ambient demo alerts so the dashboard feels live
+setTimeout(()=>pushAlert("buff","⟳ Buff faded: Spiritual Vigor — re-fire F5",520),2500);
+setTimeout(()=>{ if(alertState.named) pushAlert("named","◆ NAMED UP: a shadowed reaver — "+data().chars[0].win,880); },6000);
+</script>
+</body>
+</html>
