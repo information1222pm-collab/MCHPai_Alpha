@@ -19,11 +19,21 @@ editing, no folder hunting, no prior MQ2 knowledge needed.
 - **MacroQuest macros** (`macros/`) — for emu servers, turns your whole burn into
   one key. Uses the **free, open-source** MacroQuest (you never pay anyone).
 
-**C. A dark-blue raid HUD** (`ui/index.html`)
+**C. A medieval dark-blue raid HUD** (`ui/index.html`)
 - Animated **cooldown rings** so you never sit on a ready Rogue's Fury or Spire.
 - A **real DPS meter**: drag in your `eqlog.txt` and it shows your actual DPS,
   crit rate, per-ability breakdown, and your Backstab/Assassinate share (with a
   flag if your positioning is costing you damage).
+
+**C2. A before/after DPS comparison** (`ui/compare.html`)
+- Shows what each fix is worth (positioning, burns, poisons, gear, haste…) and
+  the total projected uplift. Then **prove it**: drop in an old log and a new log
+  and it measures your real before → after change.
+
+**C3. A fully optimized Shaman** (`macros/ShamanAssist.mac` + `docs/10`)
+- Drop it on the Shaman and it runs itself: emergency heals → slow → malo →
+  haste/buffs → cannibalize → bonus DoT/nuke DPS. Keeps you alive and hitting
+  harder, and adds a second damage column to the box's parse.
 
 **D. A printable cheat card** (`ui/cheatsheet.html`)
 One page, the whole rotation + permanent-gains checklist. Print it, keep it by

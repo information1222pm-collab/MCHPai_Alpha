@@ -1,0 +1,176 @@
+| =====================================================================
+|  ShamanAssist.mac  -  hands-free Shaman support + DPS  (SoR, 2-box)
+| ---------------------------------------------------------------------
+|  RUN THIS ON THE SHAMAN. It turns your box Shaman into a self-running
+|  support that keeps the Rogue alive and hitting harder, then adds its
+|  own DPS when there's spare mana:
+|     * Heals the Rogue (and tank) below a threshold
+|     * Slows + Maloes the kill target (assisted off the Rogue)
+|     * Keeps haste/buffs up on the Rogue
+|     * Cannibalizes HP->mana so it never goes OOM
+|     * (optional) Lands DoTs + a nuke for bonus parse DPS
+|
+|  Priority each tick:  EMERGENCY HEAL > SLOW > MALO > BUFFS > CANNI > DPS
+|
+|  Bind it (on the Shaman):  /bind LeftAlt+9 /mac ShamanAssist
+|  Stop:                     /endmacro
+|
+|  >>> Set the CONFIGURE ME block to YOUR spell names (highest rank owned)
+|      and the Rogue/Tank names. Wrong/owned-later names are skipped safely.
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    /declare RogueName   string outer Cloudi          | who you assist/heal/buff
+    /declare TankName    string outer                 | extra heal target (blank = none)
+
+    | --- Heals (use your highest ranks) ---
+    /declare FastHeal    string outer Chloroblast            | quick single-target heal
+    /declare GroupHeal   string outer Spirissist             | group heal (blank to skip)
+    /declare HoT         string outer Breath of Trushar      | heal-over-time (blank to skip)
+    /declare HealPct     int    outer 70                      | heal a target below this %
+    /declare GroupPct    int    outer 60                      | group-heal if 2+ below this %
+
+    | --- Debuffs on the kill target ---
+    /declare SlowSpell   string outer Turgur's Swarm
+    /declare MaloSpell   string outer Malosenia
+
+    | --- Buffs to keep on the Rogue (blank any you don't use) ---
+    /declare Haste       string outer Talisman of the Tribe
+    /declare Buff1       string outer Spiritual Vigor         | HP/AC buff
+    /declare Buff2       string outer                         | spare slot
+
+    | --- Sustain ---
+    /declare CanniAA     bool   outer TRUE                    | use Cannibalization AA
+    /declare CanniSpell  string outer Cannibalization         | fallback spell if no AA
+    /declare CanniMana   int    outer 45                      | canni when mana below this %
+    /declare CanniSafeHP int    outer 55                      | ...and my HP above this %
+
+    | --- Optional DPS (bonus parse when mana is healthy) ---
+    /declare DoDPS       bool   outer TRUE
+    /declare DpsManaMin  int    outer 55                      | only DPS above this mana %
+    /declare DoT1        string outer Curse of Sisslak
+    /declare DoT2        string outer Bite of the Shissar
+    /declare Nuke        string outer Spear of Torment        | blank to skip
+    | ----------------------- END CONFIG -----------------------------
+
+    /echo \ag[ShamanAssist] Running. Healing \ay${RogueName}\ag. /endmacro to stop.
+    /squelch /assist off
+
+    :loop
+    /doevents
+    /if (${Me.Casting.ID}) {
+        /delay 2
+        /goto :loop
+    }
+
+    | ---------- 1) EMERGENCY HEALS (highest priority) ----------
+    /declare lowCount int local 0
+    /if (${Spawn[pc ${RogueName}].ID} && ${Spawn[pc ${RogueName}].PctHPs} < ${GroupPct}) /varcalc lowCount ${lowCount}+1
+    /if (${TankName.Length} && ${Spawn[pc ${TankName}].ID} && ${Spawn[pc ${TankName}].PctHPs} < ${GroupPct}) /varcalc lowCount ${lowCount}+1
+
+    /if (${GroupHeal.Length} && ${lowCount} >= 2 && ${Me.SpellReady[${GroupHeal}]}) {
+        /call Cast "${GroupHeal}" ${Me.ID}
+        /goto :loop
+    }
+    /if (${Spawn[pc ${RogueName}].ID} && ${Spawn[pc ${RogueName}].PctHPs} < ${HealPct}) {
+        /call Cast "${FastHeal}" ${Spawn[pc ${RogueName}].ID}
+        /goto :loop
+    }
+    /if (${TankName.Length} && ${Spawn[pc ${TankName}].ID} && ${Spawn[pc ${TankName}].PctHPs} < ${HealPct}) {
+        /call Cast "${FastHeal}" ${Spawn[pc ${TankName}].ID}
+        /goto :loop
+    }
+    /if (${HoT.Length} && ${Spawn[pc ${RogueName}].ID} && ${Spawn[pc ${RogueName}].PctHPs} < 90 && !${Spawn[pc ${RogueName}].Buff[${HoT}].ID} && ${Me.SpellReady[${HoT}]}) {
+        /call Cast "${HoT}" ${Spawn[pc ${RogueName}].ID}
+        /goto :loop
+    }
+
+    | ---------- Acquire the kill target off the Rogue ----------
+    /assist ${RogueName}
+    /delay 3
+    /declare haveMob bool local FALSE
+    /if (${Target.ID} && ${Target.Type.Equal[NPC]} && ${Target.PctHPs} > 0) /varset haveMob TRUE
+
+    /if (${haveMob}) {
+        | ---------- 2) SLOW ----------
+        /if (${SlowSpell.Length} && !${Target.Slowed} && !${Target.Beneficial} && ${Me.SpellReady[${SlowSpell}]}) {
+            /call Cast "${SlowSpell}" ${Target.ID}
+            /goto :loop
+        }
+        | ---------- 3) MALO ----------
+        /if (${MaloSpell.Length} && !${Target.Maloed} && ${Me.SpellReady[${MaloSpell}]}) {
+            /call Cast "${MaloSpell}" ${Target.ID}
+            /goto :loop
+        }
+    }
+
+    | ---------- 4) MAINTAIN BUFFS on the Rogue ----------
+    /if (${Spawn[pc ${RogueName}].ID}) {
+        /if (${Haste.Length} && !${Spawn[pc ${RogueName}].Buff[${Haste}].ID} && ${Me.SpellReady[${Haste}]}) {
+            /call Cast "${Haste}" ${Spawn[pc ${RogueName}].ID}
+            /goto :loop
+        }
+        /if (${Buff1.Length} && !${Spawn[pc ${RogueName}].Buff[${Buff1}].ID} && ${Me.SpellReady[${Buff1}]}) {
+            /call Cast "${Buff1}" ${Spawn[pc ${RogueName}].ID}
+            /goto :loop
+        }
+        /if (${Buff2.Length} && !${Spawn[pc ${RogueName}].Buff[${Buff2}].ID} && ${Me.SpellReady[${Buff2}]}) {
+            /call Cast "${Buff2}" ${Spawn[pc ${RogueName}].ID}
+            /goto :loop
+        }
+    }
+
+    | ---------- 5) CANNIBALIZE (stay topped on mana) ----------
+    /if (${Me.PctMana} < ${CanniMana} && ${Me.PctHPs} > ${CanniSafeHP}) {
+        /if (${CanniAA} && ${Me.AltAbility[Cannibalization].ID} && ${Me.AltAbilityReady[Cannibalization]}) {
+            /alt activate ${Me.AltAbility[Cannibalization].ID}
+            /delay 8
+            /goto :loop
+        }
+        /if (${CanniSpell.Length} && ${Me.SpellReady[${CanniSpell}]}) {
+            /call Cast "${CanniSpell}" ${Me.ID}
+            /goto :loop
+        }
+    }
+
+    | ---------- 6) BONUS DPS (only when healthy on mana) ----------
+    /if (${DoDPS} && ${haveMob} && ${Me.PctMana} > ${DpsManaMin}) {
+        /if (${DoT1.Length} && !${Target.Buff[${DoT1}].ID} && ${Me.SpellReady[${DoT1}]}) {
+            /call Cast "${DoT1}" ${Target.ID}
+            /goto :loop
+        }
+        /if (${DoT2.Length} && !${Target.Buff[${DoT2}].ID} && ${Me.SpellReady[${DoT2}]}) {
+            /call Cast "${DoT2}" ${Target.ID}
+            /goto :loop
+        }
+        /if (${Nuke.Length} && ${Me.SpellReady[${Nuke}]}) {
+            /call Cast "${Nuke}" ${Target.ID}
+            /goto :loop
+        }
+    }
+
+    /delay 5
+    /goto :loop
+/return
+
+| --------------------------------------------------------------------
+| Cast <spell> on <target id>. Uses MQ2Cast (/casting) if loaded for
+| clean success/fail handling; otherwise falls back to /cast + wait.
+Sub Cast(string SpellName, int TargetID)
+    /if (!${SpellName.Length}) /return
+    | NOTE: the spell must be MEMMED in a gem to cast. Keep your support set
+    | memmed (see docs/10). If it isn't memmed, the cast just fails harmlessly.
+    /if (${TargetID} && ${Target.ID} != ${TargetID}) {
+        /target id ${TargetID}
+        /delay 5 ${Target.ID}==${TargetID}
+    }
+    /if (${Plugin[MQ2Cast].Name.Length}) {
+        /casting "${SpellName}" -maxtries|2
+    } else {
+        /cast "${SpellName}"
+        /delay 8
+        /delay 40 !${Me.Casting.ID}
+    }
+    /delay 2
+/return

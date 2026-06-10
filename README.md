@@ -32,9 +32,9 @@ busywork so you can focus on staying behind the target and not dying.
 | **[`setup.html`](setup.html)** | Click-through setup wizard; auto-fills every macro/hotkey with your names | …the painless, no-knowledge-needed start |
 | **[`HANDOFF.md`](HANDOFF.md)** | One-page client delivery note + the 2-min "tune it to my character" step | …the short version of what you got & how to start |
 | **[`docs/`](docs/)** | Step-by-step guides written for a returning player | …to understand *why*, not just *what* |
-| **[`macros/`](macros/)** | MQ2 macros — one-key burn, sustained assist, box driver, **+ `ExportAbilities`** | …to press one key and do damage |
+| **[`macros/`](macros/)** | MQ2 macros — one-key burn, sustained assist, box driver, **`ShamanAssist`** (hands-free Shaman), **`ExportAbilities`** | …to press one key and do damage |
 | **[`hotkeys/`](hotkeys/)** | Copy-paste in-game social hotkeys (no MQ2 needed) | …a setup that works *today* before you learn MQ2 |
-| **[`ui/`](ui/)** | Dark-blue raid HUD with cooldown rings + **a real `eqlog.txt` DPS parser**, and a printable **[cheat card](ui/cheatsheet.html)** | …live DPS numbers + a rotation card by the keyboard |
+| **[`ui/`](ui/)** | **Medieval dark-blue** raid HUD with cooldown rings + a real `eqlog.txt` DPS parser, a **[before/after comparison](ui/compare.html)**, and a printable **[cheat card](ui/cheatsheet.html)** | …live DPS, proof of the gains, and a rotation card by the keyboard |
 
 ### The two things that make this *yours* (not a generic guide)
 
