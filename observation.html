@@ -244,6 +244,12 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;text-s
 section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgba(86,240,192,.08)}
 .up,.chg.up{text-shadow:0 0 9px rgba(52,236,170,.18)}.down,.chg.down{text-shadow:0 0 9px rgba(255,106,82,.16)}
 @media(prefers-reduced-motion:reduce){.appbar h1,.heroval,.vtitle,.hh,#overlay h3,.chip .v,.dstat .v{animation:none}}
+/* === streaming feed text: new rows type themselves in, char by char, the way a reply streams === */
+.ch{display:inline-block;opacity:0;filter:blur(5px);transform:translateY(2px);animation:chin .24s cubic-bezier(.2,.75,.25,1) both;will-change:opacity,filter,transform}
+@keyframes chin{0%{opacity:0;filter:blur(5px);transform:translateY(2px)}55%{opacity:1;filter:blur(0)}100%{opacity:1;filter:none;transform:none}}
+.caret{display:inline-block;width:2px;height:.92em;margin-left:2px;vertical-align:-1px;border-radius:1px;background:linear-gradient(180deg,var(--ice),var(--mint));box-shadow:0 0 6px rgba(86,240,192,.7);opacity:0;animation:caret 1.15s ease forwards;pointer-events:none}
+@keyframes caret{0%{opacity:0}6%{opacity:1}40%{opacity:.15}54%{opacity:1}84%{opacity:1}100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.ch{animation:none;opacity:1;filter:none;transform:none}.caret{display:none}}
 </style>
 </head>
 <body>
@@ -1192,10 +1198,11 @@ function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlpha
  const scored=tv().filter(T=>now()-T.lastSeen<90&&T.buyers.size>=4&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,A:alphaCached(T)})).filter(x=>x.A.score>=Math.max(30,thr-25)).sort((a,b)=>b.A.score-a.A.score).slice(0,8);
  const graded=[...walletAlpha.values()].filter(w=>w.n>=2);const proven=graded.filter(w=>w.a>0).length;
  const st=$('alpha_stat');if(st)st.innerHTML=`<div class=row><span class=muted>graded wallets · proven (+ROI)</span><span>${graded.length} · <span class=up>${proven}</span></span></div><div class=row><span class=muted>entry bar · firing now</span><span>alpha ≥ ${thr} · <span class="${scored.filter(x=>x.A.score>=thr).length?'up':''}">${scored.filter(x=>x.A.score>=thr).length}</span></span></div>`;
- el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class="item clickable" onclick="openToken('${T.mint}')">
+ el.innerHTML=scored.map(({T,A})=>{const fire=A.score>=thr;return `<div class="item clickable" data-k="${T.mint}" onclick="openToken('${T.mint}')">
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${fire?'var(--up)':'#f5a623'}>${A.score.toFixed(0)}</span>${fire?' <span class="tag" style=color:var(--up)>🎯 buy</span>':''}</div>
    <div class=sub>smart ${(A.cSmart*100|0)} · accel ${(A.cAccel*100|0)} · flow ${(A.cFlow*100|0)} · liq ${(A.cLiq*100|0)} · org ${(A.cOrg*100|0)}</div></div>
-  <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';}
+  <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';
+ streamFeed(el);}
 const SIG_ICON={whale:'🐋',smart:'🧠',copy:'👥',volsurge:'📈',breakout:'🚀',alpha:'🎯',trend:'⚡'};
 const DEXSHORT=d=>(d||'?').replace('raydium_','ray-').replace('pumpfun','pump').replace('pumpswap','pswap').replace('meteora_','met-').replace('orca_whirlpool','orca');
 function renderPulse(){const el=$('p_tape');if(!el)return;
@@ -1322,12 +1329,44 @@ function renderQuant(){const el=$('quant_body');if(!el)return;const N=now(),act=
    +(disc?vcard('Discovered feature weights','what the model keys on',radar(DISC_FEATS,disc.w.map(Math.abs),200)):'')
    +(aucT.length>1?vcard('Model AUC trend','learning curve · >0.6 predictive',rhChart(aucT,150,aucT[aucT.length-1]>=0.6,{fmt:x=>(+x).toFixed(2)})):'')
   +'</div>';}
+/* ===== streamFeed: type newly-arrived feed rows in, char-by-char, like a streaming reply.
+   Diffs each container's rows by data-k so only NEW rows animate; old rows stay put. ===== */
+function typeLine(line,ctr,base){
+ const walk=node=>{[...node.childNodes].forEach(n=>{
+  if(n.nodeType===3){
+   const frag=document.createDocumentFragment();
+   for(const ch of n.nodeValue){
+    if(ch===' '||ch==='\n'){frag.appendChild(document.createTextNode(ch));continue;}
+    const s=document.createElement('span');s.className='ch';s.textContent=ch;
+    s.style.animationDelay=(base+(ctr.i++)*13)+'ms';frag.appendChild(s);
+   }
+   node.replaceChild(frag,n);
+  }else if(n.nodeType===1&&!n.classList.contains('ch')){walk(n);}
+ });};
+ walk(line);
+}
+function streamFeed(el){
+ if(!el||reduce)return;
+ const prev=el._seen,first=prev===undefined,seen=first?new Set():prev,next=new Set();let fresh=0;
+ el.querySelectorAll('.item[data-k]').forEach((item,idx)=>{
+  const k=item.getAttribute('data-k');next.add(k);
+  if(seen.has(k)||(first&&idx>=10)||fresh>=12)return;   // already shown / cap page-load / cap work
+  const nm=item.querySelector('.nm'),sub=item.querySelector('.sub'),ctr={i:0},base=fresh*70;
+  if(nm)typeLine(nm,ctr,base);
+  const caretAt=base+ctr.i*13;
+  if(sub)typeLine(sub,ctr,base);
+  if(nm){const c=document.createElement('span');c.className='caret';c.style.animationDelay=caretAt+'ms';nm.appendChild(c);}
+  fresh++;
+ });
+ el._seen=next;
+}
 function renderSignals(){const el=$('sig_feed');if(!el)return;
  const SR=findSignalStrat(),srb=$('sigresp_btn');if(srb){const on=SR&&SR.on;srb.textContent=on?'📡 Responding ON':'📡 Respond to all';srb.className='mini'+(on?' on':'');}
  const cc=$('sig_counts');if(cc)cc.innerHTML=Object.keys(SIG_ICON).filter(k=>sigCounts[k]).map(k=>`<span class="tag clickable" onclick="openDetail('signal','${k}')">${SIG_ICON[k]} ${k} <b>${sigCounts[k]}</b> ›</span>`).join(' ')||'<span class=muted>warming up… signals appear as the stream flows</span>';
  el.innerHTML=signalFeed.slice(0,40).map(s=>{const T=tokens.get(s.mint),mult=T?T.maxMult.toFixed(1)+'×':'',up=T&&pct(T)>=0;
   const meta=[s.sol?('buy '+s.sol+'◎'):'',s.q?('walletQ '+s.q):'',s.score?('alpha '+(s.score|0)):'',s.x?(s.x+'× breakout'):''].filter(Boolean).join(' · ');
-  return `<div class="item clickable" onclick="openToken('${s.mint}')"><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';}
+  return `<div class="item clickable" data-k="${s.type}|${s.mint}|${s.ts}" onclick="openToken('${s.mint}')"><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';
+ streamFeed(el);}
 function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findDiscStrat();
  const sc=$('disc_scatter');if(sc){const pts=tv().filter(T=>(now()-T.firstSeen)>60&&T.maxMult>1&&T.firstPrice>0).slice(-400).map(T=>({x:alphaCached(T).score,y:T.maxMult,up:T.maxMult>=1.5,mint:T.mint}));sc.innerHTML=scatter(pts,'alpha score →','peak × (log)',160,true);}   // always: validates score→outcome
  const ab=$('disc_auto');if(ab){ab.textContent=autoDiscover?'auto ●':'auto ○';ab.className='mini'+(autoDiscover?' on':'');}
@@ -1345,11 +1384,12 @@ function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findD
  const thr=(DS&&DS.params.discMin)||55;
  $('disc_live').innerHTML=pred?(cand.map(({T,p})=>`<div class="item clickable" onclick="openToken('${T.mint}')"><div><div class=nm>${short(T.mint)} <span class=tag style=color:${p*100>=thr?'var(--up)':'#f5a623'}>${(p*100|0)}%</span>${p*100>=thr?' <span class="tag" style=color:var(--up)>🧬 buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)}</div></div><div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div></div></div>`).join('')||'<div class=ctr>no live matches…</div>'):'<div class=ctr>model not predictive yet — gathering data</div>';}
 function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35&&now()-x.T.lastSeen<300).sort((a,b)=>b.s-a.s).slice(0,10);
- $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class="item clickable" onclick="openToken('${T.mint}')">
+ $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class="item clickable" data-k="${T.mint}" onclick="openToken('${T.mint}')">
   <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=50?'#f5a623':'#8b9197'}>${s.toFixed(0)}</span></div>
   <div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div>
   <div class=mid>${spark(T.prices,up)}</div>
   <div class=rt><div class="badge ${up?'up':'down'}">${T.maxMult.toFixed(1)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning for setups…</div>';
+ streamFeed($('opps'));
  const cats={};tv().forEach(T=>{const c=category(T);cats[c]=(cats[c]||0)+1;});const heat=(cats.heating||0)+(cats.fresh||0),cold=(cats.dumping||0)+(cats.quiet||0);
  $('regime').innerHTML=`<span class="${heat>=cold?'up':'down'}">${heat>=cold?'RISK-ON':'RISK-OFF'}</span> <span class=muted>(${heat} hot / ${cold} cold)</span>`;}
 function renderDist(){$('ch_multhist').innerHTML=histogram(tv().map(T=>T.maxMult),'#00c805');$('ch_volhist').innerHTML=histogram(tv().map(T=>T.vol).filter(v=>v>0),'#5aa9ff');}
