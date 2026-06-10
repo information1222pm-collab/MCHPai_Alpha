@@ -1,0 +1,112 @@
+| =====================================================================
+|  RogueAssist.mac  -  Cloudi's sustained DPS "spam key"  (SoR)
+| ---------------------------------------------------------------------
+|  The set-and-forget loop that keeps you doing damage:
+|    * Assists your Main Assist and locks onto the kill target
+|    * Re-asserts /attack ON after every swap (fixes the #1 hidden DPS leak)
+|    * Stays behind the mob (if MQ2MoveUtils is loaded)
+|    * Keeps an offensive DISCIPLINE running at all times (hand-off chain)
+|    * Spams Backstab on cooldown
+|    * Keeps your debuff (Ligament Slice) refreshed
+|
+|  Run it once and leave it:   /bind LeftAlt+2 /mac RogueAssist
+|  Stop with:                  /endmacro       (LeftAlt+0 if you bound it)
+|
+|  >>> EDIT THE "CONFIGURE ME" BLOCK to match your names + Main Assist.
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    | Name of your Main Assist (tank/MA). Boxed solo? set to your own name
+    | or leave blank to just use your current target.
+    /declare MainAssist      string outer
+
+    | Offensive disc hand-off chain (highest rank you own; biggest first).
+    | We keep ONE running at all times, cycling to the next ready one.
+    /declare Disc1           string outer Frenzied Stabbing Discipline
+    /declare Disc2           string outer Executioner's Discipline
+    /declare Disc3           string outer Knifeplay Discipline
+    /declare Disc4           string outer Razor's Edge Discipline
+    /declare Disc5           string outer Arcworker Discipline
+
+    | Debuff to keep refreshed on the target
+    /declare Debuff          string outer Ligament Slice
+
+    /declare StickBehind     bool   outer TRUE
+    | ----------------------- END CONFIG -----------------------------
+
+    /echo \ag[RogueAssist] Sustained DPS loop running. /endmacro to stop.
+
+    :loop
+    /doevents
+
+    | --- Acquire / refresh the kill target via the Main Assist ---
+    /if (${MainAssist.Length} && ${Spawn[pc ${MainAssist}].ID}) {
+        /if (${Spawn[pc ${MainAssist}].Dead}) {
+            /delay 5
+            /goto :loop
+        }
+        /assist ${MainAssist}
+        /delay 3
+    }
+
+    | --- Only act on a real, attackable mob ---
+    /if (!${Target.ID} || ${Target.Type.Equal[PC]} || ${Target.Type.Equal[Corpse]}) {
+        /delay 5
+        /goto :loop
+    }
+    /if (${Target.PctHPs} <= 0) {
+        /delay 5
+        /goto :loop
+    }
+
+    | --- Stay behind + keep swinging (the leak-proofing) ---
+    /if (${StickBehind} && ${Plugin[MQ2MoveUtils].Name.Length}) {
+        /if (!${Stick.Active}) /stick 12 behind
+    }
+    /if (!${Me.Combat}) /attack on
+
+    | --- Keep ONE offensive disc running; start the next ready one if none ---
+    /if (!${Me.ActiveDisc.ID}) {
+        /call StartFirstReadyDisc
+    }
+
+    | --- Refresh debuff if it's not on the target ---
+    /if (${Me.AltAbility[${Debuff}].ID} && ${Me.AltAbilityReady[${Debuff}]}) {
+        /if (!${Target.FindBuff[${Debuff}].ID}) {
+            /alt activate ${Me.AltAbility[${Debuff}].ID}
+            /delay 4
+        }
+    }
+
+    | --- Backstab on cooldown ---
+    /if (${Me.AbilityReady[Backstab]}) {
+        /doability Backstab
+    }
+
+    /delay 5
+    /goto :loop
+/return
+
+| --------------------------------------------------------------------
+| Fire the first disc in the chain that is owned + ready.
+Sub StartFirstReadyDisc
+    /call TryDisc "${Disc1}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc2}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc3}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc4}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc5}"
+/return
+
+Sub TryDisc(string Name)
+    /if (!${Name.Length}) /return skip
+    /if (${Me.CombatAbility[${Name}].ID} && ${Me.CombatAbilityReady[${Name}]}) {
+        /disc ${Name}
+        /delay 5
+        /return done
+    }
+/return skip

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cloudi · Rogue DPS HUD — Shattering of Ro</title>
+<style>
+  /* ===================================================================
+     THEME: Dark Blue · Rogue · Raid-Oriented · Minimalist
+     Tuned for an ultrawide second window at small–medium scale.
+     =================================================================== */
+  :root{
+    --bg:#070b14;            /* near-black navy */
+    --panel:#0c1322;         /* panel base */
+    --panel-2:#111b30;       /* raised panel */
+    --edge:#1b2c49;          /* steel edge */
+    --ink:#dce6f5;           /* primary text */
+    --muted:#7f93b3;         /* secondary text */
+    --accent:#3f7cff;        /* electric blue */
+    --accent-dim:#22467f;
+    --rogue:#9aa7ff;         /* cold steel/violet rogue tint */
+    --good:#39d98a;
+    --warn:#ffcc55;
+    --bad:#ff5d6c;
+    --ready:#4cd2ff;
+    --ring-track:#16233c;
+    --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #0e1b33 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #10172b 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--font);
+    font-size:14px;
+    letter-spacing:.2px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    max-width:2000px;margin:0 auto;padding:14px 18px;
+    display:grid;gap:14px;
+    grid-template-columns: 320px 1fr 360px;   /* ultrawide 3-column */
+    grid-template-rows:auto 1fr;
+    grid-template-areas:
+      "brand brand brand"
+      "left  mid   right";
+    min-height:100vh;
+  }
+  @media (max-width:1300px){
+    .wrap{grid-template-columns:1fr;grid-template-areas:"brand" "left" "mid" "right";}
+  }
+
+  /* --- top brand strip --- */
+  .brand{
+    grid-area:brand;display:flex;align-items:center;gap:14px;
+    padding:10px 16px;border:1px solid var(--edge);border-radius:12px;
+    background:linear-gradient(90deg,var(--panel-2),var(--panel));
+  }
+  .dagger{font-size:22px;filter:drop-shadow(0 0 6px var(--accent))}
+  .brand h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.6px}
+  .brand .sub{color:var(--muted);font-size:12px}
+  .brand .spacer{flex:1}
+  .pill{
+    border:1px solid var(--edge);border-radius:999px;padding:4px 12px;
+    color:var(--rogue);font-size:12px;background:#0a1222;
+  }
+  .pill b{color:var(--ink)}
+
+  .panel{
+    border:1px solid var(--edge);border-radius:12px;background:var(--panel);
+    box-shadow:0 6px 20px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.02);
+  }
+  .panel h2{
+    margin:0;padding:11px 14px;font-size:12px;font-weight:600;
+    text-transform:uppercase;letter-spacing:1.4px;color:var(--muted);
+    border-bottom:1px solid var(--edge);display:flex;align-items:center;gap:8px;
+  }
+  .panel h2 .tag{margin-left:auto;color:var(--accent);font-size:11px}
+  .body{padding:14px}
+
+  .left{grid-area:left;display:flex;flex-direction:column;gap:14px}
+  .mid{grid-area:mid;display:flex;flex-direction:column;gap:14px}
+  .right{grid-area:right;display:flex;flex-direction:column;gap:14px}
+
+  /* --- target / status --- */
+  .stat-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--edge);font-size:13px}
+  .stat-row:last-child{border-bottom:0}
+  .stat-row .k{color:var(--muted)}
+  .stat-row .v{color:var(--ink);font-variant-numeric:tabular-nums}
+  .hpbar{height:10px;border-radius:6px;background:var(--ring-track);overflow:hidden;margin-top:6px;border:1px solid var(--edge)}
+  .hpbar > i{display:block;height:100%;background:linear-gradient(90deg,#ff5d6c,#ff9a3c);transition:width .25s}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dot.on{background:var(--good);box-shadow:0 0 8px var(--good)}
+  .dot.off{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+  .dot.idle{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+
+  /* --- cooldown grid --- */
+  .cd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px}
+  .cd{
+    position:relative;border:1px solid var(--edge);border-radius:12px;
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    padding:10px 8px 9px;text-align:center;overflow:hidden;
+  }
+  .cd .ring{display:block;margin:0 auto 6px}
+  .cd .name{font-size:11px;color:var(--ink);line-height:1.15;min-height:26px;display:flex;align-items:center;justify-content:center}
+  .cd .time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .cd.ready{border-color:var(--ready);box-shadow:0 0 0 1px var(--ready),0 0 16px rgba(76,210,255,.25)}
+  .cd.ready .time{color:var(--ready);font-weight:700;letter-spacing:.5px}
+  .cd.ready::after{
+    content:"";position:absolute;inset:0;border-radius:12px;
+    background:radial-gradient(120px 60px at 50% 120%, rgba(76,210,255,.22), transparent 70%);
+    animation:pulse 1.6s ease-in-out infinite;pointer-events:none;
+  }
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:.9}}
+  .ring circle{fill:none;stroke-width:6;transform:rotate(-90deg);transform-origin:50% 50%}
+  .ring .track{stroke:var(--ring-track)}
+  .ring .prog{stroke:var(--accent);transition:stroke-dashoffset .25s linear}
+  .ring.rdy .prog{stroke:var(--ready)}
+  .ring text{fill:var(--ink);font-size:13px;font-weight:600}
+
+  /* --- dps meter --- */
+  .dps-big{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+  .dps-big .num{font-size:34px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(63,124,255,.5)}
+  .dps-big .unit{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px}
+  .meter-row{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:12px}
+  .meter-row .who{width:78px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meter-row .who.me{color:var(--rogue);font-weight:700}
+  .meter-row .track{flex:1;height:14px;background:var(--ring-track);border-radius:7px;border:1px solid var(--edge);overflow:hidden}
+  .meter-row .track > i{display:block;height:100%;border-radius:7px;transition:width .4s}
+  .meter-row .val{width:64px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+  .bar-me{background:linear-gradient(90deg,var(--accent-dim),var(--accent))}
+  .bar-o{background:linear-gradient(90deg,#1d2d4d,#33507f)}
+
+  .breakdown{margin-top:10px;border-top:1px solid var(--edge);padding-top:10px}
+  .breakdown .b-row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px}
+  .breakdown .b-row .lbl{width:96px;color:var(--muted)}
+  .breakdown .b-row .bar{flex:1;height:8px;background:var(--ring-track);border-radius:5px;overflow:hidden}
+  .breakdown .b-row .bar>i{display:block;height:100%;background:linear-gradient(90deg,#2a4a86,var(--rogue))}
+  .breakdown .b-row .pc{width:42px;text-align:right;color:var(--ink)}
+
+  .hint{color:var(--muted);font-size:11px;line-height:1.5;margin-top:10px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin-top:4px}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .footer{grid-column:1/-1;color:var(--muted);font-size:11px;text-align:center;padding:6px}
+  .demo{color:var(--warn)}
+  .btnbar{display:flex;gap:8px;margin-top:10px}
+  .btn{cursor:pointer;border:1px solid var(--edge);background:var(--panel-2);color:var(--ink);
+       border-radius:8px;padding:7px 12px;font-size:12px}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.go{border-color:var(--ready);color:var(--ready)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===================== BRAND ===================== -->
+  <div class="brand">
+    <span class="dagger">🗡️</span>
+    <div>
+      <h1>CLOUDI · ROGUE DPS HUD</h1>
+      <div class="sub">Shattering of Ro · Lv 130 · Tunare · Rogue + Shaman box</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill">Mode: <b id="modeLabel">Sustained</b></span>
+    <span class="pill">Behind target: <b id="posLabel" style="color:var(--good)">YES</b></span>
+    <span class="pill">Parse: <b id="fightLabel">—</b></span>
+  </div>
+
+  <!-- ===================== LEFT: STATUS ===================== -->
+  <div class="left">
+    <div class="panel">
+      <h2>Target <span class="tag" id="tgtName">—</span></h2>
+      <div class="body">
+        <div class="stat-row"><span class="k">HP</span><span class="v" id="tgtHpPct">—</span></div>
+        <div class="hpbar"><i id="tgtHp" style="width:100%"></i></div>
+        <div class="stat-row"><span class="k">Slowed</span><span class="v" id="tgtSlow">—</span></div>
+        <div class="stat-row"><span class="k">Malo'd</span><span class="v" id="tgtMalo">—</span></div>
+        <div class="stat-row"><span class="k">Ligament Slice</span><span class="v" id="tgtDebuff">—</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Box &amp; State</h2>
+      <div class="body">
+        <div class="stat-row"><span class="k"><span class="dot on" id="dAtk"></span>Auto-Attack</span><span class="v" id="vAtk">ON</span></div>
+        <div class="stat-row"><span class="k"><span class="dot on" id="dDisc"></span>Offensive Disc</span><span class="v" id="vDisc">Running</span></div>
+        <div class="stat-row"><span class="k"><span class="dot on" id="dShaman"></span>Shaman</span><span class="v" id="vShaman">Assisting</span></div>
+        <div class="stat-row"><span class="k">Piercing weapon</span><span class="v" style="color:var(--good)">Equipped</span></div>
+        <div class="stat-row"><span class="k">Poisons</span><span class="v" style="color:var(--good)">Applied</span></div>
+        <div class="btnbar">
+          <button class="btn go" id="btnBurn">▶ BURN</button>
+          <button class="btn" id="btnSwap">⇄ Swap Target</button>
+        </div>
+        <div class="hint">These buttons drive the demo. In game, these are your
+          <b>RogueBurn</b> / <b>RogueAssist</b> keys.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MID: COOLDOWNS ===================== -->
+  <div class="mid">
+    <div class="panel" style="flex:1">
+      <h2>Burn Cooldowns <span class="tag">ready = lit blue · press it!</span></h2>
+      <div class="body">
+        <div class="cd-grid" id="cdGrid"><!-- rings injected by JS --></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--ready)"></span>Ready</span>
+          <span><span class="dot" style="background:var(--accent)"></span>On cooldown</span>
+          <span>Rings count down so you never sit on a ready burn.</span>
+        </div>
+        <div class="hint">Cooldown lengths are configured in the
+          <code>COOLDOWNS</code> array near the top of this file's script —
+          edit them to match your character (see docs/04).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== RIGHT: DPS METER ===================== -->
+  <div class="right">
+    <div class="panel">
+      <h2>DPS Meter <span class="tag demo" id="dpsTag">DEMO DATA</span></h2>
+      <div class="body">
+        <div class="dps-big"><span class="num" id="myDps">0</span><span class="unit">your dps</span></div>
+        <div id="meterRows"><!-- group rows injected --></div>
+
+        <div class="breakdown">
+          <div style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your damage breakdown</div>
+          <div id="breakdownRows"></div>
+        </div>
+
+        <div class="hint">
+          <span class="demo">Numbers here are simulated for layout.</span>
+          To go live, feed your parser output where the script says
+          <code>// LIVE DATA HOOK</code>. Keep GamParse as the source of truth
+          for serious parsing (docs/07).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Cloudi's Rogue DPS Package · dark-blue / minimalist / raid-oriented ·
+    <span class="demo">standalone demo — not connected to a live game</span>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIG — edit these to match your character. (docs/04)
+   "cd" = cooldown seconds (ballpark; confirm in-game).
+   ===================================================================== */
+const COOLDOWNS = [
+  { name:"Third Spire of the Rake", cd:450 },
+  { name:"Rogue's Fury",            cd:180 },
+  { name:"Twisted Chance",          cd:60  },
+  { name:"Frenzied Stabbing",       cd:210 },
+  { name:"Ligament Slice",          cd:18  },
+  { name:"Twisted Shank",           cd:90  },
+  { name:"Banestrike",              cd:120 },
+  { name:"Big Offensive Disc",      cd:72  },
+];
+
+/* Group/raid roster for the meter (your Rogue is flagged me:true). */
+const ROSTER = [
+  { who:"Cloudi", me:true,  base:[42000, 165000] },  // [sustained, burn] dps range
+  { who:"Berserk",          base:[40000, 150000] },
+  { who:"Wizard",           base:[30000, 210000] },
+  { who:"Monk",             base:[35000, 120000] },
+  { who:"Ranger",           base:[28000, 115000] },
+];
+
+/* Your damage sources (breakdown panel). */
+const SOURCES = [
+  { lbl:"Backstab",    w:34 },
+  { lbl:"Assassinate", w:22 },
+  { lbl:"Auto (1H)",   w:18 },
+  { lbl:"Disc procs",  w:14 },
+  { lbl:"Poisons",     w:7  },
+  { lbl:"Throwing",    w:5  },
+];
+
+/* ===================================================================== */
+const R = 26, CIRC = 2 * Math.PI * R;
+const cdGrid = document.getElementById('cdGrid');
+const state = COOLDOWNS.map(c => ({ ...c, remain: Math.random()*c.cd }));
+
+function ring(remain, cd){
+  const frac = Math.max(0, Math.min(1, remain/cd));
+  const off = CIRC * (1 - frac);
+  const rdy = remain<=0;
+  return `<svg class="ring ${rdy?'rdy':''}" width="64" height="64" viewBox="0 0 64 64">
+      <circle class="track" cx="32" cy="32" r="${R}"></circle>
+      <circle class="prog"  cx="32" cy="32" r="${R}"
+        stroke-dasharray="${CIRC.toFixed(1)}"
+        stroke-dashoffset="${rdy?CIRC.toFixed(1):off.toFixed(1)}"></circle>
+      <text x="32" y="37" text-anchor="middle">${rdy?'●':Math.ceil(remain)}</text>
+    </svg>`;
+}
+function fmt(s){ if(s<=0) return 'READY'; if(s>=60) return Math.floor(s/60)+'m'+String(Math.floor(s%60)).padStart(2,'0'); return Math.ceil(s)+'s'; }
+
+function renderCooldowns(){
+  cdGrid.innerHTML = state.map((c,i)=>`
+    <div class="cd ${c.remain<=0?'ready':''}" data-i="${i}">
+      ${ring(c.remain, c.cd)}
+      <div class="name">${c.name}</div>
+      <div class="time">${fmt(c.remain)}</div>
+    </div>`).join('');
+  // click a ready ring to "fire" it (demo)
+  cdGrid.querySelectorAll('.cd').forEach(el=>{
+    el.onclick = ()=>{ const i=+el.dataset.i; if(state[i].remain<=0){ state[i].remain=state[i].cd; renderCooldowns(); } };
+  });
+}
+
+/* ---- DPS meter (DEMO simulation) ---- */
+let burning = false, burnEnds = 0, myDps = 42000, fightSec = 0;
+function pick(arr){return arr[0] + Math.random()*(arr[1]-arr[0]);}
+
+function tickDps(){
+  fightSec++;
+  document.getElementById('fightLabel').textContent = fmt(fightSec).replace('READY','0s');
+  const rows = ROSTER.map(p=>{
+    const [lo,hi]=p.base;
+    const burnBoost = burning ? (0.55+Math.random()*0.45) : 0;     // burn pushes toward hi
+    let dps = lo + (hi-lo)*(burnBoost + (1-burnBoost)*Math.random()*0.35);
+    if(p.me) myDps = dps;
+    return { who:p.who, me:!!p.me, dps };
+  });
+  const max = Math.max(...rows.map(r=>r.dps));
+  rows.sort((a,b)=>b.dps-a.dps);
+  document.getElementById('myDps').textContent = Math.round(myDps).toLocaleString();
+  document.getElementById('meterRows').innerHTML = rows.map(r=>`
+    <div class="meter-row">
+      <span class="who ${r.me?'me':''}">${r.me?'▸ ':''}${r.who}</span>
+      <span class="track"><i class="${r.me?'bar-me':'bar-o'}" style="width:${(r.dps/max*100).toFixed(0)}%"></i></span>
+      <span class="val">${(r.dps/1000).toFixed(1)}k</span>
+    </div>`).join('');
+
+  // LIVE DATA HOOK:
+  // Replace the simulated `rows` above with real numbers parsed from your
+  // EQ log / GamParse export / an MQ2 parse plugin. Shape each entry as
+  // { who:"Name", me:bool, dps:Number } and the bars update automatically.
+
+  const tot = SOURCES.reduce((a,b)=>a+b.w,0);
+  document.getElementById('breakdownRows').innerHTML = SOURCES.map(s=>`
+    <div class="b-row"><span class="lbl">${s.lbl}</span>
+      <span class="bar"><i style="width:${(s.w/tot*100).toFixed(0)}%"></i></span>
+      <span class="pc">${(s.w/tot*100).toFixed(0)}%</span></div>`).join('');
+}
+
+/* ---- target / status sim ---- */
+let tgtHp = 100;
+function tickStatus(){
+  tgtHp -= burning ? 2.2 : 0.9;
+  if(tgtHp<=0){ tgtHp=100; document.getElementById('btnSwap').click(); }
+  document.getElementById('tgtHp').style.width = tgtHp+'%';
+  document.getElementById('tgtHpPct').textContent = tgtHp.toFixed(0)+'%';
+}
+const MOBS=["Ro'Shin Sandweaver","Sunscorched Behemoth","Avatar of Ro","Glassbone Reaver"];
+function setTarget(){
+  const n=MOBS[Math.floor(Math.random()*MOBS.length)];
+  document.getElementById('tgtName').textContent=n;
+  ['tgtSlow','tgtMalo','tgtDebuff'].forEach((id,k)=>{
+    const on = Math.random()>0.3;
+    const el=document.getElementById(id); el.textContent=on?'Yes':'—';
+    el.style.color = on? 'var(--good)':'var(--muted)';
+  });
+  tgtHp=100;
+}
+
+/* ---- master loop ---- */
+function loop(){
+  state.forEach(c=>{ if(c.remain>0) c.remain=Math.max(0,c.remain-1); });
+  if(burning && Date.now()>burnEnds){ burning=false; document.getElementById('modeLabel').textContent='Sustained'; }
+  renderCooldowns(); tickDps(); tickStatus();
+}
+document.getElementById('btnBurn').onclick=()=>{
+  // fire everything ready (demo) and enter burn mode
+  state.forEach(c=>{ if(c.remain<=0) c.remain=c.cd; });
+  burning=true; burnEnds=Date.now()+18000;
+  document.getElementById('modeLabel').textContent='BURNING';
+  renderCooldowns();
+};
+document.getElementById('btnSwap').onclick=setTarget;
+
+setTarget(); renderCooldowns(); tickDps();
+setInterval(loop, 1000);
+</script>
+</body>
+</html>

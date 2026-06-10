@@ -1,0 +1,113 @@
+| =====================================================================
+|  RogueBurn.mac  -  Cloudi's one-key Rogue burn  (Shattering of Ro)
+| ---------------------------------------------------------------------
+|  Fires your full burn stack in priority order, once, then ends.
+|  Bind it to a key:   /bind LeftAlt+1 /mac RogueBurn
+|
+|  HOW IT WORKS
+|    * Each ability is only fired IF you own it AND it's off cooldown.
+|    * Anything it can't find by name is silently skipped (nothing breaks),
+|      so a wrong/owned-later name just means that one line does nothing.
+|    * Discs: only ONE offensive disc runs at a time, so we fire the single
+|      biggest one. The hand-off to later discs is sustained by RogueAssist.
+|
+|  >>> EDIT THE "CONFIGURE ME" BLOCK BELOW to match the exact names in your
+|      AA window / Combat Abilities window. See docs/04 for how to confirm.
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    | --- Activated AAs (these STACK - fire them all). Use YOUR names. ---
+    /declare AA_Spire        string local Third Spire of the Rake
+    /declare AA_Fury         string local Rogue's Fury
+    /declare AA_Twisted      string local Twisted Chance
+    /declare AA_FrenzyAA     string local Frenzied Stabbing
+    /declare AA_Ligament     string local Ligament Slice
+    /declare AA_Shank        string local Twisted Shank
+    /declare AA_Bane         string local Banestrike
+    /declare AA_Envenom      string local Envenomed Blades
+    /declare AA_Rampage      string local Focused Rampage
+    /declare AA_Intensity    string local Intensity of the Resolute
+    /declare AA_Absorb       string local Absorbing Agent
+
+    | --- Your single biggest OFFENSIVE DISCIPLINE (only one runs at once) ---
+    /declare DISC_Big        string local Frenzied Stabbing Discipline
+
+    | --- Optional clicky burn item (epic-equiv / damage clicky). Blank = skip. ---
+    /declare ITEM_Clicky     string local
+
+    | --- Behavior knobs ---
+    /declare StickBehind     bool   local TRUE
+    | ----------------------- END CONFIG -----------------------------
+
+    /declare gcd int local 5
+
+    /if (!${Target.ID} || ${Target.Type.Equal[PC]}) {
+        /echo \ar[RogueBurn] No valid mob target - target something first.
+        /return
+    }
+
+    /echo \ag[RogueBurn] >>> BURNING <<<  Target: \ay${Target.CleanName}
+
+    | Get behind the mob and make sure we're swinging
+    /if (${StickBehind} && ${Plugin[MQ2MoveUtils].Name.Length}) /stick 12 behind
+    /attack on
+
+    | 1) Lead with the long crit buff so everything benefits
+    /call FireAA "${AA_Spire}"
+    | 2) Signature buff
+    /call FireAA "${AA_Fury}"
+    | 3) Biggest offensive disc
+    /call FireDisc "${DISC_Big}"
+    | 4) Open the synergy window
+    /call FireAA "${AA_Twisted}"
+    | 5) Debuff / damage-add
+    /call FireAA "${AA_Ligament}"
+    | 6) Everything else that's ready
+    /call FireAA "${AA_FrenzyAA}"
+    /call FireAA "${AA_Shank}"
+    /call FireAA "${AA_Bane}"
+    /call FireAA "${AA_Envenom}"
+    /call FireAA "${AA_Rampage}"
+    /call FireAA "${AA_Intensity}"
+    /call FireAA "${AA_Absorb}"
+
+    | 7) Clicky burn item, if configured
+    /if (${ITEM_Clicky.Length} && ${FindItem[=${ITEM_Clicky}].ID}) {
+        /useitem "${ITEM_Clicky}"
+        /delay ${gcd}
+    }
+
+    | Get a backstab out immediately; RogueAssist sustains the rest
+    /call Backstab
+
+    /echo \ag[RogueBurn] Burn dumped. Keep running RogueAssist for sustained DPS.
+/return
+
+| --------------------------------------------------------------------
+Sub FireAA(string Name)
+    /if (!${Name.Length}) /return
+    /if (${Me.AltAbility[${Name}].ID} && ${Me.AltAbilityReady[${Name}]}) {
+        /alt activate ${Me.AltAbility[${Name}].ID}
+        /echo \ao  fired AA: \aw${Name}
+        /delay 5
+    }
+/return
+
+| --------------------------------------------------------------------
+Sub FireDisc(string Name)
+    /if (!${Name.Length}) /return
+    /if (${Me.CombatAbility[${Name}].ID} && ${Me.CombatAbilityReady[${Name}]}) {
+        /disc ${Name}
+        /echo \ao  fired DISC: \aw${Name}
+        /delay 5
+    }
+/return
+
+| --------------------------------------------------------------------
+Sub Backstab
+    /if (${Me.AbilityReady[Backstab]}) {
+        /doability Backstab
+        /delay 3
+    }
+/return

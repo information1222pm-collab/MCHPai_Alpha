@@ -1,0 +1,71 @@
+| =====================================================================
+|  BoxAssist.mac  -  Rogue drives the Shaman box  (SoR, 2-box)
+| ---------------------------------------------------------------------
+|  Run this ON THE ROGUE. It tells your boxed Shaman to assist the Rogue's
+|  target and keep slow + malo applied, so you never have to alt-tab for it.
+|
+|  REQUIRES a comms plugin on BOTH characters:
+|     * MQ2DanNet   (commands shown below use /dgt = DanNet "tell group")
+|     * or MQ2EQBC  (swap /dgt for: /bct ShamanName //<command>)
+|
+|  Bind it:   /bind LeftAlt+3 /mac BoxAssist
+|  Stop:      /endmacro
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    /declare ShamanName      string outer Shamanname        | <-- your Shaman's name
+    /declare SlowSpell       string outer Turgur's Swarm     | highest slow you own
+    /declare MaloSpell       string outer Malosenia          | highest malo you own
+    | Comms style: "dannet" or "eqbc"
+    /declare Comms           string outer dannet
+    | ----------------------- END CONFIG -----------------------------
+
+    /echo \ag[BoxAssist] Driving Shaman (\ay${ShamanName}\ag). /endmacro to stop.
+
+    :loop
+    /doevents
+
+    /if (!${Target.ID} || ${Target.Type.Equal[PC]} || ${Target.Type.Equal[Corpse]} || ${Target.PctHPs} <= 0) {
+        /delay 10
+        /goto :loop
+    }
+
+    | Send the Shaman to our target, then have it slow + malo.
+    | The Shaman only recasts if its target isn't already slowed/maloed -
+    | that buff check runs on the Shaman side via /casting's duplicate guard
+    | (or your Shaman bot routine handles it entirely; see note below).
+    /call BoxCmd "/target id ${Target.ID}"
+    /delay 3
+    /call BoxCmd "/casting \"${SlowSpell}\""
+    /delay 5
+    /call BoxCmd "/casting \"${MaloSpell}\""
+    /delay 5
+
+    | Re-check roughly every 30s (don't spam the Shaman)
+    /delay 300
+    /goto :loop
+/return
+
+| --------------------------------------------------------------------
+Sub BoxCmd(string Cmd)
+    | Cmd should already begin with a leading slash, e.g. "/target id 123"
+    | NOTE: the exact "make a peer run a command" verb varies by plugin/version.
+    |   * EQBC:    /bct <name> //<command>   (confident)
+    |   * DanNet:  /dex <name> <command>     (verify; some builds use /dexecute,
+    |              /dge, or /dgga for group-wide execute - check /dnet help)
+    /if (${Comms.Equal[eqbc]}) {
+        /bct ${ShamanName} /${Cmd}
+    } else {
+        /dex ${ShamanName} ${Cmd}
+    }
+/return
+
+| ---------------------------------------------------------------------
+| NOTE: Slow/malo casting logic lives mostly on the SHAMAN side. The
+| cleanest setup is a small heal/slow routine ON the Shaman (Very Vanilla
+| MQ ships class routines) and this macro just keeps the Shaman targeting
+| your kill target. If you use a full Shaman bot routine, you may only need
+| the "/target id" line here and let the Shaman handle slow/malo/heals.
+| See docs/05-shaman-box-coordination.md.
+| ---------------------------------------------------------------------

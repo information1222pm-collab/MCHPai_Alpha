@@ -1,0 +1,67 @@
+=======================================================================
+ SHAMAN IN-GAME SOCIAL HOTKEYS  -  Cloudi's box  (no MQ2 required)
+=======================================================================
+Keep the Shaman window in a corner of your ultrawide. These let you tab
+over and handle the few Shaman things that matter for the Rogue's DPS &
+survival with one click each. Same setup steps as the Rogue file.
+
+Replace spell names with the HIGHEST RANK you own (see your spellbook).
+
+-----------------------------------------------------------------------
+ 1) SLOW  -  keeps you and the tank alive = longer fights = more DPS
+-----------------------------------------------------------------------
+NAME:  SLOW
+LINE1: /assist ROGUENAME
+LINE2: /pause 2
+LINE3: /cast "Turgur's Swarm"        | <- your highest slow
+
+-----------------------------------------------------------------------
+ 2) MALO  -  lowers mob resists; helps your debuffs/poisons + raid land
+-----------------------------------------------------------------------
+NAME:  MALO
+LINE1: /assist ROGUENAME
+LINE2: /pause 2
+LINE3: /cast "Malosenia"             | <- your highest malo
+
+-----------------------------------------------------------------------
+ 3) HEAL  -  quick heal on the Rogue (or tank in groups)
+-----------------------------------------------------------------------
+NAME:  HEAL
+LINE1: /target ROGUENAME
+LINE2: /pause 2
+LINE3: /cast "<your fast/group heal>"
+
+-----------------------------------------------------------------------
+ 4) CANNI  -  HP -> mana so you never go OOM mid-fight
+-----------------------------------------------------------------------
+NAME:  CANNI
+LINE1: /cast "Cannibalization"       | <- your highest canni / use the AA
+
+-----------------------------------------------------------------------
+ 5) HASTE/BUFF  -  buff the Rogue (run once after zoning/death)
+-----------------------------------------------------------------------
+NAME:  BUFF ROGUE
+LINE1: /target ROGUENAME
+LINE2: /pause 2
+LINE3: /cast "<Talisman / haste line>"
+LINE4: /pause 45
+LINE5: /cast "<2nd buff>"
+   (chain more buffs across additional BUFF2/BUFF3 socials as needed.)
+
+-----------------------------------------------------------------------
+ 6) REZ  -  rez your Rogue's corpse after a wipe (corpse recovery)
+-----------------------------------------------------------------------
+NAME:  REZ
+LINE1: /corpse                       | (or target the corpse manually)
+LINE2: /cast "<your rez spell / Incarnate Anew>"
+   (Target the Rogue's corpse first, then press. On most setups: Rogue
+    runs back / summons corpse, targets it, Shaman casts rez.)
+
+=======================================================================
+ SHAMAN QUICK FLOW DURING A FIGHT
+=======================================================================
+  Pull lands -> SLOW -> MALO -> then just HEAL as needed and CANNI when
+  mana dips. Everything else (DoTs, roar) is bonus damage when you have
+  spare time. For fully hands-off, run a Shaman heal/slow bot routine and
+  let the Rogue's BoxAssist.mac just keep the Shaman on-target.
+=======================================================================

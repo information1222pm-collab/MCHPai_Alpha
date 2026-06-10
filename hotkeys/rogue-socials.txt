@@ -1,0 +1,107 @@
+=======================================================================
+ ROGUE IN-GAME SOCIAL HOTKEYS  -  Cloudi  (no MQ2 required)
+=======================================================================
+These work on ANY server, including live. To use one:
+  1. Open the Socials window (EQ button -> Socials, or default 'O').
+  2. Right-click an empty social button -> edit.
+  3. Set the NAME and paste the LINES (max 5 lines per social).
+  4. Drag the finished social onto a hotbar button.
+
+Color tip for a clean bar: name them in CAPS so they read fast at a glance.
+
+NOTES ON ABILITY LINES
+  * Discs:  /disc <Exact Disc Name>          (names: see docs/04)
+  * AAs:    drag the AA from your AA window straight onto a hotbar button -
+            it's one click and needs no social. For a MULTI-AA burn social,
+            EQ requires /alt activate <numeric ID>; fill IDs in the BURN
+            template below, OR just place the 4-5 burn AAs on one hotbar row
+            and press them L-to-R. Both are fine; the row is less setup.
+  * Backstab: /doability "Backstab"  (if that errors on your client, drag
+            Backstab onto an Abilities button and use /doability <slot#>).
+
+-----------------------------------------------------------------------
+ 1) ASSIST  -  swap to the tank's target AND start attacking
+    (fixes "attack toggles off on swaps" + covers Swapping Targets)
+-----------------------------------------------------------------------
+NAME:  ASSIST
+LINE1: /assist TANKNAME
+LINE2: /attack on
+LINE3: /pause 2
+LINE4: /doability "Backstab"
+   (replace TANKNAME with your main assist / tank. Boxed solo: use your
+    Shaman's name or remove line 1 and just /assist on your current target.)
+
+-----------------------------------------------------------------------
+ 2) SPAM  -  your sustained "do damage" key. Mash it during fights.
+-----------------------------------------------------------------------
+NAME:  SPAM
+LINE1: /attack on
+LINE2: /doability "Backstab"
+LINE3: /disc Frenzied Stabbing Discipline
+   (line 3 keeps an offensive disc up; it just no-ops if one is already
+    running or on cooldown. Swap to your highest-rank disc name.)
+
+-----------------------------------------------------------------------
+ 3) BURN  -  fire your big cooldowns. (Fill in your AA IDs once.)
+-----------------------------------------------------------------------
+NAME:  BURN
+LINE1: /alt activate 0000    | Third Spire of the Rake
+LINE2: /alt activate 0000    | Rogue's Fury
+LINE3: /alt activate 0000    | Twisted Chance
+LINE4: /disc Frenzied Stabbing Discipline
+LINE5: /doability "Backstab"
+   HOW TO GET THE IDs: hover the AA in your AA window, or it's faster to
+   just drag Spire / Rogue's Fury / Twisted Chance / Ligament Slice onto a
+   hotbar row and press them in order. (See docs/04 for finding IDs.)
+   NOTE: a social is max 5 lines - put the rest of your AAs (Ligament Slice,
+   Twisted Shank, etc.) on a second BURN2 social or on the hotbar row.
+
+-----------------------------------------------------------------------
+ 4) DEBUFF  -  open every fight on a named with this
+-----------------------------------------------------------------------
+NAME:  DEBUFF
+LINE1: /alt activate 0000    | Ligament Slice  (fill in ID, or drag to bar)
+
+-----------------------------------------------------------------------
+ 5) RANGED  -  when you CAN'T get behind the mob, throw instead
+-----------------------------------------------------------------------
+NAME:  RANGED
+LINE1: /autofire on
+LINE2: /disc <your throwing / Fatal Aim disc name>
+   (make sure throwing weapons/stacks are in your ranged slot)
+
+-----------------------------------------------------------------------
+ 6) CORPSE  -  corpse recovery (you flagged this as a top action)
+-----------------------------------------------------------------------
+NAME:  CORPSE
+LINE1: /corpse
+LINE2: /say Pulling my corpse - need a rez when ready
+   (Stand on/near your corpse and press it to drag it to you. For rez,
+    target your corpse and have the Shaman cast - see REZHELP below.)
+
+NAME:  CONSENT
+LINE1: /consent SHAMANNAME
+   (lets your Shaman drag/loot your corpse. Replace SHAMANNAME.)
+
+NAME:  FINDCORPSE
+LINE1: /say (use the in-game /findcorpse or the Find feature; on most
+        servers corpses summon to you with the guild/expansion corpse
+        summoner - keep one handy.)
+
+-----------------------------------------------------------------------
+ 7) PULL  -  simple ranged pull (if you end up pulling)
+-----------------------------------------------------------------------
+NAME:  PULL
+LINE1: /target nearest
+LINE2: /autofire on
+LINE3: /say Pulling %t
+
+=======================================================================
+ RECOMMENDED HOTBAR LAYOUT (small-medium, ultrawide friendly)
+=======================================================================
+ Row 1 (left thumb keys):   ASSIST | SPAM | BURN | DEBUFF | RANGED
+ Row 2 (burn AAs, drag-on): Spire | Rogue's Fury | Twisted Chance |
+                            Ligament Slice | Twisted Shank
+ Row 3 (utility):           CORPSE | CONSENT | Evade | Sneak | Hide
+ Keep it to ~3 rows. That alone kills the "too many buttons" problem.
+=======================================================================
