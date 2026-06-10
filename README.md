@@ -38,6 +38,14 @@ busywork so you can focus on staying behind the target and not dying.
 
 ## The 10-minute quick start
 
+**Easiest of all — open [`setup.html`](setup.html) in any browser.** It's a
+click-through setup wizard that walks you through everything with zero prior
+knowledge: type your character names once and it auto-fills every macro and
+hotkey, with copy/download buttons built in. No editing files, no hunting through
+folders. Start there.
+
+Prefer to read instead? The manual path:
+
 1. **Read [`docs/00-START-HERE.md`](docs/00-START-HERE.md).** It's short and tells you the order to do things in.
 2. **Set up the in-game hotkeys** from [`hotkeys/rogue-socials.txt`](hotkeys/rogue-socials.txt). This alone fixes "too many buttons" — no MQ2 required.
 3. **When ready, install MQ2** using [`docs/02-mq2-install-and-setup.md`](docs/02-mq2-install-and-setup.md) and drop in [`macros/RogueBurn.mac`](macros/RogueBurn.mac).

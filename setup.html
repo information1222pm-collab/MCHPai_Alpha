@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cloudi's Rogue Setup Wizard · Shattering of Ro</title>
+<style>
+  :root{
+    --bg:#070b14; --panel:#0c1322; --panel-2:#111b30; --edge:#1b2c49;
+    --ink:#dce6f5; --muted:#7f93b3; --accent:#3f7cff; --accent-dim:#22467f;
+    --rogue:#9aa7ff; --good:#39d98a; --warn:#ffcc55; --bad:#ff5d6c; --ready:#4cd2ff;
+    --font:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #0e1b33 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #10172b 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink); font-family:var(--font); font-size:15px; line-height:1.55;
+    -webkit-font-smoothing:antialiased; min-height:100vh;
+  }
+  a{color:var(--accent)}
+  code{background:#0a1222;border:1px solid var(--edge);border-radius:5px;padding:1px 6px;font-size:.9em;color:var(--rogue)}
+
+  /* sticky character bar */
+  .charbar{
+    position:sticky;top:0;z-index:50;backdrop-filter:blur(8px);
+    background:linear-gradient(90deg,rgba(17,27,48,.96),rgba(12,19,34,.96));
+    border-bottom:1px solid var(--edge);padding:10px 18px;
+  }
+  .charbar .inner{max-width:1080px;margin:0 auto;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+  .charbar .title{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.5px;margin-right:6px}
+  .charbar .dagger{font-size:20px;filter:drop-shadow(0 0 6px var(--accent))}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .field input{
+    background:#0a1222;border:1px solid var(--edge);border-radius:8px;color:var(--ink);
+    padding:7px 10px;font-size:14px;width:150px;outline:none;
+  }
+  .field input:focus{border-color:var(--accent)}
+  .charbar .hint{font-size:11px;color:var(--muted);flex-basis:100%;margin-top:2px}
+
+  .shell{max-width:1080px;margin:0 auto;padding:18px;display:grid;grid-template-columns:230px 1fr;gap:22px}
+  @media (max-width:880px){.shell{grid-template-columns:1fr}.stepper{flex-direction:row;overflow:auto}}
+
+  /* progress */
+  .progwrap{grid-column:1/-1;margin-bottom:2px}
+  .progbar{height:8px;background:#0a1222;border:1px solid var(--edge);border-radius:6px;overflow:hidden}
+  .progbar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent-dim),var(--ready));transition:width .4s}
+  .progtxt{font-size:12px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between}
+
+  /* stepper nav */
+  .stepper{display:flex;flex-direction:column;gap:6px;position:sticky;top:96px;align-self:start}
+  .stepper button{
+    text-align:left;border:1px solid transparent;background:transparent;color:var(--muted);
+    padding:9px 11px;border-radius:9px;cursor:pointer;font-size:13px;display:flex;gap:9px;align-items:center;width:100%;
+  }
+  .stepper button .n{
+    width:22px;height:22px;border-radius:50%;border:1px solid var(--edge);display:grid;place-items:center;
+    font-size:12px;flex:none;color:var(--muted);
+  }
+  .stepper button.active{background:var(--panel-2);border-color:var(--edge);color:var(--ink)}
+  .stepper button.active .n{border-color:var(--accent);color:var(--accent)}
+  .stepper button.done .n{background:var(--good);border-color:var(--good);color:#04210f}
+
+  .stage{min-height:60vh}
+  .card{
+    border:1px solid var(--edge);border-radius:14px;background:var(--panel);
+    box-shadow:0 10px 30px rgba(0,0,0,.35);padding:24px 26px;margin-bottom:18px;
+  }
+  .card h2{margin:0 0 4px;font-size:22px}
+  .card .lead{color:var(--muted);margin:0 0 18px}
+  .eyebrow{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
+  h3{margin:22px 0 8px;font-size:16px;color:var(--rogue)}
+  ul,ol{margin:8px 0 8px;padding-left:22px}
+  li{margin:5px 0}
+
+  .callout{border-left:3px solid var(--accent);background:#0a1222;border-radius:0 10px 10px 0;padding:12px 14px;margin:14px 0;font-size:14px}
+  .callout.warn{border-color:var(--warn)}
+  .callout.good{border-color:var(--good)}
+  .callout .h{font-weight:700;display:block;margin-bottom:3px}
+
+  details{border:1px solid var(--edge);border-radius:10px;padding:0 14px;margin:12px 0;background:#0a1222}
+  details summary{cursor:pointer;padding:11px 0;font-weight:600;color:var(--ink)}
+  details[open]{padding-bottom:12px}
+
+  /* resource / code block */
+  .res{border:1px solid var(--edge);border-radius:12px;background:#070d18;margin:14px 0;overflow:hidden}
+  .res .top{display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(90deg,var(--panel-2),var(--panel));border-bottom:1px solid var(--edge)}
+  .res .top .fn{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:var(--rogue)}
+  .res .top .desc{color:var(--muted);font-size:12px}
+  .res .top .sp{flex:1}
+  .res pre{margin:0;padding:14px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;color:#cfe0ff;max-height:340px}
+  .btn{cursor:pointer;border:1px solid var(--edge);background:var(--panel-2);color:var(--ink);border-radius:8px;padding:6px 12px;font-size:13px;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.go{border-color:var(--ready);color:var(--ready);background:#08233a}
+  .btn.big{padding:10px 18px;font-size:14px}
+  .btn:active{transform:translateY(1px)}
+  .copied{border-color:var(--good)!important;color:var(--good)!important}
+
+  /* social card */
+  .social{border:1px solid var(--edge);border-radius:11px;background:#0a1222;margin:12px 0;overflow:hidden}
+  .social .sh{display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid var(--edge);background:#0c1626}
+  .social .sh .nm{font-weight:700;letter-spacing:.5px;color:var(--ready)}
+  .social .sh .ds{color:var(--muted);font-size:12px}
+  .social .sh .sp{flex:1}
+  .social .lines{padding:11px 13px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:#cfe0ff}
+  .social .lines .ln{padding:2px 0;display:flex;gap:8px}
+  .social .lines .ln b{color:var(--muted);font-weight:400;user-select:none}
+  .social .note{padding:0 13px 11px;color:var(--muted);font-size:12px}
+
+  .nav{display:flex;justify-content:space-between;gap:12px;margin-top:8px}
+  .nav .spacer{flex:1}
+  .check{display:flex;align-items:center;gap:10px;margin:16px 0 2px;padding:11px 13px;border:1px dashed var(--edge);border-radius:10px;cursor:pointer;background:#0a1222}
+  .check input{width:18px;height:18px;accent-color:var(--good)}
+  .check.done{border-style:solid;border-color:var(--good);background:#091c12}
+
+  .pill{display:inline-block;border:1px solid var(--edge);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--rogue);background:#0a1222}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:700px){.grid2{grid-template-columns:1fr}}
+  .path-pick{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+  @media(max-width:700px){.path-pick{grid-template-columns:1fr}}
+  .path{border:1px solid var(--edge);border-radius:12px;padding:16px;background:#0a1222;cursor:pointer}
+  .path:hover{border-color:var(--accent)}
+  .path.sel{border-color:var(--ready);box-shadow:0 0 0 1px var(--ready)}
+  .path h4{margin:0 0 6px;font-size:16px}
+  .path .free{color:var(--good);font-weight:700;font-size:12px}
+  .path p{color:var(--muted);font-size:13px;margin:6px 0 0}
+
+  /* confetti */
+  #confetti{position:fixed;inset:0;pointer-events:none;z-index:200;overflow:hidden}
+  .conf{position:absolute;width:9px;height:14px;opacity:.9;animation:fall linear forwards}
+  @keyframes fall{to{transform:translateY(105vh) rotate(540deg);opacity:1}}
+  .toast{position:fixed;right:18px;bottom:18px;z-index:300;background:var(--panel-2);border:1px solid var(--good);
+    color:var(--ink);border-radius:10px;padding:12px 16px;box-shadow:0 10px 30px rgba(0,0,0,.5);transform:translateY(140%);transition:transform .35s}
+  .toast.show{transform:none}
+  .toast b{color:var(--good)}
+  .finale{text-align:center;padding:14px}
+  .finale .big{font-size:48px}
+</style>
+</head>
+<body>
+
+<!-- ============ STICKY CHARACTER BAR (personalizes everything) ============ -->
+<div class="charbar">
+  <div class="inner">
+    <div class="title"><span class="dagger">🗡️</span> Rogue Setup Wizard</div>
+    <div class="field"><label>Rogue name</label><input id="inRogue" placeholder="Cloudi" /></div>
+    <div class="field"><label>Shaman name</label><input id="inShaman" placeholder="Shaman" /></div>
+    <div class="field"><label>Tank / Main Assist</label><input id="inTank" placeholder="TANKNAME" /></div>
+    <div class="hint">Type your names once here — every macro &amp; hotkey on this page fills in automatically. Nothing to edit by hand. Saved in your browser.</div>
+  </div>
+</div>
+
+<div class="shell">
+  <div class="progwrap">
+    <div class="progbar"><i id="progFill"></i></div>
+    <div class="progtxt"><span id="progLabel">Step 1 of 7</span><span id="progPct">0% complete</span></div>
+  </div>
+
+  <!-- ============ STEPPER ============ -->
+  <nav class="stepper" id="stepper"></nav>
+
+  <!-- ============ STAGE ============ -->
+  <main class="stage" id="stage"></main>
+</div>
+
+<div id="confetti"></div>
+<div class="toast" id="toast"></div>
+
+<!-- ============ EMBEDDED RESOURCES (raw, never executed) ============ -->
+<script type="text/plain" id="tpl-RogueBurn">| =====================================================================
+|  RogueBurn.mac  -  Cloudi's one-key Rogue burn  (Shattering of Ro)
+| ---------------------------------------------------------------------
+|  Fires your full burn stack in priority order, once, then ends.
+|  Bind it to a key:   /bind LeftAlt+1 /mac RogueBurn
+|
+|  HOW IT WORKS
+|    * Each ability is only fired IF you own it AND it's off cooldown.
+|    * Anything it can't find by name is silently skipped (nothing breaks),
+|      so a wrong/owned-later name just means that one line does nothing.
+|    * Discs: only ONE offensive disc runs at a time, so we fire the single
+|      biggest one. The hand-off to later discs is sustained by RogueAssist.
+|
+|  >>> EDIT THE "CONFIGURE ME" BLOCK BELOW to match the exact names in your
+|      AA window / Combat Abilities window.
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    | --- Activated AAs (these STACK - fire them all). Use YOUR names. ---
+    /declare AA_Spire        string local Third Spire of the Rake
+    /declare AA_Fury         string local Rogue's Fury
+    /declare AA_Twisted      string local Twisted Chance
+    /declare AA_FrenzyAA     string local Frenzied Stabbing
+    /declare AA_Ligament     string local Ligament Slice
+    /declare AA_Shank        string local Twisted Shank
+    /declare AA_Bane         string local Banestrike
+    /declare AA_Envenom      string local Envenomed Blades
+    /declare AA_Rampage      string local Focused Rampage
+    /declare AA_Intensity    string local Intensity of the Resolute
+    /declare AA_Absorb       string local Absorbing Agent
+
+    | --- Your single biggest OFFENSIVE DISCIPLINE (only one runs at once) ---
+    /declare DISC_Big        string local Frenzied Stabbing Discipline
+
+    | --- Optional clicky burn item (epic-equiv / damage clicky). Blank = skip. ---
+    /declare ITEM_Clicky     string local
+
+    | --- Behavior knobs ---
+    /declare StickBehind     bool   local TRUE
+    | ----------------------- END CONFIG -----------------------------
+
+    /declare gcd int local 5
+
+    /if (!${Target.ID} || ${Target.Type.Equal[PC]}) {
+        /echo \ar[RogueBurn] No valid mob target - target something first.
+        /return
+    }
+
+    /echo \ag[RogueBurn] >>> BURNING <<<  Target: \ay${Target.CleanName}
+
+    | Get behind the mob and make sure we're swinging
+    /if (${StickBehind} && ${Plugin[MQ2MoveUtils].Name.Length}) /stick 12 behind
+    /attack on
+
+    | 1) Lead with the long crit buff so everything benefits
+    /call FireAA "${AA_Spire}"
+    | 2) Signature buff
+    /call FireAA "${AA_Fury}"
+    | 3) Biggest offensive disc
+    /call FireDisc "${DISC_Big}"
+    | 4) Open the synergy window
+    /call FireAA "${AA_Twisted}"
+    | 5) Debuff / damage-add
+    /call FireAA "${AA_Ligament}"
+    | 6) Everything else that's ready
+    /call FireAA "${AA_FrenzyAA}"
+    /call FireAA "${AA_Shank}"
+    /call FireAA "${AA_Bane}"
+    /call FireAA "${AA_Envenom}"
+    /call FireAA "${AA_Rampage}"
+    /call FireAA "${AA_Intensity}"
+    /call FireAA "${AA_Absorb}"
+
+    | 7) Clicky burn item, if configured
+    /if (${ITEM_Clicky.Length} && ${FindItem[=${ITEM_Clicky}].ID}) {
+        /useitem "${ITEM_Clicky}"
+        /delay ${gcd}
+    }
+
+    | Get a backstab out immediately; RogueAssist sustains the rest
+    /call Backstab
+
+    /echo \ag[RogueBurn] Burn dumped. Keep running RogueAssist for sustained DPS.
+/return
+
+| --------------------------------------------------------------------
+Sub FireAA(string Name)
+    /if (!${Name.Length}) /return
+    /if (${Me.AltAbility[${Name}].ID} && ${Me.AltAbilityReady[${Name}]}) {
+        /alt activate ${Me.AltAbility[${Name}].ID}
+        /echo \ao  fired AA: \aw${Name}
+        /delay 5
+    }
+/return
+
+| --------------------------------------------------------------------
+Sub FireDisc(string Name)
+    /if (!${Name.Length}) /return
+    /if (${Me.CombatAbility[${Name}].ID} && ${Me.CombatAbilityReady[${Name}]}) {
+        /disc ${Name}
+        /echo \ao  fired DISC: \aw${Name}
+        /delay 5
+    }
+/return
+
+| --------------------------------------------------------------------
+Sub Backstab
+    /if (${Me.AbilityReady[Backstab]}) {
+        /doability Backstab
+        /delay 3
+    }
+/return
+</script>
+
+<script type="text/plain" id="tpl-RogueAssist">| =====================================================================
+|  RogueAssist.mac  -  Cloudi's sustained DPS "spam key"  (SoR)
+| ---------------------------------------------------------------------
+|  The set-and-forget loop that keeps you doing damage:
+|    * Assists your Main Assist and locks onto the kill target
+|    * Re-asserts /attack ON after every swap (fixes the #1 hidden DPS leak)
+|    * Stays behind the mob (if MQ2MoveUtils is loaded)
+|    * Keeps an offensive DISCIPLINE running at all times (hand-off chain)
+|    * Spams Backstab on cooldown
+|    * Keeps your debuff (Ligament Slice) refreshed
+|
+|  Run it once and leave it:   /bind LeftAlt+2 /mac RogueAssist
+|  Stop with:                  /endmacro       (LeftAlt+0 if you bound it)
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    | Name of your Main Assist (tank/MA). Boxed solo? set to your own name
+    | or leave blank to just use your current target.
+    /declare MainAssist      string outer TANKNAME
+
+    | Offensive disc hand-off chain (highest rank you own; biggest first).
+    /declare Disc1           string outer Frenzied Stabbing Discipline
+    /declare Disc2           string outer Executioner's Discipline
+    /declare Disc3           string outer Knifeplay Discipline
+    /declare Disc4           string outer Razor's Edge Discipline
+    /declare Disc5           string outer Arcworker Discipline
+
+    | Debuff to keep refreshed on the target
+    /declare Debuff          string outer Ligament Slice
+
+    /declare StickBehind     bool   outer TRUE
+    | ----------------------- END CONFIG -----------------------------
+
+    /echo \ag[RogueAssist] Sustained DPS loop running. /endmacro to stop.
+
+    :loop
+    /doevents
+
+    | --- Acquire / refresh the kill target via the Main Assist ---
+    /if (${MainAssist.Length} && ${Spawn[pc ${MainAssist}].ID}) {
+        /if (${Spawn[pc ${MainAssist}].Dead}) {
+            /delay 5
+            /goto :loop
+        }
+        /assist ${MainAssist}
+        /delay 3
+    }
+
+    | --- Only act on a real, attackable mob ---
+    /if (!${Target.ID} || ${Target.Type.Equal[PC]} || ${Target.Type.Equal[Corpse]}) {
+        /delay 5
+        /goto :loop
+    }
+    /if (${Target.PctHPs} <= 0) {
+        /delay 5
+        /goto :loop
+    }
+
+    | --- Stay behind + keep swinging (the leak-proofing) ---
+    /if (${StickBehind} && ${Plugin[MQ2MoveUtils].Name.Length}) {
+        /if (!${Stick.Active}) /stick 12 behind
+    }
+    /if (!${Me.Combat}) /attack on
+
+    | --- Keep ONE offensive disc running; start the next ready one if none ---
+    /if (!${Me.ActiveDisc.ID}) {
+        /call StartFirstReadyDisc
+    }
+
+    | --- Refresh debuff if it's not on the target ---
+    /if (${Me.AltAbility[${Debuff}].ID} && ${Me.AltAbilityReady[${Debuff}]}) {
+        /if (!${Target.FindBuff[${Debuff}].ID}) {
+            /alt activate ${Me.AltAbility[${Debuff}].ID}
+            /delay 4
+        }
+    }
+
+    | --- Backstab on cooldown ---
+    /if (${Me.AbilityReady[Backstab]}) {
+        /doability Backstab
+    }
+
+    /delay 5
+    /goto :loop
+/return
+
+| --------------------------------------------------------------------
+Sub StartFirstReadyDisc
+    /call TryDisc "${Disc1}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc2}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc3}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc4}"
+    /if (${Macro.Return.Equal[done]}) /return
+    /call TryDisc "${Disc5}"
+/return
+
+Sub TryDisc(string Name)
+    /if (!${Name.Length}) /return skip
+    /if (${Me.CombatAbility[${Name}].ID} && ${Me.CombatAbilityReady[${Name}]}) {
+        /disc ${Name}
+        /delay 5
+        /return done
+    }
+/return skip
+</script>
+
+<script type="text/plain" id="tpl-BoxAssist">| =====================================================================
+|  BoxAssist.mac  -  Rogue drives the Shaman box  (SoR, 2-box)
+| ---------------------------------------------------------------------
+|  Run this ON THE ROGUE. It keeps your boxed Shaman on your target and
+|  applies slow + malo, so you never alt-tab for it.
+|
+|  REQUIRES a comms plugin on BOTH characters (MQ2DanNet or MQ2EQBC).
+|  Bind it:   /bind LeftAlt+3 /mac BoxAssist     Stop: /endmacro
+| =====================================================================
+
+Sub Main
+    | ---------------------- CONFIGURE ME ----------------------------
+    /declare ShamanName      string outer Shamanname        | <-- your Shaman
+    /declare SlowSpell       string outer Turgur's Swarm     | highest slow
+    /declare MaloSpell       string outer Malosenia          | highest malo
+    /declare Comms           string outer dannet             | "dannet" or "eqbc"
+    | ----------------------- END CONFIG -----------------------------
+
+    /echo \ag[BoxAssist] Driving Shaman (\ay${ShamanName}\ag). /endmacro to stop.
+
+    :loop
+    /doevents
+    /if (!${Target.ID} || ${Target.Type.Equal[PC]} || ${Target.Type.Equal[Corpse]} || ${Target.PctHPs} <= 0) {
+        /delay 10
+        /goto :loop
+    }
+    /call BoxCmd "/target id ${Target.ID}"
+    /delay 3
+    /call BoxCmd "/casting \"${SlowSpell}\""
+    /delay 5
+    /call BoxCmd "/casting \"${MaloSpell}\""
+    /delay 5
+    /delay 300
+    /goto :loop
+/return
+
+| --------------------------------------------------------------------
+Sub BoxCmd(string Cmd)
+    /if (${Comms.Equal[eqbc]}) {
+        /bct ${ShamanName} /${Cmd}
+    } else {
+        /dex ${ShamanName} ${Cmd}
+    }
+/return
+</script>
+
+<script>
+/* =====================================================================
+   Wizard engine
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const stepperEl = $('#stepper'), stageEl = $('#stage');
+let current = 0, chosenPath = localStorage.getItem('cl_path') || '';
+
+const chars = {
+  rogue:  localStorage.getItem('cl_rogue')  || '',
+  shaman: localStorage.getItem('cl_shaman') || '',
+  tank:   localStorage.getItem('cl_tank')   || '',
+};
+$('#inRogue').value  = chars.rogue;
+$('#inShaman').value = chars.shaman;
+$('#inTank').value   = chars.tank;
+
+function tpl(id){ return document.getElementById(id).textContent.replace(/^\n/,''); }
+
+/* Personalize a template string with the character names. */
+function personalize(text){
+  const rogue  = chars.rogue.trim()  || 'Cloudi';
+  const shaman = chars.shaman.trim() || 'Shamanname';
+  const tank   = chars.tank.trim()   || 'TANKNAME';
+  const repl = [
+    ['ROGUENAME', rogue],
+    ['SHAMANNAME', shaman],
+    ['Shamanname', shaman],
+    ['TANKNAME', tank],
+    ['Cloudi', rogue],
+  ];
+  let out = text;
+  for(const [k,v] of repl){ out = out.split(k).join(v); }
+  return out;
+}
+
+function download(filename, text){
+  const blob = new Blob([text], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+function copyText(text, btn){
+  navigator.clipboard.writeText(text).then(()=>{
+    const old = btn.textContent; btn.textContent = '✔ Copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent = old; btn.classList.remove('copied'); }, 1400);
+  }).catch(()=>{ alert('Copy failed — select the text and copy manually.'); });
+}
+
+/* ---- a downloadable / copyable file resource block ---- */
+function resourceBlock(filename, desc, tplId){
+  const wrap = document.createElement('div'); wrap.className='res';
+  const body = personalize(tpl(tplId));
+  wrap.innerHTML = `
+    <div class="top">
+      <span class="fn">${filename}</span>
+      <span class="desc">${desc}</span>
+      <span class="sp"></span>
+      <button class="btn">Copy</button>
+      <button class="btn go">⬇ Download</button>
+    </div>
+    <pre></pre>`;
+  wrap.querySelector('pre').textContent = body;
+  const [copyBtn, dlBtn] = wrap.querySelectorAll('button');
+  copyBtn.onclick = ()=>copyText(personalize(tpl(tplId)), copyBtn);
+  dlBtn.onclick   = ()=>{ download(filename, personalize(tpl(tplId))); achieve('Saved '+filename+'!'); };
+  wrap.dataset.tpl = tplId; wrap.dataset.fn = filename;
+  return wrap;
+}
+
+/* ---- a single in-game social hotkey card ---- */
+function socialCard(s){
+  const div = document.createElement('div'); div.className='social';
+  const linesText = s.lines.join('\n');
+  div.innerHTML = `
+    <div class="sh"><span class="nm">${s.name}</span><span class="ds">${s.desc}</span>
+      <span class="sp"></span><button class="btn">Copy lines</button></div>
+    <div class="lines">${s.lines.map((l,i)=>`<div class="ln"><b>${i+1}</b><span>${escapeHtml(personalize(l))}</span></div>`).join('')}</div>
+    ${s.note?`<div class="note">${personalize(s.note)}</div>`:''}`;
+  const btn = div.querySelector('button');
+  btn.onclick = ()=>copyText(personalize(linesText), btn);
+  div.dataset.social = '1';
+  return div;
+}
+function escapeHtml(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+/* ===================== SOCIAL DATA ===================== */
+const rogueSocials = [
+  {name:'ASSIST', desc:'Swap to tank’s target + attack', lines:['/assist TANKNAME','/attack on','/pause 2','/doability "Backstab"'],
+   note:'Boxed solo with no tank? Leave the Tank field blank — it becomes /assist on your current target.'},
+  {name:'SPAM', desc:'Your sustained “do damage” key', lines:['/attack on','/doability "Backstab"','/disc Frenzied Stabbing Discipline'],
+   note:'Mash this during fights. Line 3 keeps a disc up and harmlessly no-ops if one is already running.'},
+  {name:'BURN', desc:'Fire your big cooldowns', lines:['/alt activate 0000','/alt activate 0000','/alt activate 0000','/disc Frenzied Stabbing Discipline','/doability "Backstab"'],
+   note:'The 0000s are AA IDs (Spire / Rogue’s Fury / Twisted Chance). Easiest alternative: just drag those AAs onto a hotbar row and press them L‑to‑R — no IDs needed. (Step “Find your AA IDs” shows how.)'},
+  {name:'DEBUFF', desc:'Open every named with this', lines:['/alt activate 0000'],
+   note:'Ligament Slice. Fill its AA ID, or drag the AA straight to your bar.'},
+  {name:'CORPSE', desc:'Corpse recovery', lines:['/corpse','/say Pulling my corpse - rez when ready'],
+   note:'Stand on/near your corpse and press to drag it to you.'},
+  {name:'CONSENT', desc:'Let your Shaman move your corpse', lines:['/consent SHAMANNAME']},
+];
+const shamanSocials = [
+  {name:'SLOW', desc:'Keeps you alive = longer fights = more DPS', lines:['/assist ROGUENAME','/pause 2','/cast "Turgur’s Swarm"'],
+   note:'Swap the spell for your highest slow.'},
+  {name:'MALO', desc:'Lowers mob resists', lines:['/assist ROGUENAME','/pause 2','/cast "Malosenia"']},
+  {name:'HEAL', desc:'Quick heal on the Rogue', lines:['/target ROGUENAME','/pause 2','/cast "<your fast heal>"']},
+  {name:'CANNI', desc:'HP → mana, never go OOM', lines:['/cast "Cannibalization"']},
+  {name:'REZ', desc:'Rez the Rogue after a wipe', lines:['/corpse','/cast "<your rez spell>"'],
+   note:'Target the Rogue’s corpse first, then press.'},
+];
+
+/* ===================== STEPS ===================== */
+const steps = [
+  { key:'welcome', title:'Welcome', icon:'★', render: renderWelcome },
+  { key:'path',    title:'Pick your path', icon:'⑂', render: renderPath },
+  { key:'folder',  title:'Find your game', icon:'📁', render: renderFolder },
+  { key:'install', title:'Install / Open', icon:'⬇', render: renderInstall },
+  { key:'drop',    title:'Add the goods', icon:'✎', render: renderDrop },
+  { key:'bind',    title:'Bind your keys', icon:'⌨', render: renderBind },
+  { key:'done',    title:'You’re set!', icon:'🏁', render: renderDone },
+];
+
+function buildStepper(){
+  stepperEl.innerHTML='';
+  steps.forEach((s,i)=>{
+    const b=document.createElement('button');
+    const done = localStorage.getItem('cl_done_'+s.key)==='1';
+    b.className = (i===current?'active ':'')+(done?'done':'');
+    b.innerHTML = `<span class="n">${done?'✓':i+1}</span><span>${s.title}</span>`;
+    b.onclick=()=>go(i);
+    stepperEl.appendChild(b);
+  });
+}
+function go(i){ current=Math.max(0,Math.min(steps.length-1,i)); render(); window.scrollTo({top:0,behavior:'smooth'}); }
+function markDone(key){ localStorage.setItem('cl_done_'+key,'1'); buildStepper(); updateProg(); }
+
+function updateProg(){
+  const done = steps.filter(s=>localStorage.getItem('cl_done_'+s.key)==='1').length;
+  const pct = Math.round(done/steps.length*100);
+  $('#progFill').style.width = pct+'%';
+  $('#progLabel').textContent = `Step ${current+1} of ${steps.length} · ${steps[current].title}`;
+  $('#progPct').textContent = pct+'% complete';
+}
+
+function navButtons(opts={}){
+  const wrap=document.createElement('div'); wrap.className='nav';
+  const back=document.createElement('button'); back.className='btn'; back.textContent='← Back';
+  back.onclick=()=>go(current-1); if(current===0) back.style.visibility='hidden';
+  const sp=document.createElement('div'); sp.className='spacer';
+  const next=document.createElement('button'); next.className='btn go big';
+  next.textContent = opts.nextLabel || 'Next step →';
+  next.onclick=()=>{ markDone(steps[current].key); if(opts.onNext) opts.onNext(); go(current+1); };
+  wrap.append(back,sp,next);
+  if(current===steps.length-1){ next.style.visibility='hidden'; }
+  return wrap;
+}
+
+function card(html){ const c=document.createElement('div'); c.className='card'; c.innerHTML=html; return c; }
+
+/* ---------- STEP RENDERERS ---------- */
+function renderWelcome(){
+  const c=card(`
+    <div class="eyebrow">Shattering of Ro · Rogue + Shaman</div>
+    <h2>Hey Cloudi — let's get you wrecking again 🗡️</h2>
+    <p class="lead">This wizard sets up your DPS the painless way. No prior knowledge needed —
+       no .ini files, no digging through folders. Just click through; everything you need is right here on this page.</p>
+    <h3>What you'll have at the end</h3>
+    <ul>
+      <li><b>A clean 2-key playstyle</b> — one BURN key, one SPAM/assist key. Goodbye “too many buttons.”</li>
+      <li><b>Cooldown tracking + a DPS meter</b> on a dark-blue raid HUD.</li>
+      <li><b>Your Shaman</b> assisting, slowing and maloing without you tabbing over.</li>
+    </ul>
+    <div class="callout good"><span class="h">First, type your character names up top ☝️</span>
+      Fill in the <b>Rogue</b>, <b>Shaman</b> and <b>Tank</b> fields in the bar at the top of the page.
+      Every macro and hotkey below will auto-fill with those names — you'll never edit a file by hand.</div>
+    <div class="callout"><span class="h">Takes about 15 minutes.</span> You can stop and come back —
+      your progress and names are saved in this browser.</div>
+  `);
+  c.appendChild(navButtons({nextLabel:'Let’s go →'}));
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+}
+
+function renderPath(){
+  const c=card(`
+    <div class="eyebrow">Step 2 · choose how hands-free you want it</div>
+    <h2>Pick your path</h2>
+    <p class="lead">Both are <b>100% free</b>. You can start with the left one today and add the right one later.</p>
+    <div class="path-pick" id="pathPick">
+      <div class="path ${chosenPath==='hotkey'?'sel':''}" data-p="hotkey">
+        <span class="free">FREE · NO INSTALL · ANY SERVER</span>
+        <h4>🅰️ In-game hotkeys</h4>
+        <p>Build a clean bar using EverQuest's own Socials window. Works on <b>live and emu</b>.
+           Zero downloads, zero risk, fixes “too many buttons” immediately. <b>Best place to start.</b></p>
+      </div>
+      <div class="path ${chosenPath==='mq2'?'sel':''}" data-p="mq2">
+        <span class="free">FREE · OPEN SOURCE</span>
+        <h4>🅱️ MacroQuest macros</h4>
+        <p>One keypress runs the whole burn. Uses the free, open-source <b>MacroQuest</b>
+           (macroquest.org). <b>Emu servers only</b> — it's against the rules on official live servers.</p>
+      </div>
+    </div>
+    <div class="callout warn"><span class="h">Not sure which?</span>
+      Pick <b>🅰️ In-game hotkeys</b>. It works everywhere and you'll feel the difference right away.
+      The wizard adapts the next steps to your choice.</div>
+  `);
+  c.querySelectorAll('.path').forEach(p=>{
+    p.onclick=()=>{
+      chosenPath=p.dataset.p; localStorage.setItem('cl_path',chosenPath);
+      c.querySelectorAll('.path').forEach(x=>x.classList.remove('sel'));
+      p.classList.add('sel'); achieve('Path set: '+(chosenPath==='mq2'?'MacroQuest':'In-game hotkeys'));
+    };
+  });
+  c.appendChild(navButtons({onNext:()=>{ if(!chosenPath){chosenPath='hotkey';localStorage.setItem('cl_path','hotkey');} }}));
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+}
+
+function renderFolder(){
+  const mq2 = chosenPath==='mq2';
+  const c=card(`
+    <div class="eyebrow">Step 3 · the only “folder” bit, made easy</div>
+    <h2>${mq2?'Find two folders (we’ll guide you)':'Good news: no folders needed'}</h2>
+    ${mq2?`
+      <p class="lead">For the MacroQuest path you only ever touch <b>one</b> folder: the <code>Macros</code> folder.
+         Here's the no-stress way to find it.</p>
+      <h3>1) Where is EverQuest?</h3>
+      <p>You don't actually need the EQ folder for macros, but here's how to find any game folder in 3 seconds —
+         a skill worth having:</p>
+      <ol>
+        <li>Find your <b>EverQuest shortcut</b> (desktop or Start menu).</li>
+        <li><b>Right-click</b> it → <b>Open file location</b>.</li>
+        <li>That window <i>is</i> your game folder. Done — no typing paths.</li>
+      </ol>
+      <details><summary>Common EverQuest install paths (if you're curious)</summary>
+        <ul>
+          <li><code>C:\\Users\\Public\\Daybreak Game Company\\Installed Games\\EverQuest</code></li>
+          <li>Steam: <code>...\\Steam\\steamapps\\common\\Everquest F2P</code></li>
+          <li>Emu server: wherever you unzipped it</li>
+        </ul>
+      </details>
+      <h3>2) Where is the Macros folder?</h3>
+      <p>It lives inside your <b>MacroQuest</b> folder (a separate folder from EQ), created when you install MacroQuest in the next step:</p>
+      <ul><li><code>...\\MacroQuest\\Macros\\</code></li></ul>
+      <div class="callout good"><span class="h">That's the whole “folder” skill.</span>
+        Right-click shortcut → Open file location. You'll use it once.</div>
+    `:`
+      <p class="lead">The in-game hotkey path lives <b>entirely inside EverQuest's own windows</b>.
+         You will not open a single folder or edit a single file. Promise.</p>
+      <div class="callout good"><span class="h">Nothing to find. Nothing to install.</span>
+        Everything happens in the game's <b>Socials</b> window, which we'll open together in the next step.</div>
+      <details><summary>I picked hotkeys but might try MacroQuest later — where would files go?</summary>
+        <p style="margin:8px 0">Into <code>...\\MacroQuest\\Macros\\</code>. To find any game folder fast: right-click the
+        game's shortcut → <b>Open file location</b>. That's it. Switch your path at the top-left stepper anytime.</p>
+      </details>
+    `}
+  `);
+  c.appendChild(navButtons());
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+}
+
+function renderInstall(){
+  const mq2 = chosenPath==='mq2';
+  const c=card(`
+    <div class="eyebrow">Step 4 · ${mq2?'install free MacroQuest':'open the Socials window'}</div>
+    <h2>${mq2?'Install MacroQuest (free &amp; open source)':'Open your Socials window'}</h2>
+    ${mq2?`
+      <p class="lead">MacroQuest is the free tool that lets one key run your whole burn. You do <b>not</b> need to pay anyone.</p>
+      <ol>
+        <li>Get a <b>free</b> build:
+          <ul>
+            <li><b>macroquest.org</b> — the official open-source project (free).</li>
+            <li>Or your <b>emu server's own MQ build</b>, if it provides one (best compatibility, also free).</li>
+          </ul>
+        </li>
+        <li>If your antivirus flags it, add the MacroQuest folder as an <b>exclusion</b> (injectors get false-flagged). Only do this with a source you trust.</li>
+        <li>Run the <b>MacroQuest launcher</b>, then start EverQuest from it.</li>
+        <li>In game, test it: type <code>/echo Hello</code> — if “Hello” prints back, you're in. 🎉</li>
+      </ol>
+      <div class="callout warn"><span class="h">You never need RedGuides' paid tier.</span>
+        Their paid “Level 2” unlocks premium scripts none of these macros use. Skip it.</div>
+      <div class="callout"><span class="h">Want the Shaman fully hands-free too?</span>
+        Also grab the free <code>MQ2DanNet</code> (or <code>MQ2EQBC</code>) plugin — it lets the Rogue command the Shaman. Optional; covered later.</div>
+    `:`
+      <p class="lead">This is the home of your new clean bar. Two ways to open it:</p>
+      <ol>
+        <li>Click the <b>EQ button</b> (bottom of screen) → <b>Socials</b>, <i>or</i></li>
+        <li>Press <b>O</b> (the default Socials hotkey).</li>
+      </ol>
+      <p>You'll see a grid of social buttons. Each can hold up to <b>5 lines</b> of commands and gets a name.
+         In the next step you'll fill a few of them — the text is pre-written and personalized for you.</p>
+      <div class="callout good"><span class="h">How to edit one:</span>
+        Right-click an empty social button → an editor opens → type a <b>Name</b> and paste the <b>lines</b> →
+        close it → <b>drag</b> the finished social onto a hotbar button. That's the whole loop.</div>
+    `}
+  `);
+  c.appendChild(navButtons());
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+}
+
+function renderDrop(){
+  const mq2 = chosenPath==='mq2';
+  const c=card(`
+    <div class="eyebrow">Step 5 · the actual goods (auto-filled with your names)</div>
+    <h2>${mq2?'Save your macros into the Macros folder':'Build your hotkeys'}</h2>
+    <p class="lead">${mq2
+      ?'Hit <b>Download</b> on each file below and drop the three files into <code>...\\MacroQuest\\Macros\\</code>. They already have your character names baked in.'
+      :'For each card: click <b>Copy lines</b>, then in the game’s Socials editor set the <b>Name</b> shown and paste the lines. Drag it to your bar. Repeat. Done.'}</p>
+    <div id="dropZone"></div>
+    ${mq2?`
+      <h3>Optional: drive the Shaman</h3>
+      <p>Only if you grabbed DanNet/EQBC. Same deal — download and drop into the Macros folder.</p>
+      <div id="dropBox"></div>
+    `:`
+      <h3>Your Shaman's hotkeys (box support)</h3>
+      <p>Same process, on the Shaman. These keep you alive and boost your damage.</p>
+      <div id="dropShaman"></div>
+      <details><summary>Prefer one big reference file instead of cards?</summary>
+        <div id="dropTxt" style="margin-top:8px"></div>
+      </details>
+    `}
+    <div class="callout good"><span class="h">Reminder:</span>
+      Names like discs/spells default to the common SoR lines. Slot the <b>highest rank you own</b> and
+      check spelling against your in-game windows — anything mismatched is simply skipped, nothing breaks.</div>
+  `);
+
+  if(mq2){
+    c.querySelector('#dropZone').append(
+      resourceBlock('RogueBurn.mac','one-key burn','tpl-RogueBurn'),
+      resourceBlock('RogueAssist.mac','sustained spam/assist','tpl-RogueAssist'),
+    );
+    c.querySelector('#dropBox').append(resourceBlock('BoxAssist.mac','drive the Shaman','tpl-BoxAssist'));
+  } else {
+    const z=c.querySelector('#dropShaman');
+    const rz=c.querySelector('#dropZone');
+    rogueSocials.forEach(s=>rz.appendChild(socialCard(s)));
+    shamanSocials.forEach(s=>z.appendChild(socialCard(s)));
+    c.querySelector('#dropTxt').append(
+      resourceBlock('rogue-socials.txt','full Rogue reference','tpl-RogueBurn')  // placeholder swapped below
+    );
+  }
+  // fix the reference-file block to a friendly note instead of a macro
+  const txt=c.querySelector('#dropTxt');
+  if(txt){ txt.innerHTML='<div class="callout">The cards above already give you copy-ready, personalized lines — that’s the easiest path. A plain-text reference of all of them is also in your package under <code>hotkeys/</code>.</div>'; }
+
+  c.appendChild(navButtons());
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+}
+
+function renderBind(){
+  const mq2 = chosenPath==='mq2';
+  const binds = [
+    '/bind LeftAlt+1 /mac RogueBurn',
+    '/bind LeftAlt+2 /mac RogueAssist',
+    '/bind LeftAlt+3 /mac BoxAssist',
+    '/bind LeftAlt+0 /endmacro',
+  ].join('\n');
+  const c=card(`
+    <div class="eyebrow">Step 6 · make it one keypress</div>
+    <h2>${mq2?'Bind your macro keys':'Lay out your bar'}</h2>
+    ${mq2?`
+      <p class="lead">Paste these four lines into the game chat (one at a time, or all at once if your client allows). Now your whole rotation is 2–3 keys.</p>
+      <div class="res"><div class="top"><span class="fn">key binds</span><span class="desc">paste in-game</span>
+        <span class="sp"></span><button class="btn" id="copyBind">Copy</button></div><pre>${binds}</pre></div>
+      <ul>
+        <li><b>Alt+1</b> → BURN (dump cooldowns)</li>
+        <li><b>Alt+2</b> → ASSIST/SPAM loop (run once, leave it)</li>
+        <li><b>Alt+3</b> → Shaman driver (optional)</li>
+        <li><b>Alt+0</b> → stop macros</li>
+      </ul>
+      <div class="callout good"><span class="h">That's the whole game now:</span>
+        Press <b>Alt+2</b> at the start of a fight, hit <b>Alt+1</b> on burns, stay behind the mob. Seriously, that's it.</div>
+    `:`
+      <p class="lead">Drag your finished socials onto a hotbar. Here's a clean, ultrawide-friendly layout that kills the clutter:</p>
+      <h3>Recommended 3-row layout</h3>
+      <ul>
+        <li><b>Row 1 (thumb keys):</b> ASSIST · SPAM · BURN · DEBUFF · RANGED</li>
+        <li><b>Row 2 (drag AAs straight on):</b> Spire · Rogue's Fury · Twisted Chance · Ligament Slice · Twisted Shank</li>
+        <li><b>Row 3 (utility):</b> CORPSE · CONSENT · Evade · Sneak · Hide</li>
+      </ul>
+      <div class="callout good"><span class="h">In a fight:</span>
+        Mash <b>SPAM</b>, hit <b>BURN</b> on named, stay behind the mob. Three rows total — that's your “too many buttons” problem solved.</div>
+    `}
+  `);
+  if(mq2){ c.querySelector('#copyBind').onclick=(e)=>copyText(binds,e.target); }
+  c.appendChild(navButtons({nextLabel:'Finish →', onNext:()=>fireConfetti()}));
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+}
+
+function renderDone(){
+  const rogue = chars.rogue.trim()||'Cloudi';
+  const c=card(`
+    <div class="finale">
+      <div class="big">🗡️🎉</div>
+      <h2>You're set, ${rogue}!</h2>
+      <p class="lead">You went from “where do I even begin” to a clean, modern Rogue setup. Go parse.</p>
+    </div>
+    <h3>Your new routine</h3>
+    <ol>
+      <li>Start of fight → <b>${chosenPath==='mq2'?'Alt+2 (assist loop)':'mash SPAM'}</b>.</li>
+      <li>Stay <b>behind the mob</b> (this is half your damage).</li>
+      <li>On a named/boss → <b>${chosenPath==='mq2'?'Alt+1 (BURN)':'hit BURN'}</b> whenever it's up.</li>
+      <li>Let the Shaman <b>slow + malo + heal</b>.</li>
+    </ol>
+    <h3>Don't forget the HUD</h3>
+    <p>Open <code>ui/index.html</code> from your package on the side of your ultrawide — animated cooldown rings so you never sit on a ready Rogue's Fury, plus a DPS meter.</p>
+    <div id="hudTry"></div>
+    <h3>Find your AA IDs (for the in-game BURN hotkey)</h3>
+    <details><summary>Show me the 30-second trick</summary>
+      <ul>
+        <li>Easiest: just <b>drag</b> Spire / Rogue's Fury / Twisted Chance / Ligament Slice from your AA window onto a hotbar row and press them in order. No IDs needed.</li>
+        <li>If you want them in one social: with MacroQuest loaded, type <code>/echo \${Me.AltAbility[Rogue's Fury].ID}</code> — it prints the number to put after <code>/alt activate</code>.</li>
+      </ul>
+    </details>
+    <div class="callout good"><span class="h">Want to go deeper?</span>
+      Your package's <code>docs/</code> folder has the rotation, the burn order, Shaman coordination, and a
+      DPS-troubleshooting checklist — all written for a returning player.</div>
+    <div class="nav"><button class="btn" id="restart">↺ Start over</button><div class="spacer"></div>
+      <button class="btn go big" id="celebrate">🎉 Celebrate</button></div>
+  `);
+  const tryWrap=c.querySelector('#hudTry');
+  const a=document.createElement('button'); a.className='btn go'; a.textContent='Try to open the HUD (ui/index.html)';
+  a.onclick=()=>window.open('ui/index.html','_blank');
+  tryWrap.appendChild(a);
+  c.querySelector('#restart').onclick=()=>{ go(0); };
+  c.querySelector('#celebrate').onclick=()=>fireConfetti();
+  stageEl.innerHTML=''; stageEl.appendChild(c);
+  fireConfetti();
+}
+
+/* ---------- effects ---------- */
+function achieve(msg){
+  const t=$('#toast'); t.innerHTML='<b>✔</b> '+msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1900);
+}
+function fireConfetti(){
+  const box=$('#confetti'); const colors=['#3f7cff','#4cd2ff','#9aa7ff','#39d98a','#ffcc55'];
+  for(let i=0;i<90;i++){
+    const d=document.createElement('div'); d.className='conf';
+    d.style.left=Math.random()*100+'vw'; d.style.background=colors[i%colors.length];
+    d.style.animationDuration=(2+Math.random()*2)+'s'; d.style.animationDelay=(Math.random()*0.5)+'s';
+    d.style.top=(-10-Math.random()*20)+'vh';
+    box.appendChild(d); setTimeout(()=>d.remove(),4200);
+  }
+}
+
+/* ---------- live personalization ---------- */
+function rerenderResources(){
+  document.querySelectorAll('.res[data-tpl]').forEach(r=>{
+    r.querySelector('pre').textContent = personalize(tpl(r.dataset.tpl));
+  });
+  // social cards + macro blocks are re-rendered on step change; refresh visible ones:
+  render();
+}
+['inRogue','inShaman','inTank'].forEach(id=>{
+  $('#'+id).addEventListener('input', e=>{
+    const map={inRogue:'rogue',inShaman:'shaman',inTank:'tank'};
+    chars[map[id]] = e.target.value;
+    localStorage.setItem('cl_'+map[id], e.target.value);
+    // refresh any visible personalized content
+    document.querySelectorAll('.res[data-tpl]').forEach(r=>{ r.querySelector('pre').textContent=personalize(tpl(r.dataset.tpl)); });
+    if(document.querySelector('[data-social]')) steps[current].render();
+    if(steps[current].key==='done'){ const h=stageEl.querySelector('h2'); if(h) h.textContent="You're set, "+(chars.rogue.trim()||'Cloudi')+'!'; }
+  });
+});
+
+function render(){ steps[current].render(); buildStepper(); updateProg(); }
+buildStepper(); render();
+</script>
+</body>
+</html>
