@@ -193,6 +193,21 @@ section{padding:38px 0 42px}
 .vinfo{margin-left:auto;color:var(--faint);font-size:13px;cursor:pointer;transition:.2s var(--ease);padding:0 2px;flex:none}
 .vinfo:hover{color:var(--mint);text-shadow:0 0 10px var(--mint);transform:scale(1.15)}
 .vt{align-items:center}
+/* === single-page-app: each nav is its own page, animated in === */
+.wrap section{display:none;border-bottom:none;animation:none}
+.wrap section.page-on{display:block;animation:pagein .44s var(--ease)}
+@keyframes pagein{from{opacity:0;transform:translateY(18px) scale(.99);filter:blur(3px)}60%{filter:blur(0)}to{opacity:1;transform:none;filter:blur(0)}}
+@media(prefers-reduced-motion:reduce){.wrap section.page-on{animation:fadeonly .25s ease}}
+@keyframes fadeonly{from{opacity:0}to{opacity:1}}
+/* === bold viz headings + visible explanation === */
+.vhead{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.vtitle{font-family:var(--mono);font-size:13.5px;font-weight:700;letter-spacing:.4px;color:var(--txt)}
+.vexp{font-size:11px;line-height:1.55;color:var(--dim);margin:0 0 14px;max-width:56ch}
+.vinfo{margin-left:auto;color:var(--faint);font-size:13px;cursor:pointer;transition:.2s var(--ease);flex:none}
+.vinfo:hover{color:var(--mint);text-shadow:0 0 10px var(--mint);transform:scale(1.15)}
+/* bolder page titles */
+section > .h:first-child{font-size:14px;font-weight:700;letter-spacing:1px;color:var(--txt);margin-bottom:18px}
+section > .h:first-child .muted{font-weight:500;font-size:11px}
 </style>
 </head>
 <body>
@@ -639,7 +654,7 @@ const HELP={
  'Holder concentration':'Buys ÷ unique buyers per token — how repeatedly the same wallets are buying. High (red, ≥3×) means a few wallets dominate the volume (bot/wash/manipulation risk); low means dispersed, organic demand. Tap a token to inspect.'
 };
 function helpEsc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
-const vcard=(t,sub,c)=>'<div class=viz data-help="'+helpEsc(HELP[t]||sub||'')+'" data-title="'+helpEsc(t)+'"><div class=vt><span>'+t+'</span>'+(sub?'<span class=vsub>'+sub+'</span>':'')+'<span class=vinfo onclick="event.stopPropagation();helpPop(this)">ⓘ</span></div>'+c+'</div>';
+const vcard=(t,sub,c)=>'<div class=viz data-help="'+helpEsc(HELP[t]||sub||'')+'" data-title="'+helpEsc(t)+'"><div class=vhead><span class=vtitle>'+t+'</span><span class=vinfo onclick="event.stopPropagation();helpPop(this)">ⓘ</span></div>'+(sub?'<div class=vexp>'+sub+'</div>':'')+c+'</div>';
 function showHelp(title,body){if(!$('help'))return;$('help').innerHTML='<div class=grab></div><div class=hh>'+(title||'About this feed')+'</div><div class=hb>'+(body||'No description available.')+'</div><button class=hclose onclick=closeHelp()>Got it</button>';$('help').classList.add('open');$('helpbg').classList.add('open');}
 function closeHelp(){if($('help'))$('help').classList.remove('open');if($('helpbg'))$('helpbg').classList.remove('open');}
 function helpPop(infoEl){const card=infoEl.closest('[data-help]');if(card)showHelp(card.getAttribute('data-title'),card.getAttribute('data-help'));}
@@ -1402,13 +1417,18 @@ function scanSignals(){const t=now(),AS=findAlphaStrat(),TS=findTrendStrat();
   const age=t-T.firstSeen;if(age>0&&T.buyers.size/age*60>=thrT)sig('trend',T.mint,{});}}
 /* render only the visible tab + one rotating section per cycle (was: all 13 every cycle, each scanning every token) */
 const SECT={'s-pulse':renderPulse,'s-flowscope':renderFlowscope,'s-cohorts':renderCohorts,'s-quant':renderQuant,'s-intel':renderIntel,'s-movers':renderMovers,'s-tokens':renderTokens,'s-wallets':renderWallets,'s-flow':renderFlow,'s-trends':renderTrends,'s-opps':function(){renderAlpha();renderOpps();},'s-signals':renderSignals,'s-patterns':renderPatterns,'s-copy':renderCopy,'s-dist':renderDist};
-const SKEYS=Object.keys(SECT);let rrIdx=0,activeSection='s-hero';
-function render(){renderHero();renderChips();renderTrade();
- const af=SECT[activeSection];if(af)af();
- for(let i=0;i<SKEYS.length;i++){const rk=SKEYS[(rrIdx+i)%SKEYS.length];if(rk!==activeSection){SECT[rk]();rrIdx=(rrIdx+i+1)%SKEYS.length;break;}}
+/* single-page-app: render ONLY the visible page (each nav = its own page) */
+const PAGES=Object.assign({'s-hero':function(){renderHero();renderChips();},'s-trade':renderTrade},SECT);
+let activeSection='s-hero';
+function render(){const r=PAGES[activeSection];if(r)r();
  if(tokens.size>4000)tv().slice().sort((a,b)=>a.lastSeen-b.lastSeen).slice(0,1000).forEach(T=>tokens.delete(T.mint));
  if(wallets.size>8000)[...wallets.values()].sort((a,b)=>a.lastTs-b.lastTs).slice(0,2000).forEach(W=>wallets.delete(W.addr));
  if(seen.size>120000)seen.clear();}
+function showPage(id){if(!id)return;activeSection=id;
+ document.querySelectorAll('.wrap section').forEach(s=>s.classList.toggle('page-on',s.id===id));
+ document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+id));
+ try{window.scrollTo({top:0,behavior:'smooth'});}catch(e){try{window.scrollTo(0,0);}catch(_){}}
+ render();}
 function setMetric(m){heroMetric=m;renderHero();}
 function setWin(n){heroWin=n;renderHero();}
 
@@ -1429,9 +1449,10 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  render();$('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
 
-document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('on'));a.classList.add('on');const h=a.getAttribute('href');if(h&&h[0]==='#'){activeSection=h.slice(1);render();}}));
+document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const h=a.getAttribute('href');if(h&&h[0]==='#')showPage(h.slice(1));}));
 function start(){$('overlay').style.display='none';$('status').textContent='connecting…';initStorage();ensureCopyStrat();ensureTrendStrat();ensureAlphaStrat();ensureMoonStrat();ensureSignalStrat();ensureDiscStrat();loadFollowsTextarea();refreshSolUsd();poll();setInterval(poll,7000);if(follows.size){connectRealtime();pollFollows();setInterval(pollFollows,6000);}
- const sv=localStorage.getItem('mchpai_server');if(sv){const f=$('srv_url');if(f)f.value=sv;connectServer();}}
+ const sv=localStorage.getItem('mchpai_server');if(sv){const f=$('srv_url');if(f)f.value=sv;connectServer();}
+ showPage('s-hero');}
 function saveKey2(){const k=$('keyfield2').value.trim();if(k){KEY=k;localStorage.setItem('helius_key',k);start();}}
 if(KEY){start();}else{$('overlay').style.display='flex';}
 </script>
