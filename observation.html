@@ -529,7 +529,7 @@ const DETAIL={
   const comp=[['smart',A.cSmart],['accel',A.cAccel],['flow',A.cFlow],['liq',A.cLiq],['organic',A.cOrg],['mom',A.cMom]];
   return {icon:'🪙 ',title:short(mint),sub:mint,
    tag:'<span class="tag clickable" onclick="openDetail(\'dex\',\''+T.dex+'\')">'+DEXSHORT(T.dex)+' ›</span>'+(T.follow&&T.follow.size?'<span class="tag" style=color:var(--up)>followed</span>':'')+(held.length?'<span class="tag" style=color:var(--mint)>held</span>':''),
-   html:'<div class=dgrid>'+dst('Peak ×',T.maxMult.toFixed(2)+'×','up')+dst('Change',fmtPct(pct(T)),up?'up':'down')+dst('Age',ageStr(N-T.firstSeen))+dst('Buyers',T.buyers.size)+dst('Smart',T.smart.size,T.smart.size?'up':'')+dst('Liquidity',T.vol.toFixed(1)+'◎')+dst('Net flow',(T.netSol>=0?'+':'')+T.netSol.toFixed(2)+'◎',T.netSol>=0?'up':'down')+dst('Buys/Sells',T.buys+'/'+T.sells)+dst('Alpha',A.score.toFixed(0))+'</div>'
+   html:'<div class=dgrid>'+dst('Peak ×',T.maxMult.toFixed(2)+'×','up')+dst('Change',fmtPct(pct(T)),up?'up':'down')+dst('Age',ageStr(N-T.firstSeen))+dst('Buyers',T.buyers.size)+dst('Smart',T.smart.size,T.smart.size?'up':'')+dst('Liquidity',T.vol.toFixed(1)+'◎')+dst('Net flow',(T.netSol>=0?'+':'')+T.netSol.toFixed(2)+'◎',T.netSol>=0?'up':'down')+dst('Buys/Sells',T.buys+'/'+T.sells)+dst('Concentration',(T.buys/Math.max(T.buyers.size,1)).toFixed(1)+'×',(T.buys/Math.max(T.buyers.size,1))>=3?'down':'')+dst('Alpha',A.score.toFixed(0))+'</div>'
    +'<div class=h style=margin:10px 0 6px>Price trajectory <span class=muted style=font-weight:400>scrub</span></div>'+rhChart(T.prices,150,up,{fmt:x=>(+x).toExponential(2)})
    +'<div class=h style=margin:14px 0 8px>Alpha breakdown</div>'+bars(comp.map(([k,vv])=>({label:k,value:+(vv*100).toFixed(0),disp:(vv*100|0)+'%',color:vv>=0.5?'#34ecaa':vv>=0.25?'#f3c352':'#5f7d76'})))
    +(T.bSamp&&T.bSamp.length>2?'<div class=h style=margin:14px 0 8px>Buyer growth</div>'+rhChart(T.bSamp.map(s=>s.b),100,true,{fmt:x=>Math.round(x)+' buyers'}):'')
@@ -633,7 +633,10 @@ const HELP={
  'Strategy ◎/hr':'Each active strategy’s realized SOL/hour over the last 60 minutes. Tap a bar to open that strategy. Negative = currently bleeding.',
  'Win% by entry age':'Win rate grouped by how old the token was when entered. Tells you whether entering younger or older tokens works better.',
  'Discovered feature weights':'What the live-learned pattern model keys on — the magnitude of each feature’s weight (smart money, acceleration, liquidity…). Bigger spoke = more influence on the prediction.',
- 'Model AUC trend':'The discovery model’s held-out AUC over time (its learning curve). Above 0.6 means it genuinely predicts winners on unseen tokens; below = not yet.'
+ 'Model AUC trend':'The discovery model’s held-out AUC over time (its learning curve). Above 0.6 means it genuinely predicts winners on unseen tokens; below = not yet.',
+ 'Volume profile':'Total traded volume (SOL) grouped by where each token peaked. If most volume sits in the <1× / dumping bands, the market is bleeding money into losers; volume concentrated in 2×+ bands means SOL is chasing real runners.',
+ 'Co-buy network':'Wallets (nodes) that bought the same tokens are linked (edges); thicker/brighter links = more shared tokens. Tight clusters reveal coordinated groups, sybil rings, or copy-trading packs. Green nodes are graded-smart wallets. Tap any node to open that wallet.',
+ 'Holder concentration':'Buys ÷ unique buyers per token — how repeatedly the same wallets are buying. High (red, ≥3×) means a few wallets dominate the volume (bot/wash/manipulation risk); low means dispersed, organic demand. Tap a token to inspect.'
 };
 function helpEsc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 const vcard=(t,sub,c)=>'<div class=viz data-help="'+helpEsc(HELP[t]||sub||'')+'" data-title="'+helpEsc(t)+'"><div class=vt><span>'+t+'</span>'+(sub?'<span class=vsub>'+sub+'</span>':'')+'<span class=vinfo onclick="event.stopPropagation();helpPop(this)">ⓘ</span></div>'+c+'</div>';
@@ -674,6 +677,12 @@ function bubble(pts,xl,yl,h=190){if(!pts||pts.length<2)return '<div class=ctr>co
  const X=v=>14+(v-xn)/rx*(w-28),Y=v=>h-18-(v-yn)/ry*(h-30);
  return '<svg viewBox="0 0 '+w+' '+h+'" width=100% height='+h+'>'+pts.map(p=>'<circle cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+(4+(p.r||1)/sm*18).toFixed(1)+'" fill="'+(p.up?'rgba(52,236,170,.35)':'rgba(255,106,82,.32)')+'" stroke="'+(p.up?'#34ecaa':'#ff6a52')+'"'+(p.mint?' style=cursor:pointer onclick="openToken(\''+p.mint+'\')"':'')+'>'+(p.mint?'<title>'+short(p.mint)+'</title>':'')+'</circle>').join('')+'<text x='+(w-8)+' y='+(h-4)+' fill=#5b6166 font-size=9 text-anchor=end>'+xl+'</text><text x=12 y=12 fill=#5b6166 font-size=9>'+yl+'</text></svg>';}
 
+function network(nodes,edges,h=250){if(!nodes||nodes.length<2)return '<div class=ctr>collecting…</div>';const cx=h/2,cy=h/2,R=h/2-26;
+ const pos=nodes.map((n,i)=>{const a=-Math.PI/2+i/nodes.length*2*Math.PI;return {x:cx+Math.cos(a)*R,y:cy+Math.sin(a)*R};});
+ const maxW=Math.max.apply(null,edges.map(e=>e.w).concat([1]));
+ const lines=edges.map(e=>{const a=pos[e.a],b=pos[e.b];return '<line x1='+a.x.toFixed(1)+' y1='+a.y.toFixed(1)+' x2='+b.x.toFixed(1)+' y2='+b.y.toFixed(1)+' stroke=#56f0c0 stroke-width='+(0.5+e.w/maxW*2.6).toFixed(1)+' opacity='+(0.10+e.w/maxW*0.5).toFixed(2)+'/>';}).join('');
+ const dots=pos.map((p,i)=>{const sz=Math.min(12,4+(nodes[i].size||1)),sm=nodes[i].smart;return '<circle cx='+p.x.toFixed(1)+' cy='+p.y.toFixed(1)+' r='+sz.toFixed(1)+' fill='+(sm?'rgba(52,236,170,.5)':'rgba(143,216,255,.32)')+' stroke='+(sm?'#34ecaa':'#8fd8ff')+' style="cursor:pointer;filter:drop-shadow(0 0 5px '+(sm?'#34ecaa':'#8fd8ff')+'66)" onclick="openDetail(\'wallet\',\''+nodes[i].addr+'\')"><title>'+short(nodes[i].addr)+' · '+(nodes[i].size||0)+' tokens</title></circle>';}).join('');
+ return '<svg viewBox="0 0 '+h+' '+h+'" width='+h+' height='+h+' style=display:block;margin:0 auto;max-width:100%>'+lines+dots+'</svg>';}
 /* ---- data ---- */
 async function rpc(m,p){const r=await fetch(`https://mainnet.helius-rpc.com/?api-key=${KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:m,params:p})});
  if(!r.ok)throw new Error('HTTP '+r.status+(r.status===401?' (bad key)':''));const j=await r.json();if(j.error)throw new Error(j.error.message||'rpc error');return j.result;}
@@ -1166,6 +1175,7 @@ function renderFlowscope(){const el=$('flowscope_body');if(!el)return;const N=no
  const vollead=A.slice().sort((a,b)=>b.vol-a.vol).slice(0,10).map(T=>({label:short(T.mint),value:+T.vol.toFixed(1),disp:T.vol.toFixed(1)+'◎',color:T.netSol>=0?'#34ecaa':'#ff6a52',full:T.mint}));
  const sizes=tape.map(t=>t.sol).filter(x=>x>0),bigShare=(bigBuys+bigSells)/Math.max(cnt.swaps,1);
  const bvs=[{label:'buy vol',value:+flow.bvol.toFixed(0),disp:flow.bvol.toFixed(0)+'◎',color:'#34ecaa'},{label:'sell vol',value:+flow.svol.toFixed(0),disp:flow.svol.toFixed(0)+'◎',color:'#ff6a52'}];
+ const vbProf=[['<1×',0,1,'#5f7d76'],['1-2×',1,2,'#8effe3'],['2-5×',2,5,'#56f0c0'],['5-10×',5,10,'#34ecaa'],['10×+',10,1e9,'#34ecaa']].map(([l,lo,hi,c])=>{const v=A.filter(T=>T.maxMult>=lo&&T.maxMult<hi).reduce((s,T)=>s+T.vol,0);return {label:l,value:+v.toFixed(0),disp:v.toFixed(0)+'◎',color:c};});
  el.innerHTML='<div class=vrow>'+ring(bp,'Buy pressure',(bp*100).toFixed(0)+'% of flow',118)+ring(1-bp,'Sell pressure',((1-bp)*100).toFixed(0)+'% of flow',118)+'</div>'
   +'<div class=vizgrid>'
    +vcard('Cumulative Volume Delta','net ◎ buy−sell over session',rhChart(cvd,180,cvd.length?cvd[cvd.length-1]>=0:true,{fmt:x=>(x>=0?'+':'')+(+x).toFixed(2)+'◎'}))
@@ -1179,6 +1189,7 @@ function renderFlowscope(){const el=$('flowscope_body');if(!el)return;const N=no
    +vcard('Price velocity','%/min across tokens',histogram(A.filter(T=>T.prices.length>=2&&N-T.firstSeen>20).map(T=>Math.max(-200,Math.min(500,pct(T)/Math.max((N-T.firstSeen)/60,1)))),'#f3c352',160))
    +vcard('Trades / min','market tempo',ring(Math.min(1,tpm/400),tpm+' /min',tpm>250?'hot':tpm>80?'active':'quiet',118))
    +vcard('Large-trade share','≥2◎ as % of swaps',ring(Math.min(1,bigShare*5),(bigShare*100).toFixed(1)+'%',bigBuys+' big buys / '+bigSells+' sells',118))
+   +vcard('Volume profile','where SOL concentrates by peak ×',bars(vbProf))
   +'</div>';}
 function renderCohorts(){const el=$('cohorts_body');if(!el)return;const N=now(),A=tv();
  const births=diff(hist.map(s=>s.tokens)),active=A.filter(T=>N-T.lastSeen<300).length,survFrac=A.length?active/A.length:0;
@@ -1192,6 +1203,10 @@ function renderCohorts(){const el=$('cohorts_body');if(!el)return;const N=now(),
  const velo=A.filter(T=>N-T.lastSeen<120&&T.buyers.size>=4).map(T=>({T,r:T.buyers.size/Math.max(N-T.firstSeen,1)*60})).sort((a,b)=>b.r-a.r).slice(0,10).map(({T,r})=>({label:short(T.mint),value:+r.toFixed(1),disp:r.toFixed(0)+'/min',color:'#34ecaa',full:T.mint}));
  const bub=A.filter(T=>T.maxMult>1).slice(-120).map(T=>({x:N-T.firstSeen,y:T.maxMult,r:T.buyers.size,up:T.maxMult>=2,mint:T.mint}));
  const surv=[[0,300,'<5m'],[300,600,'5-10m'],[600,1200,'10-20m'],[1200,1e9,'20m+']].map(([lo,hi,l])=>{const c=A.filter(T=>{const a=N-T.firstSeen;return a>=lo&&a<hi;}),al=c.filter(T=>N-T.lastSeen<300).length;return {label:l,value:c.length?+(al/c.length*100).toFixed(0):0,disp:(c.length?(al/c.length*100|0):0)+'%',color:'#8effe3'};});
+ const wl=[...wallets.values()].filter(W=>W.tokens.size>=2).sort((a,b)=>b.tokens.size-a.tokens.size).slice(0,14);
+ const netNodes=wl.map(W=>({addr:W.addr,size:W.tokens.size,smart:walletQ(W.addr)>0.3}));const netEdges=[];
+ for(let i=0;i<wl.length;i++)for(let j=i+1;j<wl.length;j++){let sh=0;for(const m of wl[i].tokens)if(wl[j].tokens.has(m))sh++;if(sh>=2)netEdges.push({a:i,b:j,w:sh});}
+ const conc=A.filter(T=>T.buys>=5).map(T=>({T,c:T.buys/Math.max(T.buyers.size,1)})).sort((a,b)=>b.c-a.c).slice(0,10).map(({T,c})=>({label:short(T.mint),value:+c.toFixed(2),disp:c.toFixed(1)+'×',color:c>=3?'#ff6a52':c>=2?'#f3c352':'#56f0c0',full:T.mint}));
  el.innerHTML='<div class=vrow>'+ring(survFrac,'Survival',active+' active / '+A.length,118)+ring(1-rugFrac,'Not rugged',(rugFrac*100|0)+'% dumped >50%',118)+ring(win2,'≥2× rate',runners.length+' mature',118)+'</div>'
   +'<div class=vizgrid>'
    +vcard('Launch rate','new tokens / interval',rhChart(births.length>1?births:[0,0],160,true,{fmt:x=>Math.round(x)+' new'}))
@@ -1204,6 +1219,8 @@ function renderCohorts(){const el=$('cohorts_body');if(!el)return;const N=now(),
    +vcard('Age · peak · buyers','bubble size = buyers · tap',bubble(bub,'age s →','peak ×',180))
    +vcard('Lifecycle snapshot','current phase counts',bars([['fresh','#34ecaa'],['heating','#8effe3'],['active','#56f0c0'],['dumping','#f3c352'],['quiet','#5f7d76']].map(([k,c])=>({label:k,value:cats[k],disp:String(cats[k]),color:c}))))
    +vcard('Buyer velocity leaders','buyers/min · tap',bars(velo))
+   +vcard('Co-buy network','wallets sharing tokens · tap a node',network(netNodes,netEdges,250))
+   +vcard('Holder concentration','buys ÷ unique buyers · high = wash/bot risk · tap',bars(conc))
   +'</div>';}
 function renderQuant(){const el=$('quant_body');if(!el)return;const N=now(),act=strategies.filter(s=>!s.retired);
  const lens=act.map(S=>S.book.eqHist.length).filter(x=>x>0),minL=lens.length?Math.min.apply(null,lens):0;
