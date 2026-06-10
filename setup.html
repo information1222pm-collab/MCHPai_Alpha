@@ -442,6 +442,68 @@ Sub BoxCmd(string Cmd)
 /return
 </script>
 
+<script type="text/plain" id="tpl-ExportAbilities">| =====================================================================
+|  ExportAbilities.mac  -  ONE-TIME character fingerprint (read-only)
+| ---------------------------------------------------------------------
+|  Run this ONCE on your Rogue to print exactly which burn abilities you
+|  own (with IDs + reuse) and every discipline you know, and write them to
+|  <MacroQuest>\config\RogueExport.ini. Send that file back and your setup
+|  gets tuned 100% to your character - no guessing.
+|
+|  Usage:  /mac ExportAbilities
+|  It casts nothing and changes nothing.
+| =====================================================================
+
+Sub Main
+    /declare i int local
+    /declare n string local
+
+    /echo \ay========== ROGUE ABILITY EXPORT ==========
+    /echo \aw${Me.Name} \ag- Level ${Me.Level} ${Me.Class} - ${Me.AAPointsTotal} AA
+    /ini "RogueExport.ini" "Character" "Name" "${Me.Name}"
+    /ini "RogueExport.ini" "Character" "Level" "${Me.Level}"
+
+    /echo \ay---- BURN AAs (owned show ID + reuse) ----
+    /call CheckAA "Rogue's Fury"
+    /call CheckAA "Third Spire of the Rake"
+    /call CheckAA "Ligament Slice"
+    /call CheckAA "Rake's Rampage"
+    /call CheckAA "Focused Rake's Rampage"
+    /call CheckAA "Intensity of the Resolute"
+    /call CheckAA "Twisted Shank"
+    /call CheckAA "Banestrike"
+    /call CheckAA "Absorbing Agent"
+    /call CheckAA "Bestow Twisted Chance"
+    /call CheckAA "Assassinate"
+
+    /echo \ay---- DISCIPLINES KNOWN ----
+    /for i 1 to 80
+        /varset n ${Me.CombatAbility[${i}]}
+        /if (${n.Length} && !${n.Equal[NULL]}) {
+            /echo \ag  ${n} \ao(ID ${Spell[${n}].ID}, reuse ${Spell[${n}].RecastTime}s)
+            /ini "RogueExport.ini" "Disciplines" "${n}" "ID=${Spell[${n}].ID}"
+        }
+    /next i
+
+    /echo \ay---- WEAPONS ----
+    /echo Mainhand: \aw${Me.Inventory[mainhand].Name}
+    /echo Offhand:  \aw${Me.Inventory[offhand].Name}
+    /ini "RogueExport.ini" "Gear" "Mainhand" "${Me.Inventory[mainhand].Name}"
+    /ini "RogueExport.ini" "Gear" "Offhand" "${Me.Inventory[offhand].Name}"
+
+    /echo \ag========== DONE - send RogueExport.ini back ==========
+/return
+
+Sub CheckAA(string Name)
+    /if (${Me.AltAbility[${Name}].ID}) {
+        /echo \ag  OWNED: \aw${Name} \agID=${Me.AltAbility[${Name}].ID} reuse=${Me.AltAbility[${Name}].MyReuseTime}s
+        /ini "RogueExport.ini" "BurnAAs" "${Name}" "ID=${Me.AltAbility[${Name}].ID};reuse=${Me.AltAbility[${Name}].MyReuseTime}"
+    } else {
+        /echo \ar  not found: ${Name}
+    }
+/return
+</script>
+
 <script>
 /* =====================================================================
    Wizard engine
@@ -750,6 +812,13 @@ function renderDrop(){
       :'For each card: click <b>Copy lines</b>, then in the game’s Socials editor set the <b>Name</b> shown and paste the lines. Drag it to your bar. Repeat. Done.'}</p>
     <div id="dropZone"></div>
     ${mq2?`
+      <h3>⭐ Tune it to YOUR character (2 min, highly recommended)</h3>
+      <p>Every Rogue owns slightly different AAs/ranks. Drop this read-only macro in too, run
+         <code>/mac ExportAbilities</code> once, and it prints + saves exactly what you own (names, IDs, discs).</p>
+      <div id="dropExport"></div>
+      <div class="callout good"><span class="h">Then send the file back.</span>
+        It writes <code>…\\MacroQuest\\config\\RogueExport.ini</code>. Send that to whoever set this up and your
+        macros + HUD get dialed in 100% — no guessing. Until then, defaults work fine; anything that doesn't match is just skipped.</div>
       <h3>Optional: drive the Shaman</h3>
       <p>Only if you grabbed DanNet/EQBC. Same deal — download and drop into the Macros folder.</p>
       <div id="dropBox"></div>
@@ -771,6 +840,7 @@ function renderDrop(){
       resourceBlock('RogueBurn.mac','one-key burn','tpl-RogueBurn'),
       resourceBlock('RogueAssist.mac','sustained spam/assist','tpl-RogueAssist'),
     );
+    c.querySelector('#dropExport').append(resourceBlock('ExportAbilities.mac','one-time character fingerprint','tpl-ExportAbilities'));
     c.querySelector('#dropBox').append(resourceBlock('BoxAssist.mac','drive the Shaman','tpl-BoxAssist'));
   } else {
     const z=c.querySelector('#dropShaman');
@@ -844,8 +914,10 @@ function renderDone(){
       <li>On a named/boss → <b>${chosenPath==='mq2'?'Alt+1 (BURN)':'hit BURN'}</b> whenever it's up.</li>
       <li>Let the Shaman <b>slow + malo + heal</b>.</li>
     </ol>
-    <h3>Don't forget the HUD</h3>
-    <p>Open <code>ui/index.html</code> from your package on the side of your ultrawide — animated cooldown rings so you never sit on a ready Rogue's Fury, plus a DPS meter.</p>
+    <h3>Don't forget the HUD &amp; cheat card</h3>
+    <p>Open <code>ui/index.html</code> on the side of your ultrawide — animated cooldown rings plus a
+       <b>real DPS meter</b> (drag in your <code>eqlog.txt</code> for live numbers). And print
+       <code>ui/cheatsheet.html</code> to keep the rotation by your keyboard.</p>
     <div id="hudTry"></div>
     <h3>Find your AA IDs (for the in-game BURN hotkey)</h3>
     <details><summary>Show me the 30-second trick</summary>
@@ -861,9 +933,11 @@ function renderDone(){
       <button class="btn go big" id="celebrate">🎉 Celebrate</button></div>
   `);
   const tryWrap=c.querySelector('#hudTry');
-  const a=document.createElement('button'); a.className='btn go'; a.textContent='Try to open the HUD (ui/index.html)';
+  const a=document.createElement('button'); a.className='btn go'; a.textContent='Open the HUD (ui/index.html)';
   a.onclick=()=>window.open('ui/index.html','_blank');
-  tryWrap.appendChild(a);
+  const b=document.createElement('button'); b.className='btn'; b.style.marginLeft='8px'; b.textContent='Open the cheat card';
+  b.onclick=()=>window.open('ui/cheatsheet.html','_blank');
+  tryWrap.append(a,b);
   c.querySelector('#restart').onclick=()=>{ go(0); };
   c.querySelector('#celebrate').onclick=()=>fireConfetti();
   stageEl.innerHTML=''; stageEl.appendChild(c);

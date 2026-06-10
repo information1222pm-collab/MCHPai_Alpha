@@ -232,10 +232,29 @@
         </div>
 
         <div class="hint">
-          <span class="demo">Numbers here are simulated for layout.</span>
-          To go live, feed your parser output where the script says
-          <code>// LIVE DATA HOOK</code>. Keep GamParse as the source of truth
-          for serious parsing (docs/07).
+          <span class="demo" id="demoNote">Numbers above are simulated for layout — load your real log below to replace them.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- REAL LOG PARSER -->
+    <div class="panel">
+      <h2>Real Parse <span class="tag">your eqlog.txt</span></h2>
+      <div class="body">
+        <div id="dropLog" style="border:1px dashed var(--edge);border-radius:10px;padding:14px;text-align:center;cursor:pointer;background:#0a1222">
+          <div style="font-size:13px;color:var(--ink)">⬆ Drag your <b>eqlog_Cloudi_*.txt</b> here</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">or click to browse · all parsing happens in your browser, nothing is uploaded</div>
+          <input type="file" id="logFile" accept=".txt,.log" style="display:none" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <label style="font-size:11px;color:var(--muted)">Your name in log</label>
+          <input id="logName" value="You" style="flex:1;background:#0a1222;border:1px solid var(--edge);border-radius:7px;color:var(--ink);padding:5px 8px;font-size:12px" />
+        </div>
+        <div id="parseOut" style="margin-top:12px"></div>
+        <div class="hint" id="parseHint">
+          Find it at <code>EverQuest\Logs\eqlog_&lt;Char&gt;_&lt;server&gt;.txt</code>
+          (enable with <code>/log on</code> in game). Parses Backstab, Assassinate,
+          melee, procs &amp; poison DoTs into real DPS, crit %, and a breakdown.
         </div>
       </div>
     </div>
@@ -319,6 +338,7 @@ let burning = false, burnEnds = 0, myDps = 42000, fightSec = 0;
 function pick(arr){return arr[0] + Math.random()*(arr[1]-arr[0]);}
 
 function tickDps(){
+  if(window.liveLoaded) return;   // real parse loaded — stop the simulation
   fightSec++;
   document.getElementById('fightLabel').textContent = fmt(fightSec).replace('READY','0s');
   const rows = ROSTER.map(p=>{
@@ -387,6 +407,134 @@ document.getElementById('btnSwap').onclick=setTarget;
 
 setTarget(); renderCooldowns(); tickDps();
 setInterval(loop, 1000);
+
+/* =====================================================================
+   REAL COMBAT-LOG PARSER  (runs entirely in your browser)
+   Reads an EverQuest eqlog_*.txt and computes real DPS, crit %, and a
+   per-source breakdown for YOUR damage (Backstab, Assassinate, melee,
+   weapon/AA procs, and poison/DoT ticks).
+   ===================================================================== */
+(function(){
+  const drop = document.getElementById('dropLog');
+  const input = document.getElementById('logFile');
+  const out = document.getElementById('parseOut');
+  const nameInput = document.getElementById('logName');
+  if(!drop) return;
+
+  drop.onclick = ()=>input.click();
+  input.onchange = e=>{ if(e.target.files[0]) readFile(e.target.files[0]); };
+  ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--ready)';}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--edge)';}));
+  drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f); });
+
+  function readFile(file){
+    out.innerHTML = '<div style="color:var(--muted);font-size:12px">Reading '+file.name+' …</div>';
+    // auto-detect character name from filename: eqlog_<Char>_<server>.txt
+    const m = file.name.match(/eqlog_([A-Za-z]+)_/);
+    if(m){ nameInput.value = m[1]; }
+    const reader = new FileReader();
+    reader.onload = ev => parse(ev.target.result);
+    reader.onerror = ()=>{ out.innerHTML='<div style="color:var(--bad)">Could not read that file.</div>'; };
+    reader.readAsText(file);
+  }
+
+  // EQ timestamp -> ms.  "[Tue Jun 10 21:15:33 2026]"
+  const MON={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  function ts(line){
+    const m=line.match(/^\[\w+ (\w+) +(\d+) (\d+):(\d+):(\d+) (\d+)\]/);
+    if(!m) return null;
+    return new Date(+m[6], MON[m[1]], +m[2], +m[3], +m[4], +m[5]).getTime();
+  }
+  const num = s => parseInt(s.replace(/,/g,''),10);
+
+  function parse(text){
+    const me = (nameInput.value||'You').trim();
+    // Build matchers for "You" or the character's actual name as the attacker.
+    const self = me.toLowerCase()==='you' ? 'You' : me;
+    const lines = text.split(/\r?\n/);
+    let total=0, crit=0, critDmg=0, hits=0, first=null, last=null;
+    const by = {};               // source -> damage
+    const add=(src,dmg,isCrit,t)=>{
+      total+=dmg; hits++; by[src]=(by[src]||0)+dmg;
+      if(isCrit){crit++; critDmg+=dmg;}
+      if(t!=null){ if(first==null)first=t; last=t; }
+    };
+    // Regexes (case-handled). "You backstab a mob for N points of damage."
+    const selfRe = self.replace(/[^A-Za-z]/g,'');   // EQ names are letters only
+    const reMelee = new RegExp('\\] (?:'+selfRe+'|You) (\\w+) .+? for ([\\d,]+) point', 'i');
+    // "Your <proc> hits a mob for N points of damage."
+    const reProc  = new RegExp('\\] Your (.+?) (?:hits|pierces|slashes|crushes|bashes|kicks|burns|blasts) .+? for ([\\d,]+) point', 'i');
+    // poison / DoT:  "A mob has taken N damage from your <effect> ..."
+    const reDot   = /\] .+? has taken ([\d,]+) damage from (?:your|YOUR) (.+?)(?:\.| by |\'s| effect| spell)/i;
+    const meleeVerbs = new Set(['backstab','pierce','slash','crush','hit','bash','kick','strike','punch','maul','gore','bite','claw','slam','throw','assassinate','shoot','frenzy']);
+
+    for(const ln of lines){
+      if(ln.indexOf('points of damage')>-1){
+        let m=ln.match(reMelee);
+        if(m && meleeVerbs.has(m[1].toLowerCase())){
+          const v=m[1].toLowerCase();
+          const src = v==='backstab'?'Backstab' : v==='assassinate'?'Assassinate'
+                    : v==='throw'||v==='shoot'?'Throwing'
+                    : (v==='pierce'||v==='hit'||v==='slash'||v==='crush'||v==='frenzy')?'Melee swings' : cap(v);
+          add(src, num(m[2]), /\((?:critical|crit)/i.test(ln), ts(ln));
+          continue;
+        }
+        m=ln.match(reProc);
+        if(m){ add('Weapon/AA procs', num(m[2]), /\(critical/i.test(ln), ts(ln)); continue; }
+      }
+      const d=ln.match(reDot);
+      if(d){ add('Poison / DoT', num(d[1]), false, ts(ln)); }
+    }
+
+    if(total===0){
+      out.innerHTML = '<div style="color:var(--warn);font-size:12px">No damage by <b>'+esc(me)+
+        '</b> found. Set the name to match your log (or use <b>You</b>), and make sure damage is enabled in your log.</div>';
+      return;
+    }
+    const durSec = (first!=null && last!=null && last>first) ? (last-first)/1000 : 1;
+    const dps = total/durSec;
+    const critPct = hits? (crit/hits*100):0;
+    const bsShare = ((by['Backstab']||0)+(by['Assassinate']||0))/total*100;
+
+    window.liveLoaded = true;
+    document.getElementById('dpsTag').textContent='LIVE · '+esc(me);
+    document.getElementById('dpsTag').classList.remove('demo');
+    const dn=document.getElementById('demoNote'); if(dn) dn.textContent='Live numbers parsed from your log.';
+    document.getElementById('myDps').textContent = Math.round(dps).toLocaleString();
+    // replace the group meter with a single real "you" bar + summary
+    document.getElementById('meterRows').innerHTML =
+      '<div class="meter-row"><span class="who me">▸ '+esc(me)+'</span>'+
+      '<span class="track"><i class="bar-me" style="width:100%"></i></span>'+
+      '<span class="val">'+(dps/1000).toFixed(1)+'k</span></div>';
+    // breakdown from real sources
+    const entries=Object.entries(by).sort((a,b)=>b[1]-a[1]);
+    const max=entries[0][1];
+    document.getElementById('breakdownRows').innerHTML = entries.map(([k,v])=>
+      '<div class="b-row"><span class="lbl">'+esc(k)+'</span>'+
+      '<span class="bar"><i style="width:'+(v/max*100).toFixed(0)+'%"></i></span>'+
+      '<span class="pc">'+(v/total*100).toFixed(0)+'%</span></div>').join('');
+
+    out.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      stat('DPS (active)', Math.round(dps).toLocaleString())+
+      stat('Total damage', Math.round(total).toLocaleString())+
+      stat('Active time', durSec.toFixed(0)+'s')+
+      stat('Hits parsed', hits.toLocaleString())+
+      stat('Crit rate', critPct.toFixed(1)+'%')+
+      stat('BS+Assassinate', bsShare.toFixed(0)+'%')+
+      '</div>'+
+      '<div class="hint" style="margin-top:8px">'+
+        (bsShare<25?'<b style="color:var(--warn)">Low Backstab/Assassinate share — you may not be staying behind the mob. That\'s the #1 DPS fix (docs/06).</b>':
+         '<b style="color:var(--good)">Healthy Backstab/Assassinate share — positioning looks good.</b>')+
+      '</div>';
+  }
+  function stat(k,v){ return '<div style="background:#0a1222;border:1px solid var(--edge);border-radius:9px;padding:8px 10px">'+
+    '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)">'+k+'</div>'+
+    '<div style="font-size:18px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums">'+v+'</div></div>'; }
+  function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+  function trimName(s){ return s.length>18?s.slice(0,18):s; }
+})();
 </script>
 </body>
 </html>

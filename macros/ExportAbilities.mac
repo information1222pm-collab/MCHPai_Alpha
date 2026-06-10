@@ -1,0 +1,85 @@
+| =====================================================================
+|  ExportAbilities.mac  -  ONE-TIME character fingerprint
+| ---------------------------------------------------------------------
+|  WHY: Every Rogue owns slightly different AAs/discs at different ranks.
+|  This macro reads YOUR character and prints exactly which burn abilities
+|  you own, their activation IDs, and their reuse timers - plus a full list
+|  of every Discipline you know. That removes ALL guesswork from setting up
+|  RogueBurn.mac / RogueAssist.mac.
+|
+|  HOW TO USE (client):
+|    1. Log in your Rogue, load MacroQuest.
+|    2. Type:  /mac ExportAbilities
+|    3. It prints results to the MQ window AND writes a file:
+|         <MacroQuest>\config\RogueExport.ini
+|    4. Send that RogueExport.ini (or a screenshot of the printout) back.
+|       That's everything needed to finish your personalized setup.
+|
+|  Safe & read-only: it does not cast anything or change your character.
+| =====================================================================
+
+Sub Main
+    /declare i int local
+    /declare n string local
+    /declare cnt int local 0
+    /declare file string local RogueExport.ini
+
+    /echo \ay========== ROGUE ABILITY EXPORT ==========
+    /echo \aw${Me.Name} \ag- Level ${Me.Level} ${Me.Class} - ${Me.AAPointsTotal} AA
+    /ini "${file}" "Character" "Name" "${Me.Name}"
+    /ini "${file}" "Character" "Level" "${Me.Level}"
+    /ini "${file}" "Character" "AA" "${Me.AAPointsTotal}"
+
+    /echo \ay---- BURN AAs (owned ones show ID + reuse) ----
+    | Candidate activated burn AAs (base names; MQ matches your highest rank)
+    /call CheckAA "Rogue's Fury"
+    /call CheckAA "Third Spire of the Rake"
+    /call CheckAA "Second Spire of the Rake"
+    /call CheckAA "First Spire of the Rake"
+    /call CheckAA "Ligament Slice"
+    /call CheckAA "Rake's Rampage"
+    /call CheckAA "Focused Rake's Rampage"
+    /call CheckAA "Intensity of the Resolute"
+    /call CheckAA "Twisted Shank"
+    /call CheckAA "Banestrike"
+    /call CheckAA "Absorbing Agent"
+    /call CheckAA "Bestow Twisted Chance"
+    /call CheckAA "Thief's Vengeance"
+    /call CheckAA "Daggerthrust"
+    /call CheckAA "Knifed"
+    /call CheckAA "Envenomed Blade"
+    /call CheckAA "Assassinate"
+
+    /echo \ay---- DISCIPLINES KNOWN (slot in RogueAssist chain) ----
+    /for i 1 to 80
+        /varset n ${Me.CombatAbility[${i}]}
+        /if (${n.Length} && !${n.Equal[NULL]}) {
+            /varcalc cnt ${cnt}+1
+            /echo \ag  ${n}  \ao(ID ${Spell[${n}].ID}, reuse ${Spell[${n}].RecastTime}s)
+            /ini "${file}" "Disciplines" "${n}" "ID=${Spell[${n}].ID};reuse=${Spell[${n}].RecastTime}"
+        }
+    /next i
+    /echo \ay---- ${cnt} disciplines listed ----
+
+    /echo \ay---- WEAPONS / SETUP CHECK ----
+    /echo Mainhand: \aw${Me.Inventory[mainhand].Name}
+    /echo Offhand:  \aw${Me.Inventory[offhand].Name}
+    /echo Ranged:   \aw${Me.Inventory[ranged].Name}
+    /ini "${file}" "Gear" "Mainhand" "${Me.Inventory[mainhand].Name}"
+    /ini "${file}" "Gear" "Offhand" "${Me.Inventory[offhand].Name}"
+    /ini "${file}" "Gear" "Ranged" "${Me.Inventory[ranged].Name}"
+
+    /echo \ag========== DONE ==========
+    /echo \awWrote: \ay<MacroQuest>\config\${file}
+    /echo \awSend that file back to finish your personalized setup.
+/return
+
+| --------------------------------------------------------------------
+Sub CheckAA(string Name)
+    /if (${Me.AltAbility[${Name}].ID}) {
+        /echo \ag  OWNED: \aw${Name} \ag ID=${Me.AltAbility[${Name}].ID} reuse=${Me.AltAbility[${Name}].MyReuseTime}s
+        /ini "RogueExport.ini" "BurnAAs" "${Name}" "ID=${Me.AltAbility[${Name}].ID};reuse=${Me.AltAbility[${Name}].MyReuseTime}"
+    } else {
+        /echo \ar  not found: ${Name} \ao(different name/rank, or not owned)
+    }
+/return

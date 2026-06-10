@@ -29,10 +29,22 @@ busywork so you can focus on staying behind the target and not dying.
 
 | Folder | What it is | Start here if you want… |
 |--------|-----------|--------------------------|
+| **[`setup.html`](setup.html)** | Click-through setup wizard; auto-fills every macro/hotkey with your names | …the painless, no-knowledge-needed start |
+| **[`HANDOFF.md`](HANDOFF.md)** | One-page client delivery note + the 2-min "tune it to my character" step | …the short version of what you got & how to start |
 | **[`docs/`](docs/)** | Step-by-step guides written for a returning player | …to understand *why*, not just *what* |
-| **[`macros/`](macros/)** | Ready-to-run MQ2 macros — one-key burn, sustained assist, box coordination | …to press one key and do damage |
+| **[`macros/`](macros/)** | MQ2 macros — one-key burn, sustained assist, box driver, **+ `ExportAbilities`** | …to press one key and do damage |
 | **[`hotkeys/`](hotkeys/)** | Copy-paste in-game social hotkeys (no MQ2 needed) | …a setup that works *today* before you learn MQ2 |
-| **[`ui/`](ui/)** | Dark-blue raid HUD mockup with live cooldown rings + DPS meter | …to see the layout / use it as a second-screen reference |
+| **[`ui/`](ui/)** | Dark-blue raid HUD with cooldown rings + **a real `eqlog.txt` DPS parser**, and a printable **[cheat card](ui/cheatsheet.html)** | …live DPS numbers + a rotation card by the keyboard |
+
+### The two things that make this *yours* (not a generic guide)
+
+- **`macros/ExportAbilities.mac`** — run it once in-game and it prints/saves your
+  character's *actual* owned burn AAs, their activation IDs, reuse timers, and
+  every discipline you know. That turns the macros from "good defaults" into a
+  config tuned to your exact Rogue. (Details in [`HANDOFF.md`](HANDOFF.md).)
+- **The HUD's real parser** — drag your `eqlog.txt` onto [`ui/index.html`](ui/index.html)
+  and it computes your real DPS, crit rate, and Backstab/Assassinate share, and
+  flags it if your positioning is silently costing you damage.
 
 ---
 
