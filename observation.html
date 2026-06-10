@@ -229,18 +229,21 @@ section{padding:38px 0 42px}
 /* bolder page titles */
 section > .h:first-child{font-size:14px;font-weight:700;letter-spacing:1px;color:var(--txt);margin-bottom:18px}
 section > .h:first-child .muted{font-weight:500;font-size:11px}
-/* === liquid-glass text: a gradient that flows through headings + key numbers === */
-@keyframes glassflow{to{background-position:200% center}}
-.appbar h1,.heroval,.vtitle,.hh,#overlay h3{background:linear-gradient(100deg,var(--ice),#eafff9 22%,var(--mint) 50%,#eafff9 78%,var(--ice));background-size:220% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:glassflow 7.5s linear infinite}
+/* === subtle text: faint depth shadow + a quiet shine that keeps each element's own color === */
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;text-shadow:0 1px 1px rgba(0,0,0,.32)}
+@keyframes tshine{0%{background-position:160% center}100%{background-position:-60% center}}
+/* glint sweeps through showcase text; base is currentColor so it stays readable + on-palette */
+.appbar h1,.heroval,.vtitle,.hh,#overlay h3,.chip .v,.dstat .v{
+ background:linear-gradient(100deg,currentColor 0,currentColor 43%,#ffffff 50%,currentColor 57%,currentColor 100%);
+ background-size:300% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+ animation:tshine 9s linear infinite}
+.appbar h1{color:var(--ice)}.heroval{color:var(--txt)}
 .appbar h1::after{-webkit-text-fill-color:var(--faint);color:var(--faint)}
-.heroval{text-shadow:0 0 26px rgba(86,240,192,.22)}
-/* glassy lit depth on prominent text (keeps semantic colors) */
-.chip .v,.dstat .v,section>.h:first-child,.dh,.nm{text-shadow:0 0 15px rgba(86,240,192,.13),0 1px 1px rgba(0,0,0,.35)}
-.chg.up,.up,.badge.up{text-shadow:0 0 12px rgba(52,236,170,.3)}
-.chg.down,.down,.badge.down{text-shadow:0 0 12px rgba(255,106,82,.28)}
-/* subtle frosted smoothing everywhere */
-body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-@media(prefers-reduced-motion:reduce){.appbar h1,.heroval,.vtitle,.hh,#overlay h3{animation:none}}
+/* very subtle lit depth (preserves semantic colors) */
+.heroval{text-shadow:0 0 22px rgba(86,240,192,.16),0 1px 2px rgba(0,0,0,.4)}
+section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgba(86,240,192,.08)}
+.up,.chg.up{text-shadow:0 0 9px rgba(52,236,170,.18)}.down,.chg.down{text-shadow:0 0 9px rgba(255,106,82,.16)}
+@media(prefers-reduced-motion:reduce){.appbar h1,.heroval,.vtitle,.hh,#overlay h3,.chip .v,.dstat .v{animation:none}}
 </style>
 </head>
 <body>
