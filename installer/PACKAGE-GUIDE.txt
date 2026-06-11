@@ -1,0 +1,163 @@
+====================================================================
+  MCHP BOXING SERVICES
+  ISBoxer Multibox Command Center  -  PACKAGE GUIDE
+  What everything in this package is, and what it does for you.
+====================================================================
+
+Thanks for your order! This is a complete, custom 8-box build for your
+EverQuest teams, built entirely around ISBoxer (no MacroQuest). Everything
+is designed so ONE person can drive a full group: one key assists, one key
+burns, one key panics, one key pulls.
+
+
+--------------------------------------------------------------------
+YOUR TEAMS
+--------------------------------------------------------------------
+LIVE (level 130, max AAs)            TLP (level 65)
+  1  Tonga          Warrior  (tank)    1  Tonga          Warrior  (tank)
+  2  Raphial        Cleric             2  Raphial        Cleric
+  3  Strongroot     Druid              3  Strongroot     Druid
+  4  Lyrkal         Bard               4  Strangeanevil  Bard  (puller)
+  5  Strangeanevil  Beastlord          5  Miklo          Beastlord (slow)
+  6  Strangeangood  Beastlord          6  Maginus        Magician
+  7  Miklo          Monk  (puller)     7  Darkspark      Wizard
+  8  Darkspark      Wizard             8  Poky           Rogue
+
+Your Warrior (Tonga) is the driver and main assist on BOTH teams, so the
+tank's target is always the kill target. Every macro is already written
+with these exact names.
+
+
+--------------------------------------------------------------------
+THE 6 KEYS YOU ACTUALLY PRESS
+--------------------------------------------------------------------
+  ~  (tilde) ... ASSIST + ATTACK  - every DPS box targets Tonga's target,
+                 starts attacking, and sends pets in. Kills slow swapping.
+  F1 ......... BURN (stepped)     - press 1 = epics/long cooldowns,
+                 press 2 = class burn discs/AA, press 3 = nuke rotation.
+                 One button walks the whole group's burn.
+  F2 ......... PANIC              - both healers dump their biggest
+                 emergency heal and the tank pops a defensive. Bind it to
+                 a mouse button for reflex use.
+  G  ......... PULL               - only your puller acts (Miklo on Live,
+                 Strangeanevil on TLP). The group holds and doesn't aggro.
+  F5 ......... BUFF               - re-fires group buffs, songs and clickies.
+  \  ......... FOLLOW             - the whole team sticks to Tonga to reform.
+  Pause ...... BROADCAST ON/OFF   - safety key: turn key-broadcasting off
+                 before you move a single box so it doesn't echo to all 8.
+
+
+--------------------------------------------------------------------
+WHAT'S IN THE PACKAGE (the folder you unzipped)
+--------------------------------------------------------------------
+  Launch-Navigator.bat .... DOUBLE-CLICK THIS FIRST. Opens the navigator.
+  MCHP-Navigator.hta ...... The control hub: installs everything, launches
+                            your tools, restores backups, and documents the
+                            build. (Runs as a Windows HTML Application.)
+  Install.bat ............. Runs the installer directly (the navigator's
+                            Install button calls this for you).
+  Install-MCHP-Boxing.ps1 . The installer engine (PowerShell). Safe; it only
+                            writes inside your Documents folder.
+  CommandCenter.html ...... The visual Command Center app (also gets copied
+                            into your install folder + a desktop shortcut).
+  PACKAGE-GUIDE.txt ....... This document.
+  README.md ............... Technical notes.
+
+
+--------------------------------------------------------------------
+WHAT GETS INSTALLED (into Documents\MCHP-Boxing\)
+--------------------------------------------------------------------
+  00-START-HERE.txt ....... Your step-by-step quick start.
+  CommandCenter\ .......... The Command Center app (your main reference).
+  ISBoxer-Profiles\ ....... The exact ISBoxer build recipe (~10 min to set
+                            up): Character Sets, Action Target Groups, and
+                            every Mapped Key.
+  EQ-Macros\Live\ ......... Ready-to-paste in-game socials, one .txt file
+  EQ-Macros\TLP\            per character, already using your toon names.
+  EQ-AudioTriggers\ ....... The named / proc / buff-fade alert phrases to
+                            add in EverQuest (Alt+A).
+  Inventory\ .............. A standard bag layout to use on all 8 boxes.
+  Backups\ ................ Safe copies of your old ISBoxer config AND your
+                            old EverQuest UI, each with one-click restore.
+
+
+--------------------------------------------------------------------
+THE COMMAND CENTER APP - WHAT EACH PAGE DOES
+--------------------------------------------------------------------
+  Group Dashboard ..... Whole-team status at a glance; click a box to drive
+                        its hotbuttons and macros.
+  Hotbutton Designer .. Per-character hotbutton layout; burn/panic tiles
+                        show a live cooldown sweep.
+  Burn Systems ........ The staged single-key burn, per class.
+  Assist & Targeting .. The tilde assist chain + auto-target setup.
+  Healing & Panic ..... Healer doctrine + the F2 panic button.
+  Pull Systems ........ Clean single-pull flow and puller assignments.
+  ISBoxer Mapped Keys . The ISBoxer recipe (ATGs + every mapped key).
+  EQ Social Macros .... Your per-class in-game socials (copy buttons).
+  Spell Gems & Bars ... Consistent gem/hotbar slotting for reliable macros.
+  Alerts & Audio ...... LIVE buff timers, proc monitor, named watch list,
+                        and audio warnings (the awareness layer).
+  Class Overlays ...... A live, role-aware status tile for every box.
+  Inventory UI ........ The standard bag map and loot/clicky flow.
+  Build & Setup Guide . Full build order + recommendations.
+
+
+--------------------------------------------------------------------
+THE AWARENESS LAYER (buffs / procs / named / audio / overlays)
+--------------------------------------------------------------------
+  Buff tracking ..... EQ Audio Triggers fire on "has worn off"; the Command
+                      Center shows live countdown bars that go amber then
+                      alert when a buff drops - your cue to press F5.
+  Proc notifications  Audio Triggers on key procs play a distinct chime;
+                      the proc monitor counts them for the fight.
+  Named spawn alerts  Armed spawn names trigger a loud tone and ISBoxer
+                      pops the matching box to the front so you see it.
+  Audio warnings .... Distinct tones for named / proc / buff / panic, with
+                      a master on/off and volume.
+  Class overlays .... Each box shows what its role needs: tank defensives &
+                      aggro hold, healer mana & panic state, DPS burn
+                      readiness & pet health.
+  All of it is native ISBoxer + EQ Audio Triggers. No MacroQuest, nothing
+  injected into the game.
+
+
+--------------------------------------------------------------------
+HOW TO SET UP (about 30-40 minutes, once)
+--------------------------------------------------------------------
+  1. Double-click Launch-Navigator.bat, then click INSTALL.
+  2. Open the Command Center (button in the navigator) - your reference.
+  3. Build ISBoxer from ISBoxer-Profiles\ (recipe, ~10 min), then
+     "Export to Inner Space" and launch a team.
+  4. In EverQuest, paste the socials from EQ-Macros\<team>\ - one file per
+     box. Drag each social to the hotbar slot shown (~, F1, F2, G).
+  5. Add the audio triggers from EQ-AudioTriggers\ (in-game, Alt+A).
+  6. Standardize your bags using Inventory\.
+  7. Test on easy mobs: ~ assist, F1 burn, F2 panic, G pull. Done!
+
+
+--------------------------------------------------------------------
+BACKUPS & RESTORE - TRY IT RISK-FREE
+--------------------------------------------------------------------
+  Before changing anything, the installer backs up:
+    * your ISBoxer Toolkit.xml, and
+    * your EverQuest UI (window layouts + uifiles\ skins).
+  Don't like the new setup? Open the navigator > Backups & Restore >
+  "Restore my old EQ UI" (close EverQuest first). Or open the newest
+  Documents\MCHP-Boxing\Backups\EQ-UI-* folder and run Restore-EQ-UI.bat.
+  Nothing is destructive - the build mostly ADDS socials and hotbuttons.
+
+
+--------------------------------------------------------------------
+ONE HONEST NOTE
+--------------------------------------------------------------------
+  EverQuest stores in-game socials and hotbuttons on Daybreak's servers,
+  per character - so no tool (this one or any other) can silently write
+  them into the game. That's why your socials are pre-built as files: it
+  turns an hour of typing into a quick copy-paste. Everything else is
+  automated for you.
+
+
+--------------------------------------------------------------------
+  Questions or tweaks? Contact MCHP Boxing Services.
+  Enjoy the build - happy boxing!  -  MCHP
+====================================================================

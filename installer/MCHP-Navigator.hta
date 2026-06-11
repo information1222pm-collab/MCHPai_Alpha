@@ -174,6 +174,7 @@ ul.tight{margin:6px 0;padding-left:20px}ul.tight li{margin:4px 0}
         <button class="btn" onclick="openFolder('EQ-Macros')"><span class="i">&#128221;</span>EQ Social Macros</button>
         <button class="btn" onclick="openFile('EQ-AudioTriggers\\EQ-Audio-Triggers.txt')"><span class="i">&#9834;</span>Audio Triggers</button>
         <button class="btn" onclick="openFile('Inventory\\Inventory-Layout.txt')"><span class="i">&#128230;</span>Inventory Layout</button>
+        <button class="btn" onclick="openGuide()"><span class="i">&#128214;</span>Package Guide (what everything does)</button>
         <button class="btn" onclick="openFile('00-START-HERE.txt')"><span class="i">&#9733;</span>Start-Here Guide</button>
         <button class="btn" onclick="openFolder('')"><span class="i">&#128193;</span>Install Folder</button>
       </div>
@@ -245,10 +246,34 @@ ul.tight{margin:6px 0;padding-left:20px}ul.tight li{margin:4px 0}
       <p class="sub">Custom ISBoxer multibox suite for EverQuest, prepared by MCHP Boxing Services.</p>
       <div class="card">
         <div class="kv"><span class="k">Teams</span><span class="v">Live 8 (130) + TLP 8 (65)</span></div>
-        <div class="kv"><span class="k">Driver</span><span class="v">Warrior tank, both teams</span></div>
+        <div class="kv"><span class="k">Driver / Main Assist</span><span class="v">Tonga (Warrior), both teams</span></div>
         <div class="kv"><span class="k">Tooling</span><span class="v">ISBoxer only &mdash; no MacroQuest</span></div>
         <div class="kv"><span class="k">Accent</span><span class="v">Cyan on dark (high-info read)</span></div>
         <div class="kv"><span class="k">Suggested display</span><span class="v">2560x1440, ultrawide/dual, Medium UI</span></div>
+      </div>
+
+      <div class="section-title">Your roster</div>
+      <div>
+        <div class="col card"><h3>Live &middot; 130</h3>
+          <div class="kv"><span class="k">Warrior (tank/MA)</span><span class="v">Tonga</span></div>
+          <div class="kv"><span class="k">Cleric</span><span class="v">Raphial</span></div>
+          <div class="kv"><span class="k">Druid</span><span class="v">Strongroot</span></div>
+          <div class="kv"><span class="k">Bard</span><span class="v">Lyrkal</span></div>
+          <div class="kv"><span class="k">Beastlord</span><span class="v">Strangeanevil</span></div>
+          <div class="kv"><span class="k">Beastlord</span><span class="v">Strangeangood</span></div>
+          <div class="kv"><span class="k">Monk (puller)</span><span class="v">Miklo</span></div>
+          <div class="kv"><span class="k">Wizard</span><span class="v">Darkspark</span></div>
+        </div>
+        <div class="col card"><h3>TLP &middot; 65</h3>
+          <div class="kv"><span class="k">Warrior (tank/MA)</span><span class="v">Tonga</span></div>
+          <div class="kv"><span class="k">Cleric</span><span class="v">Raphial</span></div>
+          <div class="kv"><span class="k">Druid</span><span class="v">Strongroot</span></div>
+          <div class="kv"><span class="k">Bard (puller)</span><span class="v">Strangeanevil</span></div>
+          <div class="kv"><span class="k">Beastlord (slow)</span><span class="v">Miklo</span></div>
+          <div class="kv"><span class="k">Magician</span><span class="v">Maginus</span></div>
+          <div class="kv"><span class="k">Wizard</span><span class="v">Darkspark</span></div>
+          <div class="kv"><span class="k">Rogue</span><span class="v">Poky</span></div>
+        </div>
       </div>
       <div class="note warn"><b>One honest note:</b> EverQuest stores in-game socials/hotbuttons on Daybreak's servers per character, so no installer can write them directly. They're pre-built here as ready-to-paste files so adding them in-game is a quick copy-paste. Everything else is automated.</div>
       <div class="foot">
@@ -314,6 +339,14 @@ function openFile(rel){
   var p = installRoot() + "\\" + rel;
   if(!exists(p)){ alert("Not found yet:\n" + p + "\n\nRun the installer first."); return; }
   try{ sh().Run('"' + p + '"', 1, false); }catch(e){ try{ sh().Run('notepad.exe "' + p + '"',1,false); }catch(e2){ alert(e2.message); } }
+}
+function openGuide(){
+  if(!HAS_HTA) return needHta();
+  var installed = installRoot() + "\\PACKAGE-GUIDE.txt";
+  var bundled   = getScriptDir() + "PACKAGE-GUIDE.txt";
+  var target = exists(installed) ? installed : (exists(bundled) ? bundled : null);
+  if(!target){ alert("Package guide not found."); return; }
+  try{ sh().Run('"' + target + '"', 1, false); }catch(e){ try{ sh().Run('notepad.exe "'+target+'"',1,false); }catch(e2){ alert(e2.message); } }
 }
 function launchISBoxer(){
   if(!HAS_HTA) return needHta();

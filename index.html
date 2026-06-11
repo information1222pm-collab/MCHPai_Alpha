@@ -627,7 +627,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:22px 0}
             <div class="flow" style="flex-direction:column;align-items:stretch">
               <div class="node hi">You press <b>~</b> (tilde) on the Warrior window</div>
               <span class="arrow" style="text-align:center">↓ ISBoxer broadcasts to all DPS boxes</span>
-              <div class="node">Each DPS box runs <span class="kbd">/assist Warmain</span></div>
+              <div class="node">Each DPS box runs <span class="kbd">/assist Tonga</span></div>
               <span class="arrow" style="text-align:center">↓</span>
               <div class="node">Auto <span class="kbd">/attack on</span> + <span class="kbd">/pet attack</span></div>
               <span class="arrow" style="text-align:center">↓</span>
@@ -980,7 +980,7 @@ const TEAMS = {
   live: {
     label:"Live Team · 8 boxes · lvl 130", lvl:130,
     chars:[
-      {id:"war", nm:"Brunnar", cls:"Warrior", role:"tank", color:"#ff6b6b", win:"W1",
+      {id:"war", nm:"Tonga", cls:"Warrior", role:"tank", color:"#ff6b6b", win:"W1",
         hp:96,mp:0,en:72, xt:"Auto-Hater · 4 adds",
         actions:["Taunt","Aggro lock","Defensive disc","Pull park"],
         hotbar:[
@@ -996,12 +996,12 @@ const TEAMS = {
         burn:["/disc Brace for Death","/alt activate 3699  | Blast of Anger (aggro)","/disc Forceful Rebuke","/wait 1","/disc Resplendent Glory"],
         burnNote:"Aggro-first burn — keeps threat above the DPS burn so the kill target never wanders.",
         panic:["/disc Brace for Death  | defensive","/alt activate 511  | Aggressive Deflection","/wait 5","/alt activate 1242 | Warlord's Tenacity"],
-        assist:["/target Brunnar","/xtarget 1 set"],
+        assist:["/target Tonga","/xtarget 1 set"],
         pull:null,
         gems:["1 Taunt-proc click","2 —","3 —","4 —","5 —","6 —","7 —","8 Self-heal AA","—","—","—","—"],
         spellNote:"Warrior runs discs/AA, not gems — keep slot 8 = self-heal AA for the panic broadcast."
       },
-      {id:"clr", nm:"Aelith", cls:"Cleric", role:"heal", color:"#ffe066", win:"W2",
+      {id:"clr", nm:"Raphial", cls:"Cleric", role:"heal", color:"#ffe066", win:"W2",
         hp:88,mp:74,en:60, xt:"Warrior locked · slot 1",
         actions:["Tank chain heal","Group heal","Divine Arб","Rez"],
         hotbar:[
@@ -1017,12 +1017,12 @@ const TEAMS = {
         burn:["/cast 7  | when tank is safe: Yaulp","/cast 1  | filler nuke"],
         burnNote:"Cleric only DPS-burns when the tank is topped — healing always preempts.",
         panic:["/cast 8  | Divine Arbitration (group equalize)","/alt activate 416 | Burst of Life","/cast 2  | Promised Heal on MT"],
-        assist:["/target Brunnar","/xtarget 1 set  | lock MT, never assist mob"],
+        assist:["/target Tonga","/xtarget 1 set  | lock MT, never assist mob"],
         pull:null,
         gems:["1 Remedy (fast)","2 Promised Heal","3 Group Heal","4 Celestial Regen","5 Remedy (big)","6 Rez","7 Yaulp","8 Divine Arb / panic","9 Cure","10 Aego buff","11 Symbol","12 Nuke"],
         spellNote:"Slot 8 = panic heal on every healer so the F2 broadcast is class-agnostic."
       },
-      {id:"dru", nm:"Sylwen", cls:"Druid", role:"heal", color:"#69db7c", win:"W3",
+      {id:"dru", nm:"Strongroot", cls:"Druid", role:"heal", color:"#69db7c", win:"W3",
         hp:84,mp:80,en:58, xt:"Group + Warrior",
         actions:["Group HoT","Reactive heal","Spires DPS","Snare/root"],
         hotbar:[
@@ -1038,12 +1038,12 @@ const TEAMS = {
         burn:["/alt activate 1468 | Spirit of the Wood","/alt activate 538  | Nature's Boon","/cast 12 | Fire nuke","/cast 11 | Ice nuke"],
         burnNote:"Druid burns DPS when heals are covered by the Cleric — strong filler.",
         panic:["/cast 8  | Group Heal","/cast 1  | Wildtender HoT on group","/alt activate 825 | Convergence (if down)"],
-        assist:["/target Brunnar","/xtarget 1 set"],
+        assist:["/target Tonga","/xtarget 1 set"],
         pull:null,
         gems:["1 Wildtender HoT","2 Counterbias heal","3 Group Heal","4 Reactive heal","5 Convergence","6 Snare","7 Root","8 Group Heal / panic","9 SoW","10 Skin buff","11 Ice nuke","12 Fire nuke"],
         spellNote:"Slot 8 = panic group heal — matches the Cleric so F2 broadcasts cleanly."
       },
-      {id:"brd", nm:"Quillan", cls:"Bard", role:"util", color:"#9775fa", win:"W4",
+      {id:"brd", nm:"Lyrkal", cls:"Bard", role:"util", color:"#9775fa", win:"W4",
         hp:86,mp:0,en:90, xt:"Assist Warrior",
         actions:["Melody DPS","Slow/mez","Haste song","Pull (backup)"],
         hotbar:[
@@ -1059,12 +1059,12 @@ const TEAMS = {
         burn:["/alt activate 482  | Fierce Eye","/alt activate 3704 | Quick Time","/cast 1 | Epic 2.0 click  Spirit of Vesagran","/melody 1 2 3"],
         burnNote:"Bard is the group DPS multiplier — Fierce Eye + Quick Time make every burn bigger.",
         panic:["/twist stop","/cast 6 | Hymn of Restoration","/melody 1 2 6"],
-        assist:["/assist Brunnar","/attack on","/melody 1 2 3"],
+        assist:["/assist Tonga","/attack on","/melody 1 2 3"],
         pull:["/stand","/cast 7 | Lull song","/alt activate 209 | Fading Memories (split)"],
         gems:["1 Cacophony (DD)","2 Dirge of Sorcerer","3 Aria (dmg)","4 Slow","5 Mez","6 Hymn regen","7 Lull","8 —","—","—","—","—"],
         spellNote:"Bard uses song slots via /melody — keep DPS twist on 1-3, utility 4-7."
       },
-      {id:"bs1", nm:"Grokk", cls:"Beastlord", role:"dps", color:"#ff922b", win:"W5",
+      {id:"bs1", nm:"Strangeanevil", cls:"Beastlord", role:"dps", color:"#ff922b", win:"W5",
         hp:90,mp:62,en:84, xt:"Assist Warrior",
         actions:["Pet + melee DPS","Slow proc","Burn","Pet tank adds"],
         hotbar:[
@@ -1080,12 +1080,12 @@ const TEAMS = {
         burn:["/alt activate 1391 | Bestial Wrath","/alt activate 2982 | Spire of the Savage Lord","/disc Frenzied Swipes","/alt activate 1387 | Empathic Fury"],
         burnNote:"Beastlord = top sustained + burst DPS, plus a pet that can hold an add.",
         panic:["/alt activate 1389 | Group Bestial Alignment (off-heal)","/cast 6 | pet heal"],
-        assist:["/assist Brunnar","/attack on","/pet attack"],
+        assist:["/assist Tonga","/attack on","/pet attack"],
         pull:null,
         gems:["1 Slow proc","2 Pet heal","3 Pet haste","4 DoT","5 Bestial buff","6 Self heal","7 Debuff","8 —","9 —","10 —","11 —","12 —"],
         spellNote:"Both Beastlords slot identically so one broadcast macro drives both pets."
       },
-      {id:"bs2", nm:"Thokk", cls:"Beastlord", role:"dps", color:"#fd7e14", win:"W6",
+      {id:"bs2", nm:"Strangeangood", cls:"Beastlord", role:"dps", color:"#fd7e14", win:"W6",
         hp:91,mp:60,en:86, xt:"Assist Warrior",
         actions:["Pet + melee DPS","Slow backup","Burn","Pet DPS"],
         hotbar:[
@@ -1101,12 +1101,12 @@ const TEAMS = {
         burn:["/alt activate 1391 | Bestial Wrath","/alt activate 2982 | Spire of the Savage Lord","/disc Frenzied Swipes","/alt activate 1387 | Empathic Fury"],
         burnNote:"Second Beastlord doubles pet DPS and gives a backup slow if the first misses.",
         panic:["/alt activate 1389 | Group Bestial Alignment (off-heal)","/cast 6 | pet heal"],
-        assist:["/assist Brunnar","/attack on","/pet attack"],
+        assist:["/assist Tonga","/attack on","/pet attack"],
         pull:null,
         gems:["1 Slow proc","2 Pet heal","3 Pet haste","4 DoT","5 Bestial buff","6 Self heal","7 Debuff","8 —","9 —","10 —","11 —","12 —"],
-        spellNote:"Identical to Grokk — one /bcst macro drives both."
+        spellNote:"Identical to Strangeanevil — one /bcst macro drives both."
       },
-      {id:"mnk", nm:"Tsuro", cls:"Monk", role:"dps", color:"#f783ac", win:"W7",
+      {id:"mnk", nm:"Miklo", cls:"Monk", role:"dps", color:"#f783ac", win:"W7",
         hp:92,mp:0,en:88, xt:"Assist · Puller",
         actions:["Melee DPS","FD split pull","Burn","Aggro dump"],
         hotbar:[
@@ -1122,12 +1122,12 @@ const TEAMS = {
         burn:["/disc Crystalpalm Discipline","/alt activate 511 | Infusion of Thunder","/disc Heel of Kanji","/disc Five Point Palm"],
         burnNote:"Monk burst + the team's primary puller (FD split-pulling for clean named).",
         panic:["/doability 5 | Feign Death","/alt activate 249 | Imitate Death"],
-        assist:["/assist Brunnar","/attack on"],
+        assist:["/assist Tonga","/attack on"],
         pull:["/target nearest","/alt activate 250 | ranged pull / Stunning Kick","/pause 10","/doability 5 | FD to split"],
         gems:["—","—","—","—","—","—","—","—","—","—","—","—"],
         spellNote:"Monk is disc/AA based — no gems. Doability 5 bound to Feign Death on every box that has it."
       },
-      {id:"wiz", nm:"Pyralis", cls:"Wizard", role:"dps", color:"#4dabf7", win:"W8",
+      {id:"wiz", nm:"Darkspark", cls:"Wizard", role:"dps", color:"#4dabf7", win:"W8",
         hp:74,mp:88,en:50, xt:"Assist Warrior",
         actions:["Nuke DPS","Twincast burn","Rain on packs","Evac"],
         hotbar:[
@@ -1143,7 +1143,7 @@ const TEAMS = {
         burn:["/alt activate 511  | Fury of Ro","/alt activate 1217 | Improved Twincast","/alt activate 215  | Frenzied Devastation","/cast 1 | spam Force/Ice nuke","/cast 3 | big nuke"],
         burnNote:"Wizard is the nuke spike — Twincast window makes F1 hit hardest of anyone.",
         panic:["/alt activate 250 | Silent Casting (shed aggro)","/cast 6 | Harvest (mana)"],
-        assist:["/assist Brunnar","/cast 1 | open with primary nuke"],
+        assist:["/assist Tonga","/cast 1 | open with primary nuke"],
         pull:null,
         gems:["1 Primary nuke (ice)","2 Force nuke","3 Big single nuke","4 Rain","5 Chromatic","6 Harvest","7 Evac","8 Shield","9 Twincast spell","10 Debuff","11 Snare","12 Port"],
         spellNote:"Slot 1 = primary nuke on the assist macro; keep heavy-mana nukes on 2-3 for the burn step."
@@ -1153,7 +1153,7 @@ const TEAMS = {
   tlp: {
     label:"TLP Team · 8 boxes · lvl 65", lvl:65,
     chars:[
-      {id:"war", nm:"Brunnar", cls:"Warrior", role:"tank", color:"#ff6b6b", win:"T1",
+      {id:"war", nm:"Tonga", cls:"Warrior", role:"tank", color:"#ff6b6b", win:"T1",
         hp:94,mp:0,en:70, xt:"Nearest NPC · 2 adds",
         actions:["Taunt","Aggro lock","Defensive disc","Pull park"],
         hotbar:[
@@ -1169,12 +1169,12 @@ const TEAMS = {
         burn:["/disc Defensive","/disc Provoke","/wait 1","/disc Weaponshield"],
         burnNote:"Classic-era Warrior: Defensive disc + taunt spam holds aggro for the burn.",
         panic:["/disc Defensive  | PoP-era defensive","/disc Fortitude"],
-        assist:["/target Brunnar","/xtarget 1 set"],
+        assist:["/target Tonga","/xtarget 1 set"],
         pull:null,
         gems:["—","—","—","—","—","—","—","—","—","—","—","—"],
         spellNote:"Disc-based at 65 — keep a self-clicky on bag 1 slot 1 for the panic broadcast."
       },
-      {id:"clr", nm:"Aelith", cls:"Cleric", role:"heal", color:"#ffe066", win:"T2",
+      {id:"clr", nm:"Raphial", cls:"Cleric", role:"heal", color:"#ffe066", win:"T2",
         hp:86,mp:78,en:55, xt:"Warrior locked · slot 1",
         actions:["Complete Heal","Group heal","Divine Arб","Rez"],
         hotbar:[
@@ -1190,12 +1190,12 @@ const TEAMS = {
         burn:["/cast 4 | Yaulp","/pet attack | summoned hammer"],
         burnNote:"CH-chain era Cleric — only idle-DPS when MT is full.",
         panic:["/cast 8 | Divine Arbitration","/cast 1 | Complete Heal on MT"],
-        assist:["/target Brunnar","/xtarget 1 set"],
+        assist:["/target Tonga","/xtarget 1 set"],
         pull:null,
         gems:["1 Complete Heal","2 Remedy","3 Group Heal","4 Yaulp","5 Aegolism","6 Symbol","7 Cure","8 Divine Arb / panic","9 Hammer pet","10 Stun","11 DA","12 Rez"],
         spellNote:"Slot 8 = panic on both teams — the F2 broadcast is identical Live↔TLP."
       },
-      {id:"dru", nm:"Sylwen", cls:"Druid", role:"heal", color:"#69db7c", win:"T3",
+      {id:"dru", nm:"Strongroot", cls:"Druid", role:"heal", color:"#69db7c", win:"T3",
         hp:82,mp:80,en:55, xt:"Group + Warrior",
         actions:["Backup heal","HoT","Fire nuke DPS","Snare/SoW"],
         hotbar:[
@@ -1211,12 +1211,12 @@ const TEAMS = {
         burn:["/cast 11 | Wildfire / Sunstrike","/cast 12 | Ice Comet","/cast 11"],
         burnNote:"At 65 the Druid is a strong fire-nuke DPS + backup heals.",
         panic:["/cast 8 | Group Heal","/cast 2 | HoT on group"],
-        assist:["/target Brunnar","/xtarget 1 set"],
+        assist:["/target Tonga","/xtarget 1 set"],
         pull:null,
         gems:["1 Chloroblast","2 Regrowth HoT","3 Group Heal","4 Heal","5 Snare","6 Root","7 SoW","8 Group Heal / panic","9 Damage Shield","10 Stun","11 Fire nuke","12 Ice Comet"],
         spellNote:"Slot 8 = panic group heal, matching Cleric + Live Druid."
       },
-      {id:"brd", nm:"Quillan", cls:"Bard", role:"util", color:"#9775fa", win:"T4",
+      {id:"brd", nm:"Strangeanevil", cls:"Bard", role:"util", color:"#9775fa", win:"T4",
         hp:84,mp:0,en:88, xt:"Assist · Puller",
         actions:["Melody DPS","Mez/charm","Haste","Primary puller"],
         hotbar:[
@@ -1232,12 +1232,12 @@ const TEAMS = {
         burn:["/cast 1 | Epic click  Singing Steel / Vesagran","/melody 1 2 3"],
         burnNote:"Bard is the TLP primary puller AND group DPS/haste engine.",
         panic:["/twist stop","/melody 6 | regen song"],
-        assist:["/assist Brunnar","/attack on","/melody 1 2 3"],
+        assist:["/assist Tonga","/attack on","/melody 1 2 3"],
         pull:["/stand","/cast 5 | Lull","/cast 6 | Selo's fade pull"],
         gems:["1 Chant DoT","2 DD song","3 Haste/Aria","4 Slow","5 Lull","6 Regen/Selo","7 Mez","8 —","—","—","—","—"],
         spellNote:"Twist 1-3 for DPS; 4-7 utility/pull. Same layout as Live Bard."
       },
-      {id:"bst", nm:"Grokk", cls:"Beastlord", role:"dps", color:"#ff922b", win:"T5",
+      {id:"bst", nm:"Miklo", cls:"Beastlord", role:"dps", color:"#ff922b", win:"T5",
         hp:88,mp:64,en:82, xt:"Assist Warrior",
         actions:["Pet + melee DPS","Slow proc","Pet tank adds","Burn"],
         hotbar:[
@@ -1253,12 +1253,12 @@ const TEAMS = {
         burn:["/disc Bestial Fury","/cast 5 | Bloodlust","/pet attack"],
         burnNote:"65 Beastlord = pet DPS + slow + a pet that can off-tank an add.",
         panic:["/pet guard","/cast 6 | pet heal"],
-        assist:["/assist Brunnar","/attack on","/pet attack"],
+        assist:["/assist Tonga","/attack on","/pet attack"],
         pull:null,
         gems:["1 Slow","2 Pet heal","3 Pet haste","4 DoT","5 Bloodlust","6 Self heal","7 Debuff","8 —","9 —","10 —","11 —","12 —"],
         spellNote:"Slow on slot 1 — Beastlord is the TLP team's main slower."
       },
-      {id:"mag", nm:"Emberon", cls:"Magician", role:"dps", color:"#ffa94d", win:"T6",
+      {id:"mag", nm:"Maginus", cls:"Magician", role:"dps", color:"#ffa94d", win:"T6",
         hp:72,mp:86,en:48, xt:"Assist Warrior",
         actions:["Pet DPS","Nuke","Malo","Pet tank/swarm"],
         hotbar:[
@@ -1274,12 +1274,12 @@ const TEAMS = {
         burn:["/cast 6 | Frenzied Burnout (pet haste)","/cast 2 | nuke","/pet attack"],
         burnNote:"Mage = highest pet DPS + nukes; pet can off-tank or swarm-farm.",
         panic:["/pet guard","/cast 7 | pet heal"],
-        assist:["/assist Brunnar","/pet attack","/cast 2 | open nuke"],
+        assist:["/assist Tonga","/pet attack","/cast 2 | open nuke"],
         pull:null,
         gems:["1 Pet (earth)","2 Fire nuke","3 Magic nuke","4 Malo","5 Pet heal","6 Frenzied Burnout","7 Pet haste","8 Shield","9 Summon item","10 Stun","11 Rain","12 Reclaim"],
         spellNote:"Pet on slot 1 for fast re-summon; nuke on slot 2 matches the assist macro."
       },
-      {id:"wiz", nm:"Pyralis", cls:"Wizard", role:"dps", color:"#4dabf7", win:"T7",
+      {id:"wiz", nm:"Darkspark", cls:"Wizard", role:"dps", color:"#4dabf7", win:"T7",
         hp:70,mp:88,en:46, xt:"Assist Warrior",
         actions:["Nuke spike","Twincast (era)","Evac","Mana harvest"],
         hotbar:[
@@ -1295,12 +1295,12 @@ const TEAMS = {
         burn:["/alt activate Fury of Ro (if avail)","/cast 3 | Manaburn","/cast 1 | Lure nuke","/cast 2 | Ice nuke spam"],
         burnNote:"65 Wizard = burst nuke; Manaburn is the single-key spike for named.",
         panic:["/cast 6 | Concussion (shed aggro)","/cast 5 | Harvest"],
-        assist:["/assist Brunnar","/cast 2 | open ice nuke"],
+        assist:["/assist Tonga","/cast 2 | open ice nuke"],
         pull:null,
         gems:["1 Lure nuke","2 Ice nuke","3 Manaburn","4 Fire nuke","5 Harvest","6 Concussion","7 Evac","8 Shield","9 Snare","10 Stun","11 Root","12 Gate"],
         spellNote:"Ice nuke on slot 2 = assist opener; Manaburn on 3 for the burn step."
       },
-      {id:"rog", nm:"Vesk", cls:"Rogue", role:"dps", color:"#e599f7", win:"T8",
+      {id:"rog", nm:"Poky", cls:"Rogue", role:"dps", color:"#e599f7", win:"T8",
         hp:84,mp:0,en:90, xt:"Assist Warrior",
         actions:["Backstab DPS","Evade","Ranged pull (backup)","Burn"],
         hotbar:[
@@ -1316,7 +1316,7 @@ const TEAMS = {
         burn:["/disc Rogue's Fury","/doability Backstab","/attack on"],
         burnNote:"Rogue = top melee single-target; needs to stay behind the mob (stick to MT).",
         panic:["/doability Evade","/doability Hide"],
-        assist:["/assist Brunnar","/attack on","/doability Backstab"],
+        assist:["/assist Tonga","/attack on","/doability Backstab"],
         pull:null,
         gems:["—","—","—","—","—","—","—","—","—","—","—","—"],
         spellNote:"No gems — disc + doabilities. Keep Backstab/Evade/Hide on fixed doability slots for broadcast."
@@ -1333,9 +1333,9 @@ const MAPPED_KEYS = [
 <span class="cm">// Trigger: ~  (Hotkey, while EQ has focus)</span>
 <span class="cm">// Target: Action Target Group = AllDPS</span>
 Action 1 → Keystroke <span class="arg">~</span> to <span class="var">AllDPS</span>
-  <span class="cm">(each box's ~ runs its /assist Warmain social)</span>
+  <span class="cm">(each box's ~ runs its /assist Tonga social)</span>
 Action 2 → Keystroke <span class="arg">~</span> to <span class="var">Self (Bard)</span> melody refresh
-<span class="cm">// In EQ, the ~ social on each box = /assist Brunnar /attack on /pet attack</span>`},
+<span class="cm">// In EQ, the ~ social on each box = /assist Tonga /attack on /pet attack</span>`},
 
   {title:"Single-Key Burn (stepped)", phys:"F1", color:"burn",
    desc:"Walks the whole-group burn in 3 stages so you never overwrite your own discs. Press once per tier.",
@@ -1374,7 +1374,7 @@ Action 1 → Keystroke <span class="arg">G</span> to <span class="var">Puller on
    code:`<span class="cm">// ISBoxer Mapped Key: "Follow"</span>
 <span class="cm">// Trigger: \\</span>
 Action 1 → Keystroke <span class="arg">\\</span> to <span class="var">Everyone except Tank</span>
-   <span class="cm">each box runs: /stick Brunnar  (or /follow)</span>
+   <span class="cm">each box runs: /stick Tonga  (or /follow)</span>
 <span class="cm">// Tap again or move tank to break — bind a "stop follow" to Shift+\\</span>`},
 
   {title:"Buff Refresh", phys:"F5", color:"assist",
@@ -1439,7 +1439,7 @@ function renderRoster(){
   const find = r => d.chars.filter(c=>c.role===r);
   $("#maName").textContent = d.chars.find(c=>c.role==="tank").nm + " (Warrior)";
   $("#mtName").textContent = d.chars.find(c=>c.role==="tank").nm;
-  $("#pullerName").textContent = team==="live" ? "Tsuro (Monk · FD split)" : "Quillan (Bard · fade)";
+  $("#pullerName").textContent = team==="live" ? "Miklo (Monk · FD split)" : "Strangeanevil (Bard · fade)";
   $("#healCount").textContent = find("heal").map(c=>c.cls).join(" + ");
   $("#dpsCount").textContent = find("dps").length + " melee/caster + 1 bard";
   $$("#roster .char").forEach(el=>el.onclick=()=>{sel=+el.dataset.i;selectChar();});

@@ -123,104 +123,104 @@ if ($Uninstall) {
 # =====================================================================
 $Teams = @(
   @{ Team='Live'; Lvl=130; Chars=@(
-    @{ Slot=1; Name='Brunnar'; Class='Warrior'; Win='W1'; Role='Main Tank / Main Assist (driver)'
+    @{ Slot=1; Name='Tonga'; Class='Warrior'; Win='W1'; Role='Main Tank / Main Assist (driver)'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/target Brunnar','/xtarget 1 set') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/target Tonga','/xtarget 1 set') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/disc Brace for Death','/alt activate 3699','/disc Forceful Rebuke') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/disc Brace for Death','/alt activate 511','/alt activate 1242') }
        )}
-    @{ Slot=2; Name='Aelith'; Class='Cleric'; Win='W2'; Role='Primary healer (tank chain)'
+    @{ Slot=2; Name='Raphial'; Class='Cleric'; Win='W2'; Role='Primary healer (tank chain)'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/target Brunnar','/xtarget 1 set') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/target Tonga','/xtarget 1 set') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/cast 7','/cast 1') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/cast 8','/alt activate 416','/cast 2') }
        )}
-    @{ Slot=3; Name='Sylwen'; Class='Druid'; Win='W3'; Role='Secondary healer / DPS filler'
+    @{ Slot=3; Name='Strongroot'; Class='Druid'; Win='W3'; Role='Secondary healer / DPS filler'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/target Brunnar','/xtarget 1 set') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/target Tonga','/xtarget 1 set') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/alt activate 1468','/alt activate 538','/cast 12','/cast 11') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/cast 8','/cast 1','/alt activate 825') }
        )}
-    @{ Slot=4; Name='Quillan'; Class='Bard'; Win='W4'; Role='DPS / haste / mez / backup puller'
+    @{ Slot=4; Name='Lyrkal'; Class='Bard'; Win='W4'; Role='DPS / haste / mez / backup puller'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on','/melody 1 2 3') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on','/melody 1 2 3') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/alt activate 482','/alt activate 3704','/cast 1','/melody 1 2 3') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/twist stop','/cast 6','/melody 1 2 6') }
          @{ Btn='Pull';   Key='G';  Lines=@('/stand','/cast 7','/alt activate 209') }
        )}
-    @{ Slot=5; Name='Grokk'; Class='Beastlord'; Win='W5'; Role='Pet + melee DPS / slow'
+    @{ Slot=5; Name='Strangeanevil'; Class='Beastlord'; Win='W5'; Role='Pet + melee DPS / slow'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on','/pet attack') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on','/pet attack') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/alt activate 1391','/alt activate 2982','/disc Frenzied Swipes','/alt activate 1387') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/alt activate 1389','/cast 6') }
        )}
-    @{ Slot=6; Name='Thokk'; Class='Beastlord'; Win='W6'; Role='Pet + melee DPS / backup slow'
+    @{ Slot=6; Name='Strangeangood'; Class='Beastlord'; Win='W6'; Role='Pet + melee DPS / backup slow'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on','/pet attack') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on','/pet attack') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/alt activate 1391','/alt activate 2982','/disc Frenzied Swipes','/alt activate 1387') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/alt activate 1389','/cast 6') }
        )}
-    @{ Slot=7; Name='Tsuro'; Class='Monk'; Win='W7'; Role='Melee DPS / PRIMARY PULLER (FD split)'
+    @{ Slot=7; Name='Miklo'; Class='Monk'; Win='W7'; Role='Melee DPS / PRIMARY PULLER (FD split)'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/disc Crystalpalm Discipline','/alt activate 511','/disc Heel of Kanji','/disc Five Point Palm') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/doability 5','/alt activate 249') }
          @{ Btn='Pull';   Key='G';  Lines=@('/target nearest','/alt activate 250','/pause 10','/doability 5') }
        )}
-    @{ Slot=8; Name='Pyralis'; Class='Wizard'; Win='W8'; Role='Nuke DPS / evac'
+    @{ Slot=8; Name='Darkspark'; Class='Wizard'; Win='W8'; Role='Nuke DPS / evac'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/cast 1') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/cast 1') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/alt activate 511','/alt activate 1217','/alt activate 215','/cast 1','/cast 3') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/alt activate 250','/cast 6') }
        )}
   )}
   @{ Team='TLP'; Lvl=65; Chars=@(
-    @{ Slot=1; Name='Brunnar'; Class='Warrior'; Win='T1'; Role='Main Tank / Main Assist (driver)'
+    @{ Slot=1; Name='Tonga'; Class='Warrior'; Win='T1'; Role='Main Tank / Main Assist (driver)'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/target Brunnar','/xtarget 1 set') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/target Tonga','/xtarget 1 set') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/disc Defensive','/disc Provoke','/disc Weaponshield') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/disc Defensive','/disc Fortitude') }
        )}
-    @{ Slot=2; Name='Aelith'; Class='Cleric'; Win='T2'; Role='Primary healer (CH chain)'
+    @{ Slot=2; Name='Raphial'; Class='Cleric'; Win='T2'; Role='Primary healer (CH chain)'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/target Brunnar','/xtarget 1 set') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/target Tonga','/xtarget 1 set') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/cast 4','/pet attack') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/cast 8','/cast 1') }
        )}
-    @{ Slot=3; Name='Sylwen'; Class='Druid'; Win='T3'; Role='Backup heal / fire DPS'
+    @{ Slot=3; Name='Strongroot'; Class='Druid'; Win='T3'; Role='Backup heal / fire DPS'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/target Brunnar','/xtarget 1 set') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/target Tonga','/xtarget 1 set') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/cast 11','/cast 12','/cast 11') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/cast 8','/cast 2') }
        )}
-    @{ Slot=4; Name='Quillan'; Class='Bard'; Win='T4'; Role='DPS / haste / mez / PRIMARY PULLER'
+    @{ Slot=4; Name='Strangeanevil'; Class='Bard'; Win='T4'; Role='DPS / haste / mez / PRIMARY PULLER'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on','/melody 1 2 3') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on','/melody 1 2 3') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/cast 1','/melody 1 2 3') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/twist stop','/melody 6') }
          @{ Btn='Pull';   Key='G';  Lines=@('/stand','/cast 5','/cast 6') }
        )}
-    @{ Slot=5; Name='Grokk'; Class='Beastlord'; Win='T5'; Role='Pet + melee DPS / MAIN SLOW'
+    @{ Slot=5; Name='Miklo'; Class='Beastlord'; Win='T5'; Role='Pet + melee DPS / MAIN SLOW'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on','/pet attack') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on','/pet attack') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/disc Bestial Fury','/cast 5','/pet attack') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/pet guard','/cast 6') }
        )}
-    @{ Slot=6; Name='Emberon'; Class='Magician'; Win='T6'; Role='Pet DPS / nuke / malo'
+    @{ Slot=6; Name='Maginus'; Class='Magician'; Win='T6'; Role='Pet DPS / nuke / malo'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/pet attack','/cast 2') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/pet attack','/cast 2') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/cast 6','/cast 2','/pet attack') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/pet guard','/cast 7') }
        )}
-    @{ Slot=7; Name='Pyralis'; Class='Wizard'; Win='T7'; Role='Burst nuke / evac'
+    @{ Slot=7; Name='Darkspark'; Class='Wizard'; Win='T7'; Role='Burst nuke / evac'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/cast 2') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/cast 2') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/cast 3','/cast 1','/cast 2') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/cast 6','/cast 5') }
        )}
-    @{ Slot=8; Name='Vesk'; Class='Rogue'; Win='T8'; Role='Melee DPS / backup pull'
+    @{ Slot=8; Name='Poky'; Class='Rogue'; Win='T8'; Role='Melee DPS / backup pull'
        Socials=@(
-         @{ Btn='Assist'; Key='~';  Lines=@('/assist Brunnar','/attack on','/doability Backstab') }
+         @{ Btn='Assist'; Key='~';  Lines=@('/assist Tonga','/attack on','/doability Backstab') }
          @{ Btn='Burn';   Key='F1'; Lines=@('/disc Rogue''s Fury','/doability Backstab','/attack on') }
          @{ Btn='Panic';  Key='F2'; Lines=@('/doability Evade','/doability Hide') }
        )}
@@ -398,7 +398,7 @@ STEP 2 - ACTION TARGET GROUPS  (Mapped Keys > Action Target Groups)
 STEP 3 - MAPPED KEYS  (one physical key -> team action)
 --------------------------------------------------------------------
   ~  (tilde)  "Assist"   -> send keystroke ~  to AllDPS
-                            (each box's ~ social assists Brunnar + attacks)
+                            (each box's ~ social assists Tonga + attacks)
   F1          "Burn"      -> ENABLE STEPS:
                             Step1 send F1 to Everyone (Tier 1: epics/long CDs)
                             Step2 send F1 to Everyone (Tier 2: class burn discs/AA)
@@ -406,7 +406,7 @@ STEP 3 - MAPPED KEYS  (one physical key -> team action)
                             "Reset steps after 12s"
   F2          "Panic"     -> send F2 to Healers, then to Tank, then to Beastlords
   G           "Pull"      -> send G to Puller only
-  \           "Follow"    -> send \ to (Everyone except Tank): each runs /stick Brunnar
+  \           "Follow"    -> send \ to (Everyone except Tank): each runs /stick Tonga
   F5          "Buff"      -> send F5 to Everyone (re-fire buffs/clickies)
   Pause       "Broadcast" -> toggle key broadcasting on/off  (SAFETY KEY)
 
@@ -500,6 +500,13 @@ if ($ccSource) {
   Ok "Installed Command Center -> CommandCenter\MCHP-Command-Center.html"
 } else {
   Warn 'Command Center HTML not found next to the installer; skipped. (Copy MCHP-Command-Center.html in manually.)'
+}
+
+# copy the package guide into the install root, if it shipped with the package
+$guideSrc = Join-Path $ScriptDir 'PACKAGE-GUIDE.txt'
+if (Test-Path $guideSrc) {
+  Copy-Item $guideSrc (Join-Path $InstallRoot 'PACKAGE-GUIDE.txt') -Force
+  Ok 'Installed PACKAGE-GUIDE.txt (what everything does)'
 }
 
 $start = @"
