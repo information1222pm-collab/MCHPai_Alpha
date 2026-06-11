@@ -1,17 +1,37 @@
-# MCHP Boxing — ISBoxer Command Center Installer
+# MCHP Boxing — ISBoxer Command Center Package
 
-A one-click Windows installer that sets up the whole multibox build for the
-client, so they don't configure everything by hand.
+A one-click Windows package that sets up the whole multibox build for the
+client, so they don't configure anything by hand. Everything is driven from a
+single HTML navigator.
 
 ## What's in this folder
 
 | File | Purpose |
 |------|---------|
-| `Install.bat` | **Double-click this.** Launches the installer. |
+| `Launch-Navigator.bat` | **Double-click this first.** Opens the package navigator. |
+| `MCHP-Navigator.hta` | The HTML navigator — installs files, launches every tool, and documents the build. Runs as a Windows HTML Application (local privileges). |
+| `Install.bat` | Runs the installer directly (the navigator's Install button calls this). |
 | `Install-MCHP-Boxing.ps1` | The installer itself (PowerShell). |
 | `CommandCenter.html` | The visual command-center app (gets installed + a desktop shortcut). |
 
-Hand the client the whole `installer` folder (zip it). They just double-click `Install.bat`.
+Hand the client the whole `installer` folder (zip it). They double-click
+**`Launch-Navigator.bat`**, then click **Install** — or, if they prefer, run
+`Install.bat` directly.
+
+## The navigator (front door)
+
+`MCHP-Navigator.hta` is a single-window hub with tabs: **Overview · Install ·
+Launch Tools · Documentation · Backups & Restore · About**. From it the client can:
+
+- **Install / re-run setup** (calls `Install.bat`)
+- **Open the Command Center**, ISBoxer build recipe, EQ macros, audio triggers, inventory layout
+- **Launch ISBoxer / Inner Space** and (optionally) EverQuest
+- **Restore their old EQ UI** with one click
+- Read documentation for every feature
+
+It's an `.hta` (not a plain `.html`) on purpose: only an HTML Application can
+touch the filesystem and launch programs. It's written IE/MSHTML-safe (the engine
+mshta uses) so it runs on any Windows 10/11 machine with no dependencies.
 
 ## What the installer does — automatically
 

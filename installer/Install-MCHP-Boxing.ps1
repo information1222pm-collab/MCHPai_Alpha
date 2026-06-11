@@ -106,9 +106,11 @@ if ($Uninstall) {
     $ans = Read-Host '   Type YES to confirm'
     if ($ans -eq 'YES') {
       Remove-Item $InstallRoot -Recurse -Force
-      $lnk = Join-Path $Desktop 'MCHP Command Center.lnk'
-      if (Test-Path $lnk) { Remove-Item $lnk -Force }
-      Ok 'Removed install folder and desktop shortcut.'
+      foreach ($n in @('MCHP Command Center.lnk','MCHP Boxing Navigator.lnk')) {
+        $lnk = Join-Path $Desktop $n
+        if (Test-Path $lnk) { Remove-Item $lnk -Force }
+      }
+      Ok 'Removed install folder and desktop shortcuts.'
     } else { Info 'Cancelled.' }
   } else { Info 'Nothing installed at that location.' }
   Write-Host ''
@@ -553,6 +555,21 @@ if ($ccSource) {
     Ok 'Desktop shortcut created: "MCHP Command Center"'
   } catch { Warn "Could not create desktop shortcut: $($_.Exception.Message)" }
 } else { Info 'Skipped shortcut (no Command Center file).' }
+
+# navigator shortcut (the package hub), if the .hta shipped next to the installer
+$navSrc = Join-Path $ScriptDir 'MCHP-Navigator.hta'
+if (Test-Path $navSrc) {
+  try {
+    $wsh2 = New-Object -ComObject WScript.Shell
+    $nlnk = $wsh2.CreateShortcut((Join-Path $Desktop 'MCHP Boxing Navigator.lnk'))
+    $nlnk.TargetPath = "$env:SystemRoot\System32\mshta.exe"
+    $nlnk.Arguments = '"' + $navSrc + '"'
+    $nlnk.WorkingDirectory = $ScriptDir
+    $nlnk.Description = 'MCHP Boxing - Package Navigator (install / launch / docs)'
+    $nlnk.Save()
+    Ok 'Desktop shortcut created: "MCHP Boxing Navigator"'
+  } catch { Warn "Could not create navigator shortcut: $($_.Exception.Message)" }
+}
 
 # ---------- done ----------
 Write-Host ''

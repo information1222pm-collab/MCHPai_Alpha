@@ -8,13 +8,14 @@ smart pulls, and class-specific overlays in a clean dark UI.
 
 | Path | What it is |
 |------|------------|
-| `index.html` | The **Command Center** app — a self-contained, offline dashboard with the hotbuttons, burn/assist/panic/pull systems, ISBoxer mapped-key recipes, per-class EQ macros, alerts, and setup guide. Just open it in a browser. |
-| `installer/` | A **one-click Windows installer** that lays the whole build down for the client — backups, ready-to-paste macros, ISBoxer recipe, audio triggers, the app, and a desktop shortcut. See `installer/README.md`. |
+| `index.html` | The **Command Center** app — a self-contained, offline dashboard: hotbuttons, burn/assist/panic/pull systems, ISBoxer mapped-key recipes, per-class EQ macros, **live buff tracking, proc/named alerts, audio warnings, class-specific overlays**, and a setup guide. Just open it in a browser. |
+| `installer/` | The **one-click Windows package**: an HTML navigator (`MCHP-Navigator.hta`) that installs all files, launches every tool, and documents the build — plus the PowerShell installer that backs up the client's ISBoxer config *and* EverQuest UI before laying everything down. See `installer/README.md`. |
 
 ## Quick start (client)
 
-1. Run `installer/Install.bat` (double-click).
-2. Follow `00-START-HERE.txt` that opens at the end.
-3. Build ISBoxer from the recipe, paste the EQ socials, and play.
+1. Unzip the package and double-click **`installer/Launch-Navigator.bat`**.
+2. Click **Install** in the navigator (or run `installer/Install.bat` directly).
+3. From the navigator: open the Command Center, build ISBoxer from the recipe,
+   paste the EQ socials, and play. Don't like it? Use **Restore my old EQ UI**.
 
 100% native ISBoxer. Prepared by MCHP Boxing Services.

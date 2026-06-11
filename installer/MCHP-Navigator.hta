@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta charset="utf-8" />
+<title>MCHP Boxing &#183; Package Navigator</title>
+<hta:application
+  id="mchp"
+  applicationname="MCHP Boxing Navigator"
+  border="thin"
+  borderstyle="normal"
+  caption="yes"
+  maximizebutton="yes"
+  minimizebutton="yes"
+  scroll="yes"
+  singleinstance="yes"
+  icon="" />
+<style>
+/* IE11-safe CSS only: no var(), no grid. Hardcoded colors, float/inline-block. */
+html,body{margin:0;padding:0;background:#0a0e14;color:#d7e1ec;
+  font-family:"Segoe UI",Tahoma,Arial,sans-serif;font-size:13px}
+a{color:#38bdf8;text-decoration:none}
+.wrap{min-height:100%}
+.top{background:#0f1620;border-bottom:1px solid #1f2c3d;padding:12px 18px;overflow:hidden}
+.top .mk{float:left;width:34px;height:34px;background:#0e4f5c;border:1px solid #29d3ee;
+  border-radius:8px;text-align:center;line-height:34px;font-weight:bold;color:#29d3ee;margin-right:11px;font-size:16px}
+.top h1{margin:0;font-size:15px;float:left;line-height:1.1}
+.top h1 small{display:block;color:#5a6b7e;font-size:10px;font-weight:normal;letter-spacing:1px;text-transform:uppercase}
+.top .status{float:right;font-size:11px;color:#8294a8;background:#141d29;border:1px solid #1f2c3d;
+  padding:6px 12px;border-radius:14px;margin-top:2px}
+.top .status b{color:#34d399}
+.top .status.no b{color:#f5a623}
+
+.tabs{background:#0c121b;border-bottom:1px solid #1f2c3d;padding:0 12px;white-space:nowrap;overflow:hidden}
+.tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:#8294a8;
+  padding:11px 16px;font-size:12.5px;font-family:inherit;cursor:pointer}
+.tabs button:hover{color:#d7e1ec}
+.tabs button.on{color:#29d3ee;border-bottom-color:#29d3ee}
+
+.content{padding:20px 24px 40px}
+.panel{display:none}
+.panel.on{display:block}
+h2{font-size:18px;margin:0 0 4px}
+.sub{color:#8294a8;margin:0 0 18px;max-width:760px}
+.section-title{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#29d3ee;
+  margin:22px 0 10px;font-weight:bold;border-left:2px solid #29d3ee;padding-left:9px}
+
+.card{background:#111a26;border:1px solid #1f2c3d;border-radius:8px;padding:15px 16px;margin:0 0 14px}
+.card h3{margin:0 0 9px;font-size:13px}
+.muted{color:#8294a8}
+.col{display:inline-block;vertical-align:top;width:48%;margin-right:1.5%}
+.col3{display:inline-block;vertical-align:top;width:31.5%;margin-right:1.5%}
+@media all{.col,.col3{box-sizing:border-box}}
+
+.btn{display:inline-block;background:#141d29;border:1px solid #2a3a4f;color:#d7e1ec;
+  padding:10px 16px;border-radius:7px;font-size:12.5px;font-family:inherit;cursor:pointer;
+  margin:4px 6px 4px 0;font-weight:600}
+.btn:hover{border-color:#29d3ee;color:#29d3ee}
+.btn.pri{background:#29d3ee;color:#04222a;border-color:#29d3ee}
+.btn.pri:hover{background:#38bdf8;color:#04222a}
+.btn.big{padding:14px 22px;font-size:14px}
+.btn .i{font-size:14px;margin-right:7px}
+
+.kv{padding:6px 0;border-bottom:1px dashed #1f2c3d;overflow:hidden}
+.kv .k{color:#8294a8;float:left}
+.kv .v{float:right;font-family:Consolas,monospace;font-size:11px;color:#bcd2e8}
+.kv:last-child{border-bottom:0}
+.note{border-left:3px solid #29d3ee;background:#0d1b22;padding:10px 13px;border-radius:0 6px 6px 0;
+  margin:12px 0;color:#8294a8;font-size:12px}
+.note.warn{border-left-color:#f5a623;background:#1c1608}
+.note b{color:#29d3ee}.note.warn b{color:#f5a623}
+ul.tight{margin:6px 0;padding-left:20px}ul.tight li{margin:4px 0}
+.banner{background:#1c1608;border:1px solid #f5a623;color:#f5a623;padding:10px 14px;border-radius:7px;margin:0 0 16px;display:none}
+.foot{margin-top:26px;padding-top:14px;border-top:1px solid #1f2c3d;color:#5a6b7e;font-size:11px;overflow:hidden}
+.foot .price{float:right;color:#34d399;border:1px solid #14532d;background:#0b1f17;padding:3px 10px;border-radius:12px;font-family:Consolas,monospace}
+.tag{font-size:10px;color:#5a6b7e}
+.pill{display:inline-block;font-size:10px;background:#141d29;border:1px solid #1f2c3d;color:#8294a8;padding:3px 9px;border-radius:11px;margin:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="mk">&#9638;</div>
+    <h1>MCHP Boxing<small>ISBoxer Package Navigator</small></h1>
+    <div class="status" id="statusPill">checking&hellip;</div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="on" data-tab="overview">Overview</button>
+    <button data-tab="install">Install</button>
+    <button data-tab="launch">Launch Tools</button>
+    <button data-tab="docs">Documentation</button>
+    <button data-tab="backups">Backups &amp; Restore</button>
+    <button data-tab="about">About</button>
+  </div>
+
+  <div class="content">
+    <div class="banner" id="htaBanner">
+      This page is running in a normal browser, so it can't install files or launch tools.
+      Please run it via <b>Launch-Navigator.bat</b> (or double-click <b>MCHP-Navigator.hta</b>).
+    </div>
+
+    <!-- ============ OVERVIEW ============ -->
+    <div class="panel on" id="p-overview">
+      <h2>Welcome to your ISBoxer build package</h2>
+      <p class="sub">A custom 8-box EverQuest multibox suite (Live 130 + TLP 65), built around ISBoxer &mdash; no MacroQuest. This navigator installs everything into the right places, launches your tools, and documents the whole build.</p>
+
+      <div class="card">
+        <h3>&#9889; Quick start</h3>
+        <p class="muted" style="margin-top:0">Two clicks and you're set up:</p>
+        <button class="btn pri big" onclick="runInstall()"><span class="i">&#11015;</span>Install / Set Up Everything</button>
+        <button class="btn big" onclick="openCC()"><span class="i">&#9638;</span>Open Command Center</button>
+        <div class="note" id="ovStatus">Checking install status&hellip;</div>
+      </div>
+
+      <div class="section-title">What's in the package</div>
+      <div>
+        <div class="col3 card"><h3>&#9638; Command Center</h3><p class="muted">The visual control app &mdash; hotbuttons, burns, assist, panic, pull, live buff tracking, proc/named alerts, audio warnings and class overlays.</p></div>
+        <div class="col3 card"><h3>&#8635; Installer</h3><p class="muted">Lays down all files, backs up your ISBoxer config <i>and</i> your EverQuest UI, and creates a desktop shortcut.</p></div>
+        <div class="col3 card"><h3>&#10003; Build kit</h3><p class="muted">ISBoxer recipe, ready-to-paste EQ socials (per character, both teams), audio-trigger list and inventory layout.</p></div>
+      </div>
+      <div class="pill">8-box Live 130</div><div class="pill">8-box TLP 65</div>
+      <div class="pill">Single-key burns</div><div class="pill">Instant assist</div>
+      <div class="pill">Panic healing</div><div class="pill">Smart pulls</div>
+      <div class="pill">Buff / proc / named alerts</div><div class="pill">Class overlays</div>
+      <div class="pill">100% native ISBoxer</div>
+    </div>
+
+    <!-- ============ INSTALL ============ -->
+    <div class="panel" id="p-install">
+      <h2>Install</h2>
+      <p class="sub">The installer is safe and non-destructive &mdash; it backs up your existing config and UI before adding anything, and never overwrites your live ISBoxer file.</p>
+
+      <div class="card">
+        <h3>&#11015; Run the installer</h3>
+        <button class="btn pri big" onclick="runInstall()"><span class="i">&#11015;</span>Install / Re-run Setup</button>
+        <button class="btn" onclick="openFolder('')"><span class="i">&#128193;</span>Open Install Folder</button>
+        <div class="note warn"><b>You may see a SmartScreen / UAC prompt</b> &mdash; that's Windows asking about the PowerShell script. Choose &ldquo;More info &raquo; Run anyway&rdquo;. The script only writes inside your Documents folder.</div>
+      </div>
+
+      <div class="section-title">What it does (8 steps)</div>
+      <div class="card">
+        <ul class="tight">
+          <li>Creates <b>Documents\MCHP-Boxing\</b> with a clean folder tree</li>
+          <li>Backs up your existing <b>ISBoxer Toolkit.xml</b> (never overwrites it)</li>
+          <li>Backs up your <b>EverQuest UI</b> (layout INIs + uifiles\) and writes a one-click restore</li>
+          <li>Writes <b>ready-to-paste EQ socials</b>, one file per character (Live + TLP)</li>
+          <li>Writes the <b>ISBoxer build recipe</b> (ATGs, mapped keys, stepped burn)</li>
+          <li>Writes the <b>EQ audio-trigger list</b> + standard inventory layout</li>
+          <li>Installs the <b>Command Center app</b> + a Desktop shortcut</li>
+          <li>Opens the <b>Start-Here guide</b> when finished</li>
+        </ul>
+      </div>
+
+      <div class="section-title">Where files go</div>
+      <div class="card">
+        <div class="kv"><span class="k">Install root</span><span class="v" id="pathRoot">Documents\MCHP-Boxing</span></div>
+        <div class="kv"><span class="k">Command Center</span><span class="v">...\CommandCenter\</span></div>
+        <div class="kv"><span class="k">EQ socials</span><span class="v">...\EQ-Macros\Live + \TLP</span></div>
+        <div class="kv"><span class="k">ISBoxer recipe</span><span class="v">...\ISBoxer-Profiles\</span></div>
+        <div class="kv"><span class="k">Backups</span><span class="v">...\Backups\</span></div>
+      </div>
+    </div>
+
+    <!-- ============ LAUNCH ============ -->
+    <div class="panel" id="p-launch">
+      <h2>Launch Tools</h2>
+      <p class="sub">One-click access to everything in the package and the apps it works with.</p>
+      <div class="card">
+        <h3>In this package</h3>
+        <button class="btn pri" onclick="openCC()"><span class="i">&#9638;</span>Command Center app</button>
+        <button class="btn" onclick="openFile('ISBoxer-Profiles\\MCHP-ISBoxer-Build-Recipe.txt')"><span class="i">&#10003;</span>ISBoxer Build Recipe</button>
+        <button class="btn" onclick="openFolder('EQ-Macros')"><span class="i">&#128221;</span>EQ Social Macros</button>
+        <button class="btn" onclick="openFile('EQ-AudioTriggers\\EQ-Audio-Triggers.txt')"><span class="i">&#9834;</span>Audio Triggers</button>
+        <button class="btn" onclick="openFile('Inventory\\Inventory-Layout.txt')"><span class="i">&#128230;</span>Inventory Layout</button>
+        <button class="btn" onclick="openFile('00-START-HERE.txt')"><span class="i">&#9733;</span>Start-Here Guide</button>
+        <button class="btn" onclick="openFolder('')"><span class="i">&#128193;</span>Install Folder</button>
+      </div>
+      <div class="card">
+        <h3>Game tools</h3>
+        <button class="btn" onclick="launchISBoxer()"><span class="i">&#9881;</span>ISBoxer / Inner Space</button>
+        <button class="btn" onclick="launchEQ()"><span class="i">&#9876;</span>EverQuest</button>
+        <div class="note">If a game tool isn't found automatically, the navigator will tell you where to point it. ISBoxer normally launches your team for you once it's set up from the recipe.</div>
+      </div>
+    </div>
+
+    <!-- ============ DOCS ============ -->
+    <div class="panel" id="p-docs">
+      <h2>Documentation</h2>
+      <p class="sub">What every part of the build does and how it's wired in ISBoxer. Full interactive reference lives in the Command Center; this is the quick read.</p>
+
+      <div class="section-title">Command rail &mdash; the keys you press</div>
+      <div class="card">
+        <div class="kv"><span class="k">~ (tilde) &mdash; Assist + Attack</span><span class="v">all DPS &rarr; tank's target</span></div>
+        <div class="kv"><span class="k">F1 &mdash; Burn (stepped)</span><span class="v">whole-group staged burn</span></div>
+        <div class="kv"><span class="k">F2 &mdash; Panic</span><span class="v">emergency heals + defensives</span></div>
+        <div class="kv"><span class="k">G &mdash; Pull</span><span class="v">puller engages, group holds</span></div>
+        <div class="kv"><span class="k">F5 &mdash; Buff</span><span class="v">re-fire group buffs/clickies</span></div>
+        <div class="kv"><span class="k">\ &mdash; Follow</span><span class="v">reform on the tank</span></div>
+        <div class="kv"><span class="k">Pause &mdash; Broadcast toggle</span><span class="v">safety on/off</span></div>
+      </div>
+
+      <div class="section-title">Combat systems</div>
+      <div>
+        <div class="col card"><h3>Single-key burns</h3><p class="muted">F1 is an ISBoxer <b>Step key</b>: press 1 fires epics/long CDs, press 2 fires class burn discs/AA, press 3 fires the nuke rotation &mdash; so one button walks the whole burn without overwriting your own discs.</p></div>
+        <div class="col card"><h3>Assist &amp; auto-target</h3><p class="muted">Tilde broadcasts <b>/assist Warrior</b> to every DPS box plus /attack and /pet attack, so the kill target is set on all 8 in under a second &mdash; no clicking between windows.</p></div>
+        <div class="col card"><h3>Panic healing</h3><p class="muted">F2 makes both healers dump their biggest emergency heal (Cleric Divine Arbitration, Druid group heal) while the tank pops a defensive &mdash; bind it to a mouse button for reflex use.</p></div>
+        <div class="col card"><h3>Smart pulls</h3><p class="muted">G acts only on the assigned puller (Monk FD-split on Live, Bard fade on TLP); the group holds on /stick and doesn't aggro until you hit tilde.</p></div>
+      </div>
+
+      <div class="section-title">Awareness layer (buffs / procs / named / audio / overlays)</div>
+      <div>
+        <div class="col3 card"><h3>Buff tracking</h3><p class="muted">EQ Audio Triggers on &ldquo;has worn off&rdquo; fire an audible cue + the Command Center shows live countdown bars; your prompt to press F5.</p></div>
+        <div class="col3 card"><h3>Proc &amp; named</h3><p class="muted">Audio Triggers match proc/spawn text; ISBoxer Alerts pop the matching box to the front with a distinct tone so you instantly see who has it.</p></div>
+        <div class="col3 card"><h3>Class overlays</h3><p class="muted">Per-box, role-aware status (tank defensives/aggro, healer mana, DPS burn readiness &amp; pet HP) painted on each window's swap-bar.</p></div>
+      </div>
+      <div class="note">Everything in the awareness layer is <b>native ISBoxer + EQ Audio Triggers</b> &mdash; no MacroQuest, nothing injected into the game client.</div>
+    </div>
+
+    <!-- ============ BACKUPS ============ -->
+    <div class="panel" id="p-backups">
+      <h2>Backups &amp; Restore</h2>
+      <p class="sub">The installer protects your old setup before changing anything, so you can try the new build risk-free and roll back any time.</p>
+      <div class="card">
+        <h3>&#8634; Roll back your EverQuest UI</h3>
+        <p class="muted" style="margin-top:0">Close EverQuest first, then restore your original window layout and UI skins exactly as they were.</p>
+        <button class="btn pri" onclick="restoreUI()"><span class="i">&#8634;</span>Restore my old EQ UI</button>
+        <button class="btn" onclick="openFolder('Backups')"><span class="i">&#128193;</span>Open Backups Folder</button>
+      </div>
+      <div class="card">
+        <h3>What's backed up</h3>
+        <ul class="tight">
+          <li><b>ISBoxer Toolkit.xml</b> &mdash; a timestamped copy of your config, taken before install</li>
+          <li><b>EverQuest UI</b> &mdash; every <i>*_&lt;server&gt;.ini</i> layout/keybind file plus the whole <i>uifiles\</i> custom-skin folder</li>
+          <li>A generated <b>Restore-EQ-UI.bat</b> sits inside each EQ-UI backup folder for one-click rollback</li>
+        </ul>
+        <div class="note">Nothing the build does is destructive &mdash; it mostly <i>adds</i> socials and hotbuttons. Your originals are always preserved in <b>Backups\</b>.</div>
+      </div>
+    </div>
+
+    <!-- ============ ABOUT ============ -->
+    <div class="panel" id="p-about">
+      <h2>About this build</h2>
+      <p class="sub">Custom ISBoxer multibox suite for EverQuest, prepared by MCHP Boxing Services.</p>
+      <div class="card">
+        <div class="kv"><span class="k">Teams</span><span class="v">Live 8 (130) + TLP 8 (65)</span></div>
+        <div class="kv"><span class="k">Driver</span><span class="v">Warrior tank, both teams</span></div>
+        <div class="kv"><span class="k">Tooling</span><span class="v">ISBoxer only &mdash; no MacroQuest</span></div>
+        <div class="kv"><span class="k">Accent</span><span class="v">Cyan on dark (high-info read)</span></div>
+        <div class="kv"><span class="k">Suggested display</span><span class="v">2560x1440, ultrawide/dual, Medium UI</span></div>
+      </div>
+      <div class="note warn"><b>One honest note:</b> EverQuest stores in-game socials/hotbuttons on Daybreak's servers per character, so no installer can write them directly. They're pre-built here as ready-to-paste files so adding them in-game is a quick copy-paste. Everything else is automated.</div>
+      <div class="foot">
+        MCHP Boxing Services &mdash; ISBoxer Multibox Command Center &middot; v1.0
+        <span class="price">$40 &middot; delivered</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script language="JScript">
+/* ES5 JScript only (runs on the MSHTML/IE engine inside mshta.exe). */
+var HAS_HTA = (typeof ActiveXObject !== "undefined");
+
+function sh(){ return new ActiveXObject("WScript.Shell"); }
+function fso(){ return new ActiveXObject("Scripting.FileSystemObject"); }
+
+function getScriptDir(){
+  try{
+    var p = unescape(location.pathname);
+    if(p.charAt(0)=="/") p = p.substring(1);
+    p = p.replace(/\//g,"\\");
+    var i = p.lastIndexOf("\\");
+    return p.substring(0, i+1);
+  }catch(e){ return ""; }
+}
+function docsDir(){
+  try{ return sh().SpecialFolders("MyDocuments"); }catch(e){ return ""; }
+}
+function installRoot(){ return docsDir() + "\\MCHP-Boxing"; }
+function isInstalled(){
+  try{ return fso().FolderExists(installRoot()); }catch(e){ return false; }
+}
+function exists(p){ try{ return fso().FileExists(p) || fso().FolderExists(p); }catch(e){ return false; } }
+
+/* ---------- actions ---------- */
+function runInstall(){
+  if(!HAS_HTA) return needHta();
+  var bat = getScriptDir() + "Install.bat";
+  if(!exists(bat)){ alert("Install.bat was not found next to this navigator.\nExpected:\n" + bat); return; }
+  try{
+    sh().Run('"' + bat + '"', 1, false);   // visible window, don't wait
+  }catch(e){ alert("Could not launch the installer:\n" + e.message); return; }
+  setTimeout(refreshStatus, 4000);
+}
+function openCC(){
+  if(!HAS_HTA) return needHta();
+  var installed = installRoot() + "\\CommandCenter\\MCHP-Command-Center.html";
+  var bundled   = getScriptDir() + "CommandCenter.html";
+  var target = exists(installed) ? installed : (exists(bundled) ? bundled : null);
+  if(!target){ alert("Command Center file not found. Run the installer first."); return; }
+  try{ sh().Run('"' + target + '"', 1, false); }catch(e){ alert("Could not open the Command Center:\n" + e.message); }
+}
+function openFolder(sub){
+  if(!HAS_HTA) return needHta();
+  var p = installRoot() + (sub ? ("\\" + sub) : "");
+  if(!exists(p)){ alert("Not found yet:\n" + p + "\n\nRun the installer first."); return; }
+  try{ sh().Run('explorer.exe "' + p + '"', 1, false); }catch(e){ alert(e.message); }
+}
+function openFile(rel){
+  if(!HAS_HTA) return needHta();
+  var p = installRoot() + "\\" + rel;
+  if(!exists(p)){ alert("Not found yet:\n" + p + "\n\nRun the installer first."); return; }
+  try{ sh().Run('"' + p + '"', 1, false); }catch(e){ try{ sh().Run('notepad.exe "' + p + '"',1,false); }catch(e2){ alert(e2.message); } }
+}
+function launchISBoxer(){
+  if(!HAS_HTA) return needHta();
+  var cands = [
+    "C:\\Program Files (x86)\\InnerSpace\\InnerSpace.exe",
+    "C:\\Program Files\\InnerSpace\\InnerSpace.exe"
+  ];
+  for(var i=0;i<cands.length;i++){ if(exists(cands[i])){ try{ sh().Run('"'+cands[i]+'"',1,false); }catch(e){} return; } }
+  alert("Couldn't find Inner Space automatically.\n\nLaunch ISBoxer from its own shortcut, then build your team using the ISBoxer Build Recipe (Launch Tools tab).");
+}
+function launchEQ(){
+  if(!HAS_HTA) return needHta();
+  var cands = [
+    "C:\\Users\\Public\\Daybreak Game Company\\Installed Games\\EverQuest\\eqgame.exe",
+    "C:\\Users\\Public\\Sony Online Entertainment\\Installed Games\\EverQuest\\eqgame.exe",
+    "C:\\Program Files (x86)\\Sony\\EverQuest\\eqgame.exe"
+  ];
+  for(var i=0;i<cands.length;i++){
+    if(exists(cands[i])){
+      if(!confirm("Note: for boxing you normally launch EverQuest THROUGH ISBoxer, not directly.\n\nLaunch EverQuest anyway?")) return;
+      try{ sh().Run('"'+cands[i]+'" patchme',1,false); }catch(e){}
+      return;
+    }
+  }
+  alert("Couldn't find EverQuest automatically.\nLaunch your team through ISBoxer instead.");
+}
+function restoreUI(){
+  if(!HAS_HTA) return needHta();
+  var bk = installRoot() + "\\Backups";
+  if(!exists(bk)){ alert("No backups found. Run the installer first."); return; }
+  try{
+    var folder = fso().GetFolder(bk), e = new Enumerator(folder.SubFolders), best=null;
+    for(; !e.atEnd(); e.moveNext()){
+      var s = e.item();
+      if(s.Name.indexOf("EQ-UI-")===0){ if(!best || s.Name > best.Name) best = s; }
+    }
+    if(!best){ alert("No EverQuest UI backup was taken (it may have been skipped during install)."); return; }
+    var rbat = best.Path + "\\Restore-EQ-UI.bat";
+    if(!exists(rbat)){ alert("Restore script not found in:\n" + best.Path); return; }
+    if(!confirm("Restore your previous EverQuest UI from:\n" + best.Name + "\n\nClose EverQuest first. Continue?")) return;
+    sh().Run('"' + rbat + '"', 1, false);
+  }catch(ex){ alert("Restore failed:\n" + ex.message); }
+}
+
+/* ---------- ui ---------- */
+function needHta(){
+  alert("This action needs the navigator to run as an HTA.\nPlease launch it with Launch-Navigator.bat (or double-click MCHP-Navigator.hta).");
+}
+function showTab(name){
+  var panels = document.getElementsByTagName("div");
+  var ps = ["overview","install","launch","docs","backups","about"];
+  for(var i=0;i<ps.length;i++){
+    var el = document.getElementById("p-"+ps[i]);
+    if(el) el.className = (ps[i]===name) ? "panel on" : "panel";
+  }
+  var btns = document.getElementById("tabs").getElementsByTagName("button");
+  for(var j=0;j<btns.length;j++){ btns[j].className = (btns[j].getAttribute("data-tab")===name) ? "on" : ""; }
+}
+function refreshStatus(){
+  var sp = document.getElementById("statusPill");
+  var ov = document.getElementById("ovStatus");
+  var root = installRoot();
+  var pr = document.getElementById("pathRoot"); if(pr) pr.innerHTML = root;
+  if(!HAS_HTA){
+    document.getElementById("htaBanner").style.display = "block";
+    sp.className = "status no"; sp.innerHTML = "browser mode &mdash; <b>not an HTA</b>";
+    if(ov) ov.innerHTML = "Run via Launch-Navigator.bat to enable install &amp; launch.";
+    return;
+  }
+  if(isInstalled()){
+    sp.className = "status"; sp.innerHTML = "<b>Installed</b> &#10003;";
+    if(ov) ov.innerHTML = "<b>Installed</b> at " + root + ". Open the Command Center, or re-run setup any time.";
+  } else {
+    sp.className = "status no"; sp.innerHTML = "<b>Not installed yet</b>";
+    if(ov) ov.innerHTML = "Not installed yet &mdash; click <b>Install / Set Up Everything</b> to begin.";
+  }
+}
+
+/* wire tabs */
+(function(){
+  var btns = document.getElementById("tabs").getElementsByTagName("button");
+  for(var i=0;i<btns.length;i++){
+    btns[i].onclick = (function(b){ return function(){ showTab(b.getAttribute("data-tab")); }; })(btns[i]);
+  }
+  try{ window.resizeTo(1040, 760); }catch(e){}
+  refreshStatus();
+})();
+</script>
+</body>
+</html>
