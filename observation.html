@@ -847,7 +847,7 @@ async function clearData(){if(!DB||(typeof confirm!=='undefined'&&!confirm('Dele
 /* ---- paper bot: smart-money-gated momentum + REALISTIC fills (latency/slippage/fees/fails) ---- */
 /* ===== STRATEGY ENGINE — independent, user-configurable strategies ===== */
 const PSCHEMA=[['size','Size ◎',0.5],['liqFrac','Size % of liq (0=fixed)',0.05],['maxPos','Max positions',6],['minLiq','Min liquidity ◎',8],['minBuyers','Min buyers',3],['minAge','Min age s',8],['maxAge','Max age s',1200],['ratioIn','Buy/sell ratio ≥',2.5],['momIn','Momentum ≥',0.05],['smartMin','Smart wallets ≥',0],['sl','Stop loss',-0.35],['trail','Trailing stop',0.4],['tpHard','Hard take-profit',3],['spikeJump','Spike jump TP',0.35],['spikeLevel','Spike level TP',0.8],['holdMax','Max hold s',420],['tier1Buyers','Tier1 buyers ≤60s',10],['tier2Buyers','Tier2 buyers ≤120s',25],['tier3Buyers','Tier3 buyers ≤180s',100],['maxSellRatio','Max sells/buyers',0.25],['trendRate','Trending buyers/min ≥',8],['alphaMin','Alpha score ≥',68],['scaleAt','Scale-out at +ret',0.4],['scaleFrac','Scale-out fraction',0.5],['moonAt','Moonbag lock at +ret',1.5],['moonFrac','Moonbag keep fraction',0.25],['moonTrail','Moonbag trail (loose)',0.55],['discMin','Discovered win-prob ≥ %',55]];
-const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending','alpha','signal','discovered'],EXIT_MODES=['risk','firstSell'];
+const ENTRY_TYPES=['rl','tiered','momentum','copywallet','trending','alpha','signal','discovered','consensus'],EXIT_MODES=['risk','firstSell'];
 function defParams(){const o={};PSCHEMA.forEach(([k,,d])=>o[k]=d);return o;}
 function newBook(){return {cash:10,start:10,pos:new Map(),closed:[],realized:0,eqHist:[],missed:0,peakEq:10};}
 function newStrategy(name,entry){entry=entry||'rl';return {id:'s'+Math.random().toString(36).slice(2,7),name,on:true,entry,exitMode:entry==='tiered'?'firstSell':'risk',requireHelius:entry!=='tiered',live:false,retired:false,moonbag:false,alloc:1,params:defParams(),book:newBook(),brain:makeBandit(8,2)};}
@@ -952,7 +952,7 @@ function scanSmartMoney(){
    const f=feat(T),A=alphaScore(T,f);
    const pass=A.cAccel>0.2&&T.vol>=LIQ_MIN&&(f.bv-f.sv)>0&&!(T.lastPrice<=T.firstPrice*0.5)&&A.cOrg>0.3;  // accel∧liq∧buy-pressure∧not-rugging∧holder-growth
    cons.push({mint:T.mint,n:eb.length,cs:Math.round(cs),pass,A});
-   if(pass)sig('consensus',T.mint,{n:eb.length,cs:Math.round(cs)});}
+   if(pass){T._consensus={n:eb.length,cs:Math.round(cs),ts:N};sig('consensus',T.mint,{n:eb.length,cs:Math.round(cs)});}}  // stamp token so the consensus strategy can act
  SM.consensus=cons.sort((a,b)=>b.cs-a.cs).slice(0,12);}
 /* composite Alpha Score (0..100): confluence of independent signals — needs SEVERAL to clear a high bar */
 function alphaScore(T,f){let smartW=0;T.buyers.forEach(a=>{const q=walletQ(a);if(q>0)smartW+=Math.min(2,q);});
@@ -1057,6 +1057,7 @@ async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  else if(S.entry==='alpha'){const A=alphaScore(T,f);if(A.score<P.alphaMin)return;convSize=alphaSize(P,f.liq,A.score)*(S.alloc||1);if(b.cash<convSize)return;extra={scaleOut:true,alpha:+A.score.toFixed(1),moon:!!S.moonbag};}  // confluence gate + conviction size + scale-out (+moonbag)
  else if(S.entry==='signal'){if(!(T._sig&&now()-T._sig.ts<10))return;extra={scaleOut:true,moon:!!S.moonbag,sigType:T._sig.type};}   // respond to every fresh signal; ride winners via scale-out/moonbag
  else if(S.entry==='discovered'){const p=discScore(T);if(!disc||disc.auc<0.6||p*100<(P.discMin||55))return;extra={scaleOut:true,moon:!!S.moonbag,prob:+(p*100).toFixed(0)};}   // trade the learned pattern (only if the model is actually predictive)
+ else if(S.entry==='consensus'){const C=T._consensus;if(!(C&&now()-C.ts<90))return;const k=Math.min(2,C.cs/300);convSize=size*(1+k)*(S.alloc||1);if(b.cash<convSize)return;extra={scaleOut:true,moon:!!S.moonbag,consensus:C.cs,elite:C.n};}   // Stage 10: act only when the composite-gated elite consensus fires; size up with conviction
  else{const ctx=ctxOf(f);if(bSelect(S.brain,ctx)===0){bUpdate(S.brain,0,ctx,0);return;}}
  let ep=f.price;if(S.requireHelius){const ap=await authPriceSol(mint);if(ap)ep=ap;}   // prefer Helius price; fall back to sanitized swap price (fresh tokens often have no DAS price yet — don't block the entry)
  if(Math.random()<COST.failP){b.missed++;return;}
@@ -1135,6 +1136,11 @@ function findAlphaStrat(){return strategies.find(s=>s.entry==='alpha');}
 function ensureAlphaStrat(){if(findAlphaStrat())return findAlphaStrat();
  const S=newStrategy('Alpha Engine','alpha');Object.assign(S.params,{alphaMin:40,minBuyers:6,minLiq:4,minAge:10,maxAge:900,size:0.5,maxPos:5,sl:-0.3,trail:0.3,tpHard:5,spikeJump:0.35,spikeLevel:0.9,holdMax:900,scaleAt:0.4,scaleFrac:0.5});strategies.push(S);saveStrats();return S;}
 function toggleAlpha(){const S=ensureAlphaStrat();S.on=!S.on;saveStrats();renderTrade();renderAlpha();}
+/* CONSENSUS — trade the Smart-Money engine's composite-gated elite consensus (Stage 10) */
+function findConsensusStrat(){return strategies.find(s=>s.entry==='consensus');}
+function ensureConsensusStrat(){if(findConsensusStrat())return findConsensusStrat();
+ const S=newStrategy('Elite Consensus','consensus');Object.assign(S.params,{minBuyers:4,minLiq:LIQ_MIN,minAge:10,maxAge:900,size:0.5,maxPos:5,sl:-0.3,trail:0.3,tpHard:5,holdMax:900,scaleAt:0.5,scaleFrac:0.5,moonTrail:0.55});strategies.push(S);saveStrats();return S;}
+function toggleConsensus(){const S=ensureConsensusStrat();S.on=!S.on;saveStrats();renderTrade();renderWallets();}
 /* MOONSHOT — asymmetric fat-tail rider: many small bets, cut losers fast, ride a free moonbag to the moon */
 function findMoonStrat(){return strategies.find(s=>s.entry==='alpha'&&s.moonbag);}
 function ensureMoonStrat(){if(findMoonStrat())return findMoonStrat();
@@ -1243,9 +1249,10 @@ function renderMovers(){const movable=tv().filter(T=>T.prices.length>=2&&T.first
  $('gainers').innerHTML=g.map(tokRow).join('')||'<div class=ctr>—</div>';
  $('losers').innerHTML=l.map(tokRow).join('')||'<div class=ctr>—</div>';}
 function renderTokens(){$('tokens').innerHTML=tv().sort((a,b)=>b.lastSeen-a.lastSeen).slice(0,40).map(tokRow).join('')||'<div class=ctr>waiting for activity…</div>';}
-function renderWallets(){const board=SM.board||[];
+function renderWallets(){const board=SM.board||[];const cs=findConsensusStrat(),cOn=cs&&cs.on;
  const st=$('sm_stat');if(st)st.innerHTML=`<div class=row><span class=muted>scored · elite · auto-discovered</span><span>${board.length} · <span class=up>${SM.elite.size}</span> · <span class=up>${SM.discovered.size}</span></span></div>
   <div class=row><span class=muted>consensus gated-buys live</span><span class="${SM.consensus.filter(c=>c.pass).length?'up':''}">${SM.consensus.filter(c=>c.pass).length} firing</span></div>
+  <div class=row><span class=muted>🛰 trade elite consensus (Stage 10)</span><span><button class="mini ${cOn?'on':''}" onclick="toggleConsensus()">${cOn?'● trading it':'○ trade it'}</button></span></div>
   <div class=row style=border:none><span class=muted>Stage 8 · auto-expand co-buyers → follows</span><span><button class="mini ${autoExpand?'on':''}" onclick="toggleExpand()">${autoExpand?'● on':'○ off'}</button></span></div>`;
  const cel=$('sm_consensus');if(cel){cel.innerHTML=SM.consensus.length?SM.consensus.map(c=>{const T=tokens.get(c.mint),up=T&&pct(T)>=0;return `<div class="item clickable" data-k="${c.mint}" onclick="openDetail('token','${c.mint}')"><div><div class=nm>${short(c.mint)} <span class=tag style=color:${c.pass?'var(--up)':'#f5a623'}>${c.n} elite</span>${c.pass?' <span class="tag" style=color:var(--up)>✅ gated buy</span>':' <span class=tag>watch</span>'}</div><div class=sub>consensus ${c.cs} · accel ${(c.A.cAccel*100|0)} · flow ${(c.A.cFlow*100|0)} · liq ${(c.A.cLiq*100|0)} · org ${(c.A.cOrg*100|0)}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${T?T.maxMult.toFixed(1)+'×':''}</div></div></div>`;}).join(''):'<div class=ctr>watching for elite consensus… (forms once wallets are scored elite)</div>';streamFeed(cel);}
  const sb=$('smartboard');if(sb){sb.innerHTML=board.slice(0,14).map(({addr,r})=>{const fol=follows.has(addr),el=SM.elite.has(addr);return `<div class="item clickable" data-k="${addr}" onclick="openDetail('wallet','${addr}')"><div><div class=nm>${short(addr)} <span class="tag arch-${r.arch}">${r.arch||'—'}</span>${el?' <span class="tag" style=color:var(--up)>elite</span>':r.prov?' <span class=tag>provisional</span>':''}${fol?' <span class="tag" style=color:var(--ice)>following</span>':''}</div><div class=sub>win ${(r.winrate*100|0)}% · med ${(r.med*100|0)}% · ${r.n} trades · rug ${(r.rugRate*100|0)}%</div></div><div class=rt><div class="badge ${r.score>=SM.ELITE_SCORE?'up':'down'}">${r.score}</div></div></div>`;}).join('')||'<div class=ctr>scoring wallets… (needs ≥1 resolved round-trip each)</div>';streamFeed(sb);}
@@ -1535,6 +1542,7 @@ function backtestStrategy(S,all,wfirst){const P=S.params;let cash=10;const start
   else if(S.entry==='trending'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers){const rate=st.buyers.size/Math.max(f.age,1)*60;go=rate>=P.trendRate&&f.ratio>=1;}}
   else if(S.entry==='signal'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers){go=(s.side==='buy'&&s.sol>=5)||(st.smart.size>=1)||(f.ratio>=1.5&&f.mom>0.02);}}   // approx signal-ish events (whale / smart / breakout) in replay
   else if(S.entry==='alpha'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers){const conf=(st.smart.size>=1?1:0)+(f.ratio>=1.5?1:0)+(f.mom>0.02?1:0)+(f.buyers>=P.minBuyers*1.5?1:0)+(st.bv>st.sv*1.3?1:0);go=conf>=Math.max(3,Math.round((P.alphaMin-40)/12));}}  // approx confluence (no wallet-grades in replay)
+  else if(S.entry==='consensus'){if(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=Math.max(P.minLiq,LIQ_MIN)&&f.buyers>=P.minBuyers){go=st.smart.size>=3&&st.bv>st.sv&&f.mom>0&&f.ratio>=1.3;}}  // proxy: elite labels aren't point-in-time in replay → require 3+ experienced buyers + accel + buy-pressure
   else{if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers)){}else go=(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin);}
   if(go){if(rand()<0.12)continue;open(s.mint,f.price,ts,size,S.exitMode==='firstSell'?{mode:'firstSell'}:null);}}
  pos.forEach((p,m)=>{const st=states.get(m);close(m,st.last||p.entry,true);});
