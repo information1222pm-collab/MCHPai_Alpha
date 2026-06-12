@@ -118,6 +118,8 @@ section{padding:34px 0 38px;border-bottom:1px solid var(--hair);position:relativ
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:26px}
 .tag{display:inline-block;padding:1.5px 8px;border-radius:7px;font-family:var(--mono);font-size:9.5px;letter-spacing:.4px;background:rgba(86,240,192,.08);color:var(--dim);font-weight:600;border:1px solid var(--hair)}
 .tag.sniper{color:var(--down);background:var(--downbg)}.tag.fresh{color:var(--up);background:var(--upbg)}
+.tag.arch-sniper{color:#ff8a5c;background:rgba(255,138,92,.1)}.tag.arch-scalper{color:var(--ice);background:rgba(143,216,255,.1)}
+.tag.arch-swing{color:var(--mint);background:rgba(86,240,192,.1)}.tag.arch-momentum{color:var(--gold);background:rgba(243,195,82,.1)}.tag.arch-whale{color:#c79bff;background:rgba(199,155,255,.12)}
 .muted{color:var(--dim)}.ctr{text-align:center;color:var(--dim);padding:18px 0;font-family:var(--mono);font-size:11px;letter-spacing:.4px}
 .row{display:flex;justify-content:space-between;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--hair)}
 .row:last-child{border:none}.up{color:var(--up)}.down{color:var(--down)}
@@ -442,7 +444,11 @@ section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgb
 
 <section id=s-tokens><div class=h>Tokens <span class=muted id=tok_sort>by activity</span></div><div class=list id=tokens></div></section>
 
-<section id=s-wallets><div class=h>🏆 Smart-Money Leaderboard <span class=muted style=font-weight:400>wallets graded by realized forward-ROI</span></div>
+<section id=s-wallets><div class=h>🧠 Smart-Money Intelligence <span class=muted style=font-weight:400>self-scoring, self-expanding wallet engine</span></div>
+  <div id=sm_stat></div>
+  <div class=h style=margin:16px 0 8px>🛰 Consensus signals <span class=muted style=font-weight:400>≥3 elite wallets · same token · &lt;90s</span></div>
+  <div class=list id=sm_consensus></div>
+  <div class=h style=margin:16px 0 8px>🏅 Top wallets <span class=muted style=font-weight:400>composite score · archetype</span></div>
   <div class=list id=smartboard></div>
   <div class=h style=margin:16px 0 8px>Active Wallets <span class=muted style=font-weight:400>by recent net flow</span></div><div class=list id=wallets></div></section>
 
@@ -789,7 +795,11 @@ function ingest(s){cnt.swaps++;if(!replaying)swapBuf.push({mint:s.mint,wallet:s.
    T.med.push(s.price);if(T.med.length>12)T.med.shift();if(T.firstPrice){const mm=s.price/T.firstPrice;if(mm>T.maxMult){T.maxMult=mm;T.peakTs=s.ts;}}}}
  T.vol+=s.sol;if(s.side==='buy'){T.buys++;T.buyers.add(s.wallet);if((walletFirst.get(s.wallet)||s.ts)<T.firstSeen)T.smart.add(s.wallet);T.netSol+=s.sol;flow.buys++;flow.bvol+=s.sol;}else{T.sells++;T.netSol-=s.sol;flow.sells++;flow.svol+=s.sol;}
  if(s.dex)dexCount[s.dex]=(dexCount[s.dex]||0)+1;const W=wal(s.wallet);W.swaps++;W.tokens.add(s.mint);W.lastMint=s.mint;W.lastTs=s.ts;
- if(s.side==='buy'){W.buys++;W.netSol-=s.sol;}else{W.sells++;W.netSol+=s.sol;}
+ if(s.side==='buy'){W.buys++;W.netSol-=s.sol;smBuy(W,s.mint,s.price,s.sol,s.ts,Math.max(0,s.ts-T.firstSeen));
+   if(SM.elite.has(s.wallet)){T._elite=(T._elite||0)+1;}                                  // Stage 8: token now elite-touched
+   else if(T._elite){const c=(SM.coBuy.get(s.wallet)||0)+1;SM.coBuy.set(s.wallet,c);if(SM.coBuy.size>50000)SM.coBuy.clear();
+     if(c>=SM.PROMOTE&&!SM.discovered.has(s.wallet)){SM.discovered.add(s.wallet);if(autoExpand&&follows.size<800){follows.add(s.wallet);saveFollows();}}}
+ }else{W.sells++;W.netSol+=s.sol;smSell(W,s.mint,s.price,s.ts);}
  if(follows.has(s.wallet)){followStats.hits++;if(!T.follow)T.follow=new Set();if(s.side==='buy'){T.follow.add(s.wallet);T.followBuyTs=s.ts;followStats.buys++;followStats.lastBuy.unshift({mint:s.mint,wallet:s.wallet,sol:s.sol,ts:s.ts});if(followStats.lastBuy.length>20)followStats.lastBuy.pop();}else{T.followSellTs=s.ts;followStats.sells++;}}
  // ALPHA: time-series sample (for buy-acceleration / liquidity-growth) + wallet-grading queue (forward-return attribution)
  const ls=T.bSamp[T.bSamp.length-1];if(!ls||s.ts-ls.ts>=4){T.bSamp.push({ts:s.ts,b:T.buyers.size,v:T.vol});if(T.bSamp.length>16)T.bSamp.shift();}
@@ -892,6 +902,58 @@ function gradeWallets(){const cut=now(),keep=[];for(const p of gradeQ){if(cut-p.
  gradeQ=keep;if(gradeQ.length>8000)gradeQ=gradeQ.slice(-8000);
  if(walletAlpha.size>20000)for(const[k,v]of walletAlpha)if(v.n<3)walletAlpha.delete(k);}
 function walletQ(addr){const wa=walletAlpha.get(addr);return wa&&wa.n>=2?wa.a:0;}   // proven forward-return, else neutral 0
+/* ============================================================================
+   SMART-MONEY INTELLIGENCE ENGINE  (Stages 2–10 of the spec)
+   A scored, self-expanding wallet graph built from the live firehose + a
+   consensus-gated composite buy signal. Real data only — no fabricated stats.
+   ============================================================================ */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+let autoExpand=true;                                                              // Stage 8 auto-promote co-buyers into follows
+const LIQ_MIN=3;                                                                  // Stage 10 minimum pool volume (◎) to consider a buy
+const SM={elite:new Set(),coBuy:new Map(),discovered:new Set(),consensus:[],board:[],
+          MIN_TRADES:6,ELITE_SCORE:60,PROMOTE:4,CWIN:90,CMIN:3};                  // MIN_TRADES low for in-session; 50+/200+ is the server tier
+function toggleExpand(){autoExpand=!autoExpand;renderWallets();}
+/* Stage 2 — realize each wallet's round-trips into trade records (FIFO) as sells land */
+function smBuy(W,mint,price,sol,ts,tokenAge){
+ if(price<=0)return;if(!W.lots)W.lots={};const L=W.lots[mint]||(W.lots[mint]=[]);
+ L.push({p:price,ts,sz:sol,age:tokenAge});if(L.length>6)L.shift();}
+function smSell(W,mint,price,ts){
+ const L=W.lots&&W.lots[mint];if(!L||!L.length||price<=0)return;const lot=L.shift();
+ const roi=clamp(price/lot.p-1,-1,50),hold=Math.max(0,ts-lot.ts);
+ if(!W.trades)W.trades=[];W.trades.push({roi,hold,age:lot.age,sz:lot.sz,ts});if(W.trades.length>40)W.trades.shift();
+ W.tc=(W.tc||0)+1;if(roi>0)W.wins=(W.wins||0)+1;if(roi<=-0.8)W.rug=(W.rug||0)+1;W.pnl=(W.pnl||0)+roi*lot.sz;}
+/* Stage 3 + 4 + 6 — composite wallet_score (0..100), false-positive guards, archetype */
+function smScore(W){
+ const tr=W.trades||[],n=tr.length;if(!n)return{score:0,arch:'',prov:true,n:0};
+ const rois=tr.map(t=>t.roi).slice().sort((a,b)=>a-b),med=rois[n>>1],worst=rois[0];
+ const mean=rois.reduce((s,v)=>s+v,0)/n,std=Math.sqrt(rois.reduce((s,v)=>s+(v-mean)*(v-mean),0)/n);
+ const winrate=(W.wins||0)/n,toks=W.tokens?W.tokens.size:0,rugRate=(W.rug||0)/n;
+ const hold=tr.map(t=>t.hold).slice().sort((a,b)=>a-b)[n>>1]||0;
+ const mr_n=clamp(0.5+med/2,0,1),cons=clamp(1/(1+std),0,1),ddinv=clamp(1+worst,0,1),tc_n=clamp(n/50,0,1),hq=clamp(hold/180,0,1);
+ let s01=0.25*winrate+0.25*mr_n+0.20*cons+0.15*ddinv+0.10*tc_n+0.05*hq;            // Stage 3 weighted score
+ if(toks<2)s01*=0.2;                                                               // Stage 4: single-token → likely insider
+ if(winrate>0.95&&n<10)s01*=0.6;                                                   // Stage 4: suspiciously perfect, thin sample
+ if(rugRate>0.4)s01*=0.5;                                                          // Stage 4: heavy rug participation
+ const avgAge=tr.reduce((s,t)=>s+(t.age||0),0)/n,avgHold=tr.reduce((s,t)=>s+t.hold,0)/n,avgSz=tr.reduce((s,t)=>s+(t.sz||0),0)/n;
+ let arch='momentum';                                                             // Stage 6 rule-based archetype
+ if(avgSz>=3)arch='whale';else if(avgAge<60&&std>0.8)arch='sniper';else if(avgHold<60)arch='scalper';else if(avgHold>300)arch='swing';
+ return{score:Math.round(100*clamp(s01,0,1)),arch,prov:n<SM.MIN_TRADES,winrate,med,n,rugRate,avgHold,avgSz};}
+/* Stages 5/7/8/10 — periodic scan: rank wallets, refresh elite set, detect consensus, fire gated buys */
+function scanSmartMoney(){
+ const N=now(),elite=new Set(),board=[];
+ for(const W of wallets.values()){if(!W.trades||!W.trades.length)continue;const r=smScore(W);W._sm=r;board.push({addr:W.addr,r});
+   if(!r.prov&&r.score>=SM.ELITE_SCORE&&(W.tokens?W.tokens.size:0)>=2)elite.add(W.addr);}
+ for(const[addr,wa]of walletAlpha)if(wa.n>=4&&wa.a>0.4)elite.add(addr);            // bridge: proven forward-ROI graders are elite too
+ SM.elite=elite;SM.board=board.sort((a,b)=>b.r.score-a.r.score);
+ const cons=[];                                                                    // Stage 5/10 consensus + composite gate
+ for(const T of tv()){if(N-T.lastSeen>SM.CWIN||T.lastPrice<=0)continue;
+   const eb=[...T.buyers].filter(a=>elite.has(a));if(eb.length<SM.CMIN)continue;
+   const cs=eb.reduce((s,a)=>{const W=wallets.get(a);return s+((W&&W._sm&&W._sm.score)||60);},0);   // consensus_score = Σ wallet scores
+   const f=feat(T),A=alphaScore(T,f);
+   const pass=A.cAccel>0.2&&T.vol>=LIQ_MIN&&(f.bv-f.sv)>0&&!(T.lastPrice<=T.firstPrice*0.5)&&A.cOrg>0.3;  // accel∧liq∧buy-pressure∧not-rugging∧holder-growth
+   cons.push({mint:T.mint,n:eb.length,cs:Math.round(cs),pass,A});
+   if(pass)sig('consensus',T.mint,{n:eb.length,cs:Math.round(cs)});}
+ SM.consensus=cons.sort((a,b)=>b.cs-a.cs).slice(0,12);}
 /* composite Alpha Score (0..100): confluence of independent signals — needs SEVERAL to clear a high bar */
 function alphaScore(T,f){let smartW=0;T.buyers.forEach(a=>{const q=walletQ(a);if(q>0)smartW+=Math.min(2,q);});
  const follow=(T.follow?T.follow.size:0),s=T.bSamp;let accel=0,liqG=0;
@@ -1181,8 +1243,12 @@ function renderMovers(){const movable=tv().filter(T=>T.prices.length>=2&&T.first
  $('gainers').innerHTML=g.map(tokRow).join('')||'<div class=ctr>—</div>';
  $('losers').innerHTML=l.map(tokRow).join('')||'<div class=ctr>—</div>';}
 function renderTokens(){$('tokens').innerHTML=tv().sort((a,b)=>b.lastSeen-a.lastSeen).slice(0,40).map(tokRow).join('')||'<div class=ctr>waiting for activity…</div>';}
-function renderWallets(){const sb=$('smartboard');if(sb){const graded=[...walletAlpha.entries()].filter(([,v])=>v[1]>=2).sort((a,b)=>b[1][0]-a[1][0]).slice(0,12);
-  sb.innerHTML=graded.map(([addr,v])=>{const roi=v[0],up=roi>=0,fol=follows.has(addr);return `<div class="item clickable" onclick="openDetail('wallet','${addr}')"><div><div class=nm>${short(addr)} ${fol?'<span class="tag" style=color:var(--up)>following</span>':''}</div><div class=sub>${v[1]} graded trades</div></div><div class=rt><div class="badge ${up?'up':'down'}">${up?'+':''}${(roi*100).toFixed(0)}% ROI</div></div></div>`;}).join('')||'<div class=ctr>grading wallets… (needs ≥2 resolved trades each)</div>';}
+function renderWallets(){const board=SM.board||[];
+ const st=$('sm_stat');if(st)st.innerHTML=`<div class=row><span class=muted>scored · elite · auto-discovered</span><span>${board.length} · <span class=up>${SM.elite.size}</span> · <span class=up>${SM.discovered.size}</span></span></div>
+  <div class=row><span class=muted>consensus gated-buys live</span><span class="${SM.consensus.filter(c=>c.pass).length?'up':''}">${SM.consensus.filter(c=>c.pass).length} firing</span></div>
+  <div class=row style=border:none><span class=muted>Stage 8 · auto-expand co-buyers → follows</span><span><button class="mini ${autoExpand?'on':''}" onclick="toggleExpand()">${autoExpand?'● on':'○ off'}</button></span></div>`;
+ const cel=$('sm_consensus');if(cel){cel.innerHTML=SM.consensus.length?SM.consensus.map(c=>{const T=tokens.get(c.mint),up=T&&pct(T)>=0;return `<div class="item clickable" data-k="${c.mint}" onclick="openDetail('token','${c.mint}')"><div><div class=nm>${short(c.mint)} <span class=tag style=color:${c.pass?'var(--up)':'#f5a623'}>${c.n} elite</span>${c.pass?' <span class="tag" style=color:var(--up)>✅ gated buy</span>':' <span class=tag>watch</span>'}</div><div class=sub>consensus ${c.cs} · accel ${(c.A.cAccel*100|0)} · flow ${(c.A.cFlow*100|0)} · liq ${(c.A.cLiq*100|0)} · org ${(c.A.cOrg*100|0)}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${T?T.maxMult.toFixed(1)+'×':''}</div></div></div>`;}).join(''):'<div class=ctr>watching for elite consensus… (forms once wallets are scored elite)</div>';streamFeed(cel);}
+ const sb=$('smartboard');if(sb){sb.innerHTML=board.slice(0,14).map(({addr,r})=>{const fol=follows.has(addr),el=SM.elite.has(addr);return `<div class="item clickable" data-k="${addr}" onclick="openDetail('wallet','${addr}')"><div><div class=nm>${short(addr)} <span class="tag arch-${r.arch}">${r.arch||'—'}</span>${el?' <span class="tag" style=color:var(--up)>elite</span>':r.prov?' <span class=tag>provisional</span>':''}${fol?' <span class="tag" style=color:var(--ice)>following</span>':''}</div><div class=sub>win ${(r.winrate*100|0)}% · med ${(r.med*100|0)}% · ${r.n} trades · rug ${(r.rugRate*100|0)}%</div></div><div class=rt><div class="badge ${r.score>=SM.ELITE_SCORE?'up':'down'}">${r.score}</div></div></div>`;}).join('')||'<div class=ctr>scoring wallets… (needs ≥1 resolved round-trip each)</div>';streamFeed(sb);}
  $('wallets').innerHTML=[...wallets.values()].sort((a,b)=>b.lastTs-a.lastTs).slice(0,40).map(W=>{const up=W.netSol>=0;
  return `<div class="item clickable" onclick="openDetail('wallet','${W.addr}')"><div><div class=nm>${short(W.addr)} ${W.tokens.size>=3?'<span class="tag sniper">sniper</span>':''}</div>
  <div class=sub>${W.tokens.size} tokens · ${W.swaps} swaps · ${W.buys}b/${W.sells}s</div></div>
@@ -1203,7 +1269,7 @@ function renderAlpha(){const el=$('alpha_list');if(!el)return;const AS=findAlpha
    <div class=sub>smart ${(A.cSmart*100|0)} · accel ${(A.cAccel*100|0)} · flow ${(A.cFlow*100|0)} · liq ${(A.cLiq*100|0)} · org ${(A.cOrg*100|0)}</div></div>
   <div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div><div class=sub>${T.buyers.size} buyers</div></div></div>`;}).join('')||'<div class=ctr>scanning for confluence…</div>';
  streamFeed(el);}
-const SIG_ICON={whale:'🐋',smart:'🧠',copy:'👥',volsurge:'📈',breakout:'🚀',alpha:'🎯',trend:'⚡'};
+const SIG_ICON={whale:'🐋',smart:'🧠',copy:'👥',volsurge:'📈',breakout:'🚀',alpha:'🎯',trend:'⚡',consensus:'🛰'};
 const DEXSHORT=d=>(d||'?').replace('raydium_','ray-').replace('pumpfun','pump').replace('pumpswap','pswap').replace('meteora_','met-').replace('orca_whirlpool','orca');
 function renderPulse(){const el=$('p_tape');if(!el)return;
  const sd=diff(hist.slice(-9).map(s=>s.swaps));$('p_spm').textContent=Math.round(sd.reduce((a,b)=>a+b,0)/Math.max(sd.length*7/60,1/60));
@@ -1554,7 +1620,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  if(pollN%3===0){const lc={fresh:0,heating:0,active:0,dumping:0,quiet:0};for(const T of tv())lc[category(T)]++;lifeHist.push(lc);if(lifeHist.length>80)lifeHist.shift();}   // COHORT: lifecycle composition (throttled off hot path)
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- refreshProof();gradeWallets();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
+ refreshProof();gradeWallets();scanSmartMoney();flushStore();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
  render();if(!typedApp)requestAnimationFrame(typeApp);   // first populated render → whole app writes itself in
  $('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
