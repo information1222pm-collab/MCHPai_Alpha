@@ -477,7 +477,9 @@ section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgb
   <div class=list id=smartboard></div>
   <div class=h style=margin:16px 0 8px>Active Wallets <span class=muted style=font-weight:400>by recent net flow</span></div><div class=list id=wallets></div></section>
 
-<section id=s-flow><div class=h>Buy / Sell Pressure</div>
+<section id=s-flow><div class=h>🌐 Market Regime <span class=muted style=font-weight:400>state · confidence · per-regime risk</span></div>
+  <div id=regime_panel></div>
+  <div class=h style=margin:18px 0 10px>Buy / Sell Pressure</div>
   <div class=pressure id=pressure></div>
   <div class=row style=margin-top:14px><span class=muted>Net flow</span><span id=f_net>—</span></div>
   <div class=row><span class=muted>Buy / sell volume</span><span><span class=up id=f_bvol>0</span> / <span class=down id=f_svol>0</span> ◎</span></div>
@@ -1158,6 +1160,51 @@ function feLearn(){let added=0;for(const T of tv()){if(T._feDone||!T._snap||!T._
   if(added)FE.ts=now();return added;}
 function feRank(){return FEAT_NAMES.map((nm,k)=>({nm,cat:FEAT_CAT[nm],r:feCorr(k),n:FE.stats[k].n})).filter(x=>x.n>=FE.MIN_N).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));}
 function feActive(){return feRank().filter(x=>Math.abs(x.r)>=FE.MIN_R);}           // features below MIN_R are auto-pruned
+/* ============================================================================
+   MARKET REGIME ENGINE  (mission #3)
+   Reads the aggregate memecoin market from hist deltas + live breadth, scores
+   8 regimes, softmaxes to confidence probabilities, then a Bayesian/HMM-lite
+   forward filter (sticky prior on the prior posterior) smooths transitions.
+   Exposes per-regime estimates + a risk multiplier that damps sizing risk-off.
+   ============================================================================ */
+const REGIMES=['bull','bear','expansion','consolidation','distribution','panic','blowoff','capitulation'];
+const REGIME_RISK={bull:1.1,expansion:1.15,consolidation:0.8,distribution:0.5,bear:0.45,panic:0.2,blowoff:0.6,capitulation:0.15};
+let REGIME={label:'warming up…',probs:null,post:null,est:null,risk:1,ts:0};
+let regimeGuard=localStorage.getItem('mchpai_regime')!=='0';                       // apply regime risk to sizing (default ON)
+function toggleRegime(){regimeGuard=!regimeGuard;localStorage.setItem('mchpai_regime',regimeGuard?'1':'0');renderFlow();}
+const _mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
+const _std=a=>{if(a.length<2)return 0;const m=_mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)*(v-m),0)/a.length);};
+function marketFeatures(){
+ const H=hist;if(H.length<8)return null;
+ const d=[];for(let i=1;i<H.length;i++)d.push({net:(H[i].bvol-H[i].svol)-(H[i-1].bvol-H[i-1].svol),vol:(H[i].bvol+H[i].svol)-(H[i-1].bvol+H[i-1].svol),wal:H[i].wallets-H[i-1].wallets});  // per-cycle deltas (hist is cumulative)
+ const rec=d.slice(-6),old=d.slice(-12,-6);
+ const volNow=_mean(rec.map(x=>x.vol)),volPrev=_mean(old.map(x=>x.vol)),netNow=_mean(rec.map(x=>x.net)),netPrev=_mean(old.map(x=>x.net));
+ const volExp=(volNow-volPrev)/(Math.abs(volPrev)+1),momentum=Math.tanh((netNow-netPrev)/(Math.abs(netPrev)+1)),netLevel=Math.tanh(netNow/(volNow*0.5+1));
+ const volat=clamp(_std(rec.map(x=>x.net))/(volNow+1),0,1),walGrow=_mean(rec.map(x=>x.wal));
+ const cats={};for(const T of tv())cats[category(T)]=(cats[category(T)]||0)+1;
+ const hot=(cats.heating||0)+(cats.fresh||0),cold=(cats.dumping||0)+(cats.quiet||0),breadth=hot/(hot+cold+1e-9),dumping=(cats.dumping||0)/(hot+cold+1e-9);
+ return {volExp,momentum,netLevel,volat,breadth,dumping,walGrow,volNow,volPrev,
+   liqQual:clamp(Math.log1p(Math.max(0,volNow))/3*(0.5+netLevel*0.5),0,1),
+   partQual:clamp(0.5*breadth+0.5*clamp(walGrow/30,0,1),0,1)};}
+function scoreRegimes(m){const z=x=>clamp(x,0,1),pos=x=>Math.max(0,x),neg=x=>Math.max(0,-x);
+ return {bull:pos(m.momentum)*1.2+m.breadth*0.8+z(m.netLevel),
+  bear:neg(m.momentum)*1.2+(1-m.breadth)*0.8+neg(m.netLevel),
+  expansion:z(m.volExp)*1.5+m.breadth*0.6+pos(m.momentum)*0.4,
+  consolidation:(1-Math.abs(m.momentum))*1.0+(1-m.volat)*0.8+(1-Math.min(1,Math.abs(m.volExp)))*0.5,
+  distribution:m.dumping*1.0+neg(m.netLevel)*0.8+m.volat*0.5+(m.breadth<0.4?0.4:0),
+  panic:neg(m.momentum)*1.3+m.volat*0.8+m.dumping*0.8+(m.volExp>0.3?0.4:0),
+  blowoff:pos(m.momentum)*0.8+z(m.volExp)*1.0+(m.breadth>0.7?0.8:0)+m.volat*0.6,
+  capitulation:neg(m.momentum)*1.5+(m.volExp>0.4?0.8:0)+m.dumping*1.0+(m.breadth<0.25?0.5:0)};}
+function softmax(obj,T){const ks=Object.keys(obj),mx=Math.max.apply(null,ks.map(k=>obj[k])),ex=ks.map(k=>Math.exp((obj[k]-mx)/(T||0.5)));const s=ex.reduce((a,b)=>a+b,0)||1;const o={};ks.forEach((k,i)=>o[k]=ex[i]/s);return o;}
+function detectRegime(){
+ const m=marketFeatures();if(!m){REGIME={label:'warming up…',probs:null,post:null,est:null,risk:1,ts:now()};return;}
+ const lik=softmax(scoreRegimes(m),0.9),prev=REGIME.post,alpha=0.85,post={};let s=0;   // softer likelihood + sticky prior → no single-cycle whipsaw, flips on sustained shift
+ for(const k of REGIMES){const prior=prev?alpha*(prev[k]||0)+(1-alpha)/REGIMES.length:1/REGIMES.length;post[k]=lik[k]*prior;s+=post[k];}
+ for(const k of REGIMES)post[k]/=(s||1);
+ const label=REGIMES.reduce((a,b)=>post[b]>post[a]?b:a,REGIMES[0]);
+ REGIME={label,probs:post,post,risk:REGIME_RISK[label]||1,ts:now(),
+  est:{volatility:m.volat,momentum:m.momentum,liquidity:m.liqQual,participation:m.partQual,breadth:m.breadth}};}
+function regimeMult(){return regimeGuard?(REGIME.risk||1):1;}                       // fund-wide risk dial by regime
 /* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
 function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
@@ -1214,14 +1261,14 @@ function sExit(S,mint,ts){const pos=S.book.pos.get(mint);if(!pos)return;const T=
 function tieredQ(P,f,T){const b=T.buyers.size,s=T.sells,age=f.age;if(s>Math.max(2,b*P.maxSellRatio))return false;if(age<=60)return b>=P.tier1Buyers;if(age<=120)return b>=P.tier2Buyers;if(age<=180)return b>=P.tier3Buyers;return false;}
 async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  if(b.pos.has(mint)){if(S.exitMode==='firstSell'){const p=b.pos.get(mint);if(T.sells>p.sellsAtEntry)sClose(S,mint,T.lastPrice||p.entry,'first sell',false);}return;}
- if(b.pos.size>=P.maxPos||f.price<=0)return;const size=sSize(P,f.liq)*(S.alloc||1);if(b.cash<size)return;   // autopilot scales size toward the ◎/hr target
+ if(b.pos.size>=P.maxPos||f.price<=0)return;const size=sSize(P,f.liq)*(S.alloc||1)*regimeMult();if(b.cash<size)return;   // autopilot scales size toward the ◎/hr target; regime damps risk-off
  if(S.entry==='tiered'){if(tieredQ(P,f,T)){if(Math.random()<COST.failP){b.missed++;return;}sOpen(S,mint,f.price,ts,size,ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});}return;}
  if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers))return;
  let convSize=size,extra;
  if(S.entry==='copywallet'){const need=Math.max(1,P.smartMin),have=follows.size?((T.follow&&T.follow.size)||0):T.smart.size;if(have<need)return;}  // mirror followed wallets (or experienced money if no list)
  else if(S.entry==='momentum'){if(!(f.ratio>=P.ratioIn&&f.mom>=P.momIn&&f.smart>=P.smartMin))return;}
  else if(S.entry==='trending'){const rate=f.buyers/Math.max(f.age,1)*60;if(!(now()-T.lastSeen<120&&rate>=P.trendRate&&f.ratio>=1))return;}  // fastest buyer-growth, still net-buying
- else if(S.entry==='alpha'){const A=alphaScore(T,f);if(A.score<P.alphaMin)return;convSize=alphaSize(P,f.liq,A.score)*(S.alloc||1);if(b.cash<convSize)return;extra={scaleOut:true,alpha:+A.score.toFixed(1),moon:!!S.moonbag};}  // confluence gate + conviction size + scale-out (+moonbag)
+ else if(S.entry==='alpha'){const A=alphaScore(T,f);if(A.score<P.alphaMin)return;convSize=alphaSize(P,f.liq,A.score)*(S.alloc||1)*regimeMult();if(b.cash<convSize)return;extra={scaleOut:true,alpha:+A.score.toFixed(1),moon:!!S.moonbag};}  // confluence gate + conviction size + scale-out (+moonbag)
  else if(S.entry==='signal'){if(!(T._sig&&now()-T._sig.ts<10))return;extra={scaleOut:true,moon:!!S.moonbag,sigType:T._sig.type};}   // respond to every fresh signal; ride winners via scale-out/moonbag
  else if(S.entry==='discovered'){const p=discScore(T);if(!disc||disc.auc<0.6||p*100<(P.discMin||55))return;extra={scaleOut:true,moon:!!S.moonbag,prob:+(p*100).toFixed(0)};}   // trade the learned pattern (only if the model is actually predictive)
  else if(S.entry==='consensus'){const C=T._consensus;if(!(C&&now()-C.ts<90))return;const k=Math.min(2,C.cs/300);convSize=size*(1+k)*(S.alloc||1);if(b.cash<convSize)return;extra={scaleOut:true,moon:!!S.moonbag,consensus:C.cs,elite:C.n};}   // Stage 10: act only when the composite-gated elite consensus fires; size up with conviction
@@ -1431,7 +1478,17 @@ function renderWallets(){const board=SM.board||[];const cs=findConsensusStrat(),
  return `<div class="item clickable" onclick="openDetail('wallet','${W.addr}')"><div><div class=nm>${short(W.addr)} ${W.tokens.size>=3?'<span class="tag sniper">sniper</span>':''}</div>
  <div class=sub>${W.tokens.size} tokens · ${W.swaps} swaps · ${W.buys}b/${W.sells}s</div></div>
  <div class=rt><div class="badge ${up?'up':'down'}">${(up?'+':'')+W.netSol.toFixed(2)}◎</div></div></div>`;}).join('')||'<div class=ctr>waiting…</div>';}
-function renderFlow(){const tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;
+const REGIME_ICON={bull:'🐂',bear:'🐻',expansion:'📈',consolidation:'➖',distribution:'🟠',panic:'🔻',blowoff:'🚀',capitulation:'💥'};
+function renderRegime(){const el=$('regime_panel');if(!el)return;const R=REGIME;
+ if(!R.probs){el.innerHTML='<div class=ctr>reading the market… (needs ~1 min of history)</div>';return;}
+ const conf=R.probs[R.label],e=R.est,riskCol=R.risk>=1?'var(--up)':R.risk>=0.6?'var(--gold)':'var(--down)';
+ const ranked=REGIMES.map(k=>({k,p:R.probs[k]})).sort((a,b)=>b.p-a.p).slice(0,5);
+ el.innerHTML=`<div class=row><span><span style=font-size:18px>${REGIME_ICON[R.label]||''}</span> <b style=color:var(--ice);text-transform:capitalize>${R.label}</b></span><span class=muted>${(conf*100|0)}% confidence</span></div>
+  <div class=row><span class=muted>risk dial (per-regime sizing)</span><span><span style=color:${riskCol}>×${R.risk.toFixed(2)}</span> <button class="mini ${regimeGuard?'on':''}" onclick="toggleRegime()">${regimeGuard?'● applied':'○ off'}</button></span></div>
+  <div style=margin:8px 0>${bars(ranked.map(x=>({label:x.k,value:Math.round(x.p*100),disp:(x.p*100|0)+'%',color:x.k===R.label?'#8fd8ff':'#5f7d76'})))}</div>
+  <div class=row style=border:none><span class=muted>momentum · volatility</span><span><span class="${e.momentum>=0?'up':'down'}">${e.momentum>=0?'+':''}${(e.momentum*100|0)}</span> · ${(e.volatility*100|0)}</span></div>
+  <div class=row style=border:none><span class=muted>liquidity · participation · breadth</span><span>${(e.liquidity*100|0)} · ${(e.participation*100|0)} · ${(e.breadth*100|0)}%</span></div>`;}
+function renderFlow(){renderRegime();const tot=flow.buys+flow.sells,bp=tot?flow.buys/tot:.5;
  $('pressure').innerHTML=`<div class=b style=width:${(bp*100).toFixed(0)}%>${(bp*100).toFixed(0)}% buy</div><div class=s>${((1-bp)*100).toFixed(0)}% sell</div>`;
  const net=flow.bvol-flow.svol;$('f_net').innerHTML=`<span class="${net>=0?'up':'down'}">${net>=0?'+':''}${net.toFixed(2)}◎</span>`;
  $('f_bvol').textContent=flow.bvol.toFixed(2);$('f_svol').textContent=flow.svol.toFixed(2);
@@ -1802,6 +1859,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  scanSignals();                                                                      // emit alpha/trend signals regardless of active tab
  if(pollN%3===0){const lc={fresh:0,heating:0,active:0,dumping:0,quiet:0};for(const T of tv())lc[category(T)]++;lifeHist.push(lc);if(lifeHist.length>80)lifeHist.shift();}   // COHORT: lifecycle composition (throttled off hot path)
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
+ detectRegime();   // mission #3: refresh market-regime posterior each cycle
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
  refreshProof();gradeWallets();scanSmartMoney();feLearn();flushStore();if(pollN%5===0)saveBrain();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
  render();if(!typedApp)requestAnimationFrame(typeApp);   // first populated render → whole app writes itself in
