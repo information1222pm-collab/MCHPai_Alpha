@@ -366,7 +366,11 @@ section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgb
 </section>
 
 <section id=s-patterns>
-  <div class=h>🧬 Discovered Patterns <span class=muted style=font-weight:400>the system learns what predicts winners</span>
+  <div class=h>🔬 Feature Engineering <span class=muted style=font-weight:400>~110 features · online importance · auto-pruned</span></div>
+  <div id=fe_stat></div>
+  <div class=h style=margin:14px 0 8px>Top features by importance <span class=muted style=font-weight:400>|correlation| to forward run</span></div>
+  <div id=fe_body></div>
+  <div class=h style=margin:18px 0 8px>🧬 Discovered Patterns <span class=muted style=font-weight:400>the system learns what predicts winners</span>
    <button class=mini id=disc_run onclick=discoverPatterns()>↻ Discover now</button>
    <button class=mini id=disc_auto onclick=toggleAutoDiscover()>auto</button>
    <button class=mini id=disc_use onclick=toggleDisc()>🧬 Trade it</button></div>
@@ -1038,7 +1042,7 @@ function scanSmartMoney(){
    across devices and builds. (Open positions are intentionally NOT restored —
    they're tied to live prices; only the learning carries over.)
    ============================================================================ */
-const BRAIN_SCHEMA=2;
+const BRAIN_SCHEMA=3;
 function _serBrain(b){return b?{w:b.w.map(a=>Array.from(a)),mean:Array.from(b.mean),M2:Array.from(b.M2),eps:b.eps,n:b.n,updates:b.updates}:null;}
 function _deBrain(S,sb){if(!S.brain||!sb||!sb.w)return;S.brain.w=sb.w.map(a=>Float64Array.from(a));if(sb.mean)S.brain.mean=Float64Array.from(sb.mean);if(sb.M2)S.brain.M2=Float64Array.from(sb.M2);if(sb.eps!=null)S.brain.eps=sb.eps;S.brain.n=sb.n||0;S.brain.updates=sb.updates||0;}
 function snapshotBrain(){
@@ -1050,12 +1054,14 @@ function snapshotBrain(){
      tr:W.trades.slice(-12).map(t=>[+(+t.roi).toFixed(3),t.hold|0,t.age|0,+(+(t.sz||0)).toFixed(2)])};
    if(++j>=1200)break;}
  return{v:BRAIN_SCHEMA,ts:now(),wa,led,disco:[...SM.discovered].slice(0,2000),disc:disc||null,
-        brains:strategies.map(s=>({id:s.id,b:_serBrain(s.brain)}))};}
+        brains:strategies.map(s=>({id:s.id,b:_serBrain(s.brain)})),
+        fe:{N:FE.N,nm:FEAT_NAMES.length,stats:FE.stats.map(s=>[s.n,+s.mx.toFixed(5),+s.m2x.toFixed(4),+s.my.toFixed(5),+s.m2y.toFixed(4),+s.c.toFixed(4)])}};}
 function saveBrain(){try{localStorage.setItem('mchpai_brain',JSON.stringify(snapshotBrain()));}catch(e){}}
 function migrateBrain(b){                                            // forward-migrate older envelopes; refuse newer-than-known
  if(!b||typeof b!=='object')return null;
  if(b.v==null)b={v:1,wa:b.wa||{},led:{},disco:[],brains:[]};         // pre-version blob → grades-only
  if(b.v<2){b.led=b.led||{};b.brains=b.brains||[];b.disco=b.disco||[];b.v=2;}   // v1→v2: ledgers + strategy brains
+ if(b.v<3){b.fe=b.fe||null;b.v=3;}                                            // v2→v3: feature-importance stats
  return b.v<=BRAIN_SCHEMA?b:null;}
 function applyBrain(b){
  b=migrateBrain(b);if(!b)return false;
@@ -1065,6 +1071,7 @@ function applyBrain(b){
  if(Array.isArray(b.disco))b.disco.forEach(a=>SM.discovered.add(a));
  if(b.disc&&b.disc.w)disc=b.disc;
  if(Array.isArray(b.brains))b.brains.forEach(sb=>{const S=strategies.find(s=>s.id===sb.id);if(S)_deBrain(S,sb.b);});
+ if(b.fe&&b.fe.nm===FEAT_NAMES.length&&Array.isArray(b.fe.stats)){FE.N=b.fe.N||0;b.fe.stats.forEach((a,k)=>{if(FE.stats[k]&&Array.isArray(a))FE.stats[k]={n:a[0]||0,mx:a[1]||0,m2x:a[2]||0,my:a[3]||0,m2y:a[4]||0,c:a[5]||0};});}  // restore feature importance (only if the library matches)
  return true;}
 function restoreBrain(){try{const raw=localStorage.getItem('mchpai_brain');if(raw)applyBrain(JSON.parse(raw));}catch(e){}}
 function exportBrain(){try{const blob=new Blob([JSON.stringify(snapshotBrain())],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='mchpai_brain_v'+BRAIN_SCHEMA+'_'+Date.now()+'.json';a.click();URL.revokeObjectURL(u);}catch(e){}}
@@ -1089,7 +1096,7 @@ const DISC_DECIDE=20,DISC_RUNX=1.5;let disc=null,autoDiscover=localStorage.getIt
 function discFeat(T){const f=feat(T),s=T.bSamp;let accel=0;if(s&&s.length>=4){const h=s.length>>1,e=s[0],m=s[h],l=s[s.length-1];accel=(l.b-m.b)/Math.max(l.ts-m.ts,1)-(m.b-e.b)/Math.max(m.ts-e.ts,1);}
  return [f.buyers,f.smart,Math.log1p(f.liq),Math.min(f.ratio,10),(f.bv-f.sv)/(f.bv+f.sv+1e-9),Math.tanh(f.mom*5),Math.min(1,f.buyers/Math.max(T.buys,1)),accel*60,now()-T.firstSeen];}
 /* snapshot a token's EARLY features once, at the decision age — labelled later by forward outcome */
-function snapToken(T,ts){if(!T._snap&&(ts-T.firstSeen)>=DISC_DECIDE&&T.lastPrice>0&&T.buyers.size>=1)T._snap={p:T.lastPrice,x:discFeat(T)};}
+function snapToken(T,ts){if(!T._snap&&(ts-T.firstSeen)>=DISC_DECIDE&&T.lastPrice>0&&T.buyers.size>=1){const f=feat(T);T._snap={p:T.lastPrice,x:discFeat(T),bx:feBase(T,f)};}}
 function sigmoid(z){return 1/(1+Math.exp(-z));}
 function discLogistic(rows){ // rows: [{x:[],y:0/1}]  -> {w,b,mu,sd,auc,n,wins}
  const d=DISC_FEATS.length,n=rows.length;const mu=new Array(d).fill(0),sd=new Array(d).fill(0);
@@ -1108,6 +1115,49 @@ function discoverPatterns(){ // build dataset from matured snapshots, fit, store
  m.lift=DISC_FEATS.map((nm,i)=>{const col=rows.map(r=>r.x[i]).slice().sort((a,b)=>a-b),med=col[col.length>>1];const hi=rows.filter(r=>r.x[i]>med),lo=rows.filter(r=>r.x[i]<=med);const ph=hi.length?hi.filter(r=>r.y).length/hi.length:0,pl=lo.length?lo.filter(r=>r.y).length/lo.length:0;return {nm,ph,pl,lift:ph/(pl+1e-9)};});
  m.ts=now();m.base=rows.filter(r=>r.y).length/rows.length;disc=m;discHist.push({ts:m.ts,auc:m.auc});if(discHist.length>80)discHist.shift();return m;}
 function discScore(T){if(!disc||disc.auc<0.6)return 0;const x=discFeat(T);return sigmoid(x.reduce((s,v,i)=>s+(v-disc.mu[i])/disc.sd[i]*disc.w[i],disc.b));}
+/* ============================================================================
+   FEATURE ENGINEERING ENGINE  (mission #2)
+   Named feature library across every blueprint category, auto-expanded with
+   pairwise interaction features, scored by ONLINE Pearson correlation to the
+   forward outcome (incremental Welford — no batch refit). Ranks features and
+   auto-prunes the weak ones, discovering new predictive relationships as it runs.
+   ============================================================================ */
+const DEXN=d=>({raydium_amm:1,raydium_clmm:1,pumpfun:2,pumpswap:3,meteora_dlmm:4,meteora_dyn:4,orca_whirlpool:5,launchlab:6,moonshot:7}[d]||0);
+const FBASE=[ /* [key, category, fn(T,f)] — evaluated ONCE at the decision-age snapshot (no look-ahead) */
+ ['ret','price',(T,f)=>pct(T)/100],
+ ['mom','momentum',(T,f)=>Math.tanh(f.mom*5)],
+ ['accel','acceleration',(T,f)=>{const s=T.bSamp;if(!s||s.length<4)return 0;const h=s.length>>1,e=s[0],m=s[h],l=s[s.length-1];return ((l.b-m.b)/Math.max(l.ts-m.ts,1)-(m.b-e.b)/Math.max(m.ts-e.ts,1))*60;}],
+ ['vol','volume',(T,f)=>Math.log1p(f.vol)],
+ ['liq','liquidity',(T,f)=>Math.log1p(f.liq)],
+ ['buyers','holders',(T,f)=>f.buyers],
+ ['ratio','buy/sell',(T,f)=>Math.min(f.ratio,10)],
+ ['netflow','buy/sell',(T,f)=>(f.bv-f.sv)/(f.bv+f.sv+1e-9)],
+ ['smart','wallet-quality',(T,f)=>f.smart],
+ ['smartFrac','wallet-quality',(T,f)=>f.smart/Math.max(f.buyers,1)],
+ ['whaleConc','whale-conc',(T,f)=>f.vol/Math.max(f.buyers,1)],
+ ['holderConc','holders',(T,f)=>T.buys/Math.max(T.buyers.size,1)],
+ ['organic','holders',(T,f)=>Math.min(1,f.buyers/Math.max(T.buys,1))],
+ ['sellPress','buy/sell',(T,f)=>f.sv/(f.bv+f.sv+1e-9)],
+ ['volatility','volatility',(T,f)=>{const p=T.prices;if(!p||p.length<3)return 0;const m=p.reduce((s,v)=>s+v,0)/p.length;return Math.sqrt(p.reduce((s,v)=>s+(v-m)*(v-m),0)/p.length)/(m||1);}],
+ ['tradeFreq','trade-freq',(T,f)=>(T.buys+T.sells)/Math.max(f.age,1)*60],
+ ['age','age',(T,f)=>Math.log1p(f.age)],
+ ['earlyMax','momentum',(T,f)=>Math.log(Math.max(T.maxMult,1))],
+ ['dex','narrative',(T,f)=>DEXN(T.dex)],   // narrative proxy — true narrative needs token metadata (name/symbol)
+];
+const FE_INTN=14;                                                                  // first N base features get pairwise interactions
+const FE_PAIRS=(()=>{const p=[];for(let i=0;i<FE_INTN;i++)for(let j=i+1;j<FE_INTN;j++)p.push([i,j]);return p;})();
+const FEAT_NAMES=FBASE.map(b=>b[0]).concat(FE_PAIRS.map(([i,j])=>FBASE[i][0]+'×'+FBASE[j][0]));
+const FEAT_CAT={};FBASE.forEach(b=>FEAT_CAT[b[0]]=b[1]);FE_PAIRS.forEach(([i,j])=>FEAT_CAT[FBASE[i][0]+'×'+FBASE[j][0]]='interaction');
+function feBase(T,f){f=f||feat(T);return FBASE.map(b=>{const v=b[2](T,f);return isFinite(v)?v:0;});}            // base vector at snapshot
+function feFull(bx){const out=bx.slice();for(const pr of FE_PAIRS)out.push((bx[pr[0]]||0)*(bx[pr[1]]||0));return out;}  // base + interactions
+const FE={stats:FEAT_NAMES.map(()=>({n:0,mx:0,m2x:0,my:0,m2y:0,c:0})),N:0,MIN_N:40,MIN_R:0.08,ts:0};
+function feUpdate(full,y){FE.N++;for(let k=0;k<full.length;k++){const s=FE.stats[k],x=full[k];s.n++;const dx=x-s.mx;s.mx+=dx/s.n;s.m2x+=dx*(x-s.mx);const dy=y-s.my;s.my+=dy/s.n;s.m2y+=dy*(y-s.my);s.c+=dx*(y-s.my);}}  // online Welford mean/var + co-moment
+function feCorr(k){const s=FE.stats[k];return s.n>=8&&s.m2x>1e-12&&s.m2y>1e-12?s.c/Math.sqrt(s.m2x*s.m2y):0;}    // incremental Pearson r
+function feLearn(){let added=0;for(const T of tv()){if(T._feDone||!T._snap||!T._snap.bx||T.firstPrice<=0)continue;if((now()-T.firstSeen)<DISC_DECIDE+45)continue;
+  const fwd=(T.maxMult*T.firstPrice)/Math.max(T._snap.p,1e-12),y=fwd>=DISC_RUNX?1:0;feUpdate(feFull(T._snap.bx),y);T._feDone=true;added++;}
+  if(added)FE.ts=now();return added;}
+function feRank(){return FEAT_NAMES.map((nm,k)=>({nm,cat:FEAT_CAT[nm],r:feCorr(k),n:FE.stats[k].n})).filter(x=>x.n>=FE.MIN_N).sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));}
+function feActive(){return feRank().filter(x=>Math.abs(x.r)>=FE.MIN_R);}           // features below MIN_R are auto-pruned
 /* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
 function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
@@ -1573,7 +1623,11 @@ function renderSignals(){const el=$('sig_feed');if(!el)return;
   const meta=[s.sol?('buy '+s.sol+'◎'):'',s.q?('walletQ '+s.q):'',s.score?('alpha '+(s.score|0)):'',s.x?(s.x+'× breakout'):''].filter(Boolean).join(' · ');
   return `<div class="item clickable" data-k="${s.type}|${s.mint}|${s.ts}" onclick="openToken('${s.mint}')"><div><div class=nm>${SIG_ICON[s.type]||''} ${short(s.mint)} <span class=tag>${s.type}</span></div><div class=sub>${meta?meta+' · ':''}${new Date(s.ts*1000).toLocaleTimeString().replace(/:\d+ /,' ')}</div></div><div class=rt><div class="badge ${up?'up':'down'}">${mult}</div></div></div>`;}).join('')||'<div class=ctr>scanning the stream…</div>';
  streamFeed(el);}
-function renderPatterns(){const st=$('disc_status');if(!st)return;const DS=findDiscStrat();
+function renderFeatures(){const fb=$('fe_body');if(!fb)return;const ranked=feRank(),active=feActive(),fs=$('fe_stat');
+ if(fs)fs.innerHTML=`<div class=row><span class=muted>features · interactions · learned samples</span><span>${FEAT_NAMES.length} · ${FE_PAIRS.length} · <span class=up>${FE.N}</span></span></div>`
+  +`<div class=row style=border:none><span class=muted>predictive (kept) · pruned (weak)</span><span><span class="${active.length?'up':''}">${active.length}</span> · ${Math.max(0,ranked.length-active.length)}</span></div>`;
+ fb.innerHTML=ranked.length?bars(ranked.slice(0,15).map(x=>({label:x.nm,value:Math.round(Math.abs(x.r)*100),disp:(x.r>=0?'+':'')+x.r.toFixed(2)+' · '+x.cat,color:Math.abs(x.r)>=FE.MIN_R?(x.r>=0?'#34ecaa':'#ff6a52'):'#5f7d76'}))):'<div class=ctr>learning… features rank once ≥40 tokens have matured</div>';}
+function renderPatterns(){renderFeatures();const st=$('disc_status');if(!st)return;const DS=findDiscStrat();
  const sc=$('disc_scatter');if(sc){const pts=tv().filter(T=>(now()-T.firstSeen)>60&&T.maxMult>1&&T.firstPrice>0).slice(-400).map(T=>({x:alphaCached(T).score,y:T.maxMult,up:T.maxMult>=1.5,mint:T.mint}));sc.innerHTML=scatter(pts,'alpha score →','peak × (log)',160,true);}   // always: validates score→outcome
  const ab=$('disc_auto');if(ab){ab.textContent=autoDiscover?'auto ●':'auto ○';ab.className='mini'+(autoDiscover?' on':'');}
  const ub=$('disc_use');if(ub){const on=DS&&DS.on;ub.textContent=on?'🧬 Trading it':'🧬 Trade it';ub.className='mini'+(on?' on':'');}
@@ -1749,7 +1803,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  if(pollN%3===0){const lc={fresh:0,heating:0,active:0,dumping:0,quiet:0};for(const T of tv())lc[category(T)]++;lifeHist.push(lc);if(lifeHist.length>80)lifeHist.shift();}   // COHORT: lifecycle composition (throttled off hot path)
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- refreshProof();gradeWallets();scanSmartMoney();flushStore();if(pollN%5===0)saveBrain();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
+ refreshProof();gradeWallets();scanSmartMoney();feLearn();flushStore();if(pollN%5===0)saveBrain();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
  render();if(!typedApp)requestAnimationFrame(typeApp);   // first populated render → whole app writes itself in
  $('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
