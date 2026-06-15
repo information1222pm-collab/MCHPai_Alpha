@@ -509,8 +509,10 @@ section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgb
    growth, organic-buyer ratio (anti-wash), and momentum. It only auto-buys above the bar (default 68), sizes
    <b>bigger on higher conviction</b>, then <b>scales out</b> partial profit and lets a runner ride to capture the
    fat tail. Tune the score bar and scale-out in Trading. Paper by default; 🔴 LIVE routes on-chain. Not advice.</div>
-  <div class=h style=margin:18px 0 8px>⚡ Opportunity Watch <span class=muted style=font-weight:400>heuristic · not advice</span></div>
+  <div class=h style=margin:18px 0 8px>⚡ Opportunity Score <span class=muted style=font-weight:400>explainable · weights self-recalibrate · not advice</span></div>
   <div class=list id=opps></div>
+  <div class=h style=margin:16px 0 8px>Factor importance <span class=muted style=font-weight:400>◆ = learned from outcomes · else prior</span></div>
+  <div id=opp_factors></div>
   <div class=row style=margin-top:14px><span class=muted>Market regime</span><span id=regime>—</span></div></section>
 
 <section id=s-data><div class=h>Data Vault <span class=muted style=font-weight:400>all gathered data preserved (10 GB target)</span></div>
@@ -647,6 +649,7 @@ const DETAIL={
    html:'<div class=dgrid>'+dst('Peak ×',T.maxMult.toFixed(2)+'×','up')+dst('Change',fmtPct(pct(T)),up?'up':'down')+dst('Age',ageStr(N-T.firstSeen))+dst('Buyers',T.buyers.size)+dst('Smart',T.smart.size,T.smart.size?'up':'')+dst('Liquidity',T.vol.toFixed(1)+'◎')+dst('Net flow',(T.netSol>=0?'+':'')+T.netSol.toFixed(2)+'◎',T.netSol>=0?'up':'down')+dst('Buys/Sells',T.buys+'/'+T.sells)+dst('Concentration',(T.buys/Math.max(T.buyers.size,1)).toFixed(1)+'×',(T.buys/Math.max(T.buyers.size,1))>=3?'down':'')+dst('Alpha',A.score.toFixed(0))+'</div>'
    +'<div class=h style=margin:10px 0 6px>Price trajectory <span class=muted style=font-weight:400>scrub</span></div>'+rhChart(T.prices,150,up,{fmt:x=>(+x).toExponential(2)})
    +'<div class=h style=margin:14px 0 8px>Alpha breakdown</div>'+bars(comp.map(([k,vv])=>({label:k,value:+(vv*100).toFixed(0),disp:(vv*100|0)+'%',color:vv>=0.5?'#34ecaa':vv>=0.25?'#f3c352':'#5f7d76'})))
+   +(()=>{const oe=oppEval(T,f,A);return '<div class=h style=margin:14px 0 8px>Opportunity factors <span class=muted style=font-weight:400>score '+oe.score+' · contribution</span></div>'+bars(oe.factors.map(x=>({label:x.k+(x.learned?' ◆':''),value:Math.round(Math.abs(x.c)*100),disp:(x.c>=0?'+':'')+(x.c*100|0),color:x.c>=0?'#34ecaa':'#ff6a52'})));})()
    +(T.bSamp&&T.bSamp.length>2?'<div class=h style=margin:14px 0 8px>Buyer growth</div>'+rhChart(T.bSamp.map(s=>s.b),100,true,{fmt:x=>Math.round(x)+' buyers'}):'')
    +(buyers.length?'<div class=h style=margin:14px 0 8px>Buyers <span class=muted style=font-weight:400>tap to inspect wallet</span></div>'+buyers.map(w=>drow(short(w)+(walletQ(w)>0.3?' <span class="tag" style=color:var(--up)>smart</span>':''),'›',"openDetail('wallet','"+w+"')")).join(''):'')
    +(held.length?'<div class=h style=margin:14px 0 8px>Open positions</div>'+held.map(h=>drow(h.S.name,(h.upnl>=0?'+':'')+h.upnl.toFixed(3)+'◎ · '+fmtPct(h.ret*100)+' ›',"openDetail('strategy','"+h.S.id+"')",h.upnl>=0?'up':'down')).join(''):'')
@@ -1205,6 +1208,33 @@ function detectRegime(){
  REGIME={label,probs:post,post,risk:REGIME_RISK[label]||1,ts:now(),
   est:{volatility:m.volat,momentum:m.momentum,liquidity:m.liqQual,participation:m.partQual,breadth:m.breadth}};}
 function regimeMult(){return regimeGuard?(REGIME.risk||1):1;}                       // fund-wide risk dial by regime
+/* ============================================================================
+   OPPORTUNITY SCORING ENGINE  (mission #4)
+   One explainable 0..100 score over every factor. Each factor's WEIGHT is its
+   signed importance from the Feature Engineering Engine (correlation to forward
+   outcome), so the score continuously recalibrates — falling back to priors
+   until a factor's feature has enough matured samples. Regime is a factor.
+   ============================================================================ */
+const OPPF=[ /* [name, valueFn→0..1, FE-feature for the learned weight, prior weight] */
+ ['walletQuality',(T,f,A)=>A.cSmart,'smart',0.9],
+ ['liquidity',(T,f)=>clamp(Math.log1p(f.liq)/Math.log1p(40),0,1),'liq',0.5],
+ ['momentum',(T,f,A)=>A.cMom,'mom',0.6],
+ ['volumeAccel',(T,f,A)=>A.cAccel,'accel',0.7],
+ ['holderDist',(T,f,A)=>A.cOrg,'organic',0.5],
+ ['whaleConc',(T,f)=>clamp((f.vol/Math.max(f.buyers,1))/3,0,1),'whaleConc',0.3],
+ ['narrative',(T,f)=>DEXN(T.dex)>0?0.55:0.25,'dex',0.1],
+ ['volatility',(T,f)=>{const p=T.prices;if(!p||p.length<3)return 0;const m=_mean(p);return clamp(_std(p)/(m||1),0,1);},'volatility',-0.15],
+ ['age',(T,f)=>clamp(1-Math.log1p(f.age)/Math.log1p(1800),0,1),'age',0.2],
+ ['trendStrength',(T,f)=>{const s=T.bSamp;if(!s||s.length<3)return 0;const l=s[s.length-1],e=s[0];return clamp((l.b-e.b)/Math.max(l.ts-e.ts,1)*60/15,0,1);},'buyers',0.6],
+ ['regime',()=>clamp(((REGIME.risk||1)-0.15)/1.0,0,1),null,0.6],
+];
+function _feIdxReady(feKey){const k=FEAT_NAMES.indexOf(feKey);return k>=0&&FE.stats[k]&&FE.stats[k].n>=FE.MIN_N?k:-1;}
+function oppWeight(feKey,defW){if(!feKey)return defW;const k=_feIdxReady(feKey);return k<0?defW:clamp(feCorr(k)*3,-1,1);}   // learned signed weight, else prior
+function oppEval(T,f,A){f=f||feat(T);A=A||alphaScore(T,f);
+ const facs=OPPF.map(o=>{const v=clamp(o[1](T,f,A)||0,0,1),w=oppWeight(o[2],o[3]);return {k:o[0],v,w,c:w*v,learned:o[2]?_feIdxReady(o[2])>=0:false};});
+ let raw=0,wsum=0;for(const x of facs){raw+=x.c;wsum+=Math.abs(x.w);}
+ return {score:Math.round(100*clamp(0.5+raw/(2*(wsum||1)),0,1)),factors:facs.slice().sort((a,b)=>Math.abs(b.c)-Math.abs(a.c))};}
+function oppFactorTable(){return OPPF.map(o=>({k:o[0],w:oppWeight(o[2],o[3]),learned:o[2]?_feIdxReady(o[2])>=0:false})).sort((a,b)=>Math.abs(b.w)-Math.abs(a.w));}
 /* conviction sizing — bet bigger the further above threshold, capped at 10% liq / 3x base */
 function alphaSize(P,liq,score){const base=sSize(P,liq),k=Math.max(0,(score-P.alphaMin)/Math.max(100-P.alphaMin,1));return Math.max(0.05,Math.min(base*(1+1.5*k),liq*0.1,P.size*3));}
 /* self-correcting RL entry policy — contextual bandit (mirrors strategies/rl_policy.py) */
@@ -1700,13 +1730,14 @@ function renderPatterns(){renderFeatures();const st=$('disc_status');if(!st)retu
  const cand=tv().filter(T=>now()-T.lastSeen<90&&T.lastPrice>0&&!junk.has(T.mint)).map(T=>({T,p:discScore(T)})).filter(x=>x.p>0.3).sort((a,b)=>b.p-a.p).slice(0,8);
  const thr=(DS&&DS.params.discMin)||55;
  $('disc_live').innerHTML=pred?(cand.map(({T,p})=>`<div class="item clickable" onclick="openToken('${T.mint}')"><div><div class=nm>${short(T.mint)} <span class=tag style=color:${p*100>=thr?'var(--up)':'#f5a623'}>${(p*100|0)}%</span>${p*100>=thr?' <span class="tag" style=color:var(--up)>🧬 buy</span>':''}</div><div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)}</div></div><div class=rt><div class="badge up">${T.maxMult.toFixed(1)}×</div></div></div>`).join('')||'<div class=ctr>no live matches…</div>'):'<div class=ctr>model not predictive yet — gathering data</div>';}
-function renderOpps(){const o=tv().map(T=>({T,s:oppScore(T)})).filter(x=>x.s>=35&&now()-x.T.lastSeen<300).sort((a,b)=>b.s-a.s).slice(0,10);
- $('opps').innerHTML=o.map(({T,s})=>{const p=pct(T),up=p>=0;return `<div class="item clickable" data-k="${T.mint}" onclick="openToken('${T.mint}')">
-  <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=50?'#f5a623':'#8b9197'}>${s.toFixed(0)}</span></div>
-  <div class=sub>${T.buyers.size} buyers · ${ageStr(now()-T.firstSeen)} · ${T.dex||''}</div></div>
+function renderOpps(){const o=tv().map(T=>({T,e:oppEval(T)})).filter(x=>x.e.score>=45&&now()-x.T.lastSeen<300).sort((a,b)=>b.e.score-a.e.score).slice(0,10);
+ $('opps').innerHTML=o.map(({T,e})=>{const p=pct(T),up=p>=0,s=e.score,drivers=e.factors.filter(x=>x.c>0).slice(0,2).map(x=>x.k).join(' · ');return `<div class="item clickable" data-k="${T.mint}" onclick="openToken('${T.mint}')">
+  <div><div class=nm>${short(T.mint)} <span class=tag style=color:${s>=70?'#00c805':s>=55?'#f5a623':'#8b9197'}>${s}</span></div>
+  <div class=sub>${drivers||(T.buyers.size+' buyers')} · ${ageStr(now()-T.firstSeen)}</div></div>
   <div class=mid>${spark(T.prices,up)}</div>
   <div class=rt><div class="badge ${up?'up':'down'}">${T.maxMult.toFixed(1)}×</div></div></div>`;}).join('')||'<div class=ctr>scanning for setups…</div>';
  streamFeed($('opps'));
+ const ft=$('opp_factors');if(ft){ft.innerHTML=bars(oppFactorTable().map(x=>({label:x.k+(x.learned?' ◆':''),value:Math.round(Math.abs(x.w)*100),disp:(x.w>=0?'+':'')+x.w.toFixed(2),color:x.w>=0?'#34ecaa':'#ff6a52'})));}
  const cats={};tv().forEach(T=>{const c=category(T);cats[c]=(cats[c]||0)+1;});const heat=(cats.heating||0)+(cats.fresh||0),cold=(cats.dumping||0)+(cats.quiet||0);
  $('regime').innerHTML=`<span class="${heat>=cold?'up':'down'}">${heat>=cold?'RISK-ON':'RISK-OFF'}</span> <span class=muted>(${heat} hot / ${cold} cold)</span>`;}
 function renderDist(){$('ch_multhist').innerHTML=histogram(tv().map(T=>T.maxMult),'#00c805');$('ch_volhist').innerHTML=histogram(tv().map(T=>T.vol).filter(v=>v>0),'#5aa9ff');}
