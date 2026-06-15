@@ -424,6 +424,8 @@ section>.h:first-child,.nm,.dh{text-shadow:0 1px 2px rgba(0,0,0,.4),0 0 10px rgb
   <div class=heroval id=bot_eq>—</div>
   <div class="chg up" id=bot_chg>—</div>
   <div id=bot_rate style=margin:6px 0></div>
+  <div class=h style=margin:14px 0 8px>🛡 Risk Engine <span class=muted style=font-weight:400>capital preservation · limits · kill switch</span></div>
+  <div id=risk_panel></div>
   <div id=bot_chart style=margin:8px 0></div>
   <div class=h style=margin:10px 0 4px;font-size:10px>Drawdown (underwater)</div><div id=bot_dd></div>
   <div class=cols style=margin:12px 0>
@@ -1274,6 +1276,47 @@ function posSize(S,T,f,conf){const P=S.params,b=S.book,eq=bookEquity(b),method=S
  if((S._rate||0)>0&&dd<0.05)base*=clamp(1+(S._rate)/20,1,1.3);                                // ramp up gradually on strong performance
  const ex=portfolioExposure();if(ex>0.6)base*=clamp(1-(ex-0.6),0.4,1);                        // portfolio-exposure throttle
  return Math.max(0.05,Math.min(base,eq*(P.maxEqFrac||0.25),f.liq*(P.maxLiqFrac||0.1)));}      // floor + blow-up caps (≤25% equity, ≤10% pool)
+/* ============================================================================
+   RISK ENGINE  (mission #6) — preservation of capital is mandatory
+   Portfolio-level guardrails each cycle: rolling daily/weekly loss limits,
+   exposure + sector + correlation caps, liquidity floor, max-drawdown control,
+   regime-triggered tightening, abnormal-behaviour (loss-streak) detection, and
+   an emergency kill switch (manual + auto-latching). Blocks risk before it lands.
+   ============================================================================ */
+const RISK={halted:false,manualKill:localStorage.getItem('mchpai_kill')==='1',latched:null,reasons:[],
+ day:0,week:0,eq:0,start:0,peakEq:0,dd:0,expo:0,open:0,sector:{},sectorTop:0,streak:0,lastBlock:'',blocks:0,
+ DAY:-0.10,WEEK:-0.22,MAX_EXPO:0.85,SECTOR:0.55,CORR_MAX:5,MAX_DD:0.30,MAX_OPEN:14,MIN_LIQ:3,STREAK:7};   // limits (loss limits as fraction of starting capital)
+function totalEquity(){let e=0;for(const S of strategies)e+=bookEquity(S.book);return e;}
+function totalStart(){let s=0;for(const S of strategies)s+=S.book.start;return s;}
+function lossSince(sec){const c=now()-sec;let p=0;for(const e of pnlLog)if(e.ts>=c)p+=e.pnl;return p;}
+function lossStreak(){const all=[];for(const S of strategies)for(const c of S.book.closed)all.push(c);all.sort((a,b)=>b.ts-a.ts);let n=0;for(const c of all){if(c.pnl<0)n++;else break;}return n;}
+function sectorExposure(){const sec={};let open=0;for(const S of strategies)S.book.pos.forEach((p,m)=>{const T=tokens.get(m),v=p.tokens*((T&&T.lastPrice)||p.entry),d=(T&&T.dex)||'?';sec[d]=(sec[d]||0)+v;open+=v;});return{sec,open};}
+function openCount(){let n=0;for(const S of strategies)n+=S.book.pos.size;return n;}
+function riskMonitor(){
+ const start=totalStart()||1,eq=totalEquity();RISK.eq=eq;RISK.start=start;if(eq>RISK.peakEq)RISK.peakEq=eq;RISK.dd=RISK.peakEq>0?Math.max(0,(RISK.peakEq-eq)/RISK.peakEq):0;
+ RISK.day=lossSince(86400)/start;RISK.week=lossSince(604800)/start;RISK.expo=portfolioExposure();RISK.open=openCount();RISK.streak=lossStreak();
+ const se=sectorExposure();RISK.sector=se.sec;RISK.sectorTop=se.open>0?Math.max.apply(null,[0].concat(Object.values(se.sec)))/se.open:0;
+ const trips=[];                                                                   // catastrophic auto-trips (latching)
+ if(RISK.day<=RISK.DAY)trips.push('daily loss '+(RISK.day*100|0)+'%');
+ if(RISK.week<=RISK.WEEK)trips.push('weekly loss '+(RISK.week*100|0)+'%');
+ if(RISK.dd>=RISK.MAX_DD)trips.push('drawdown '+(RISK.dd*100|0)+'%');
+ if(RISK.streak>=RISK.STREAK)trips.push(RISK.streak+' losses in a row');
+ if(trips.length&&!RISK.latched)RISK.latched={reasons:trips,ts:now()};
+ if(RISK.latched&&RISK.day>RISK.DAY*0.5&&RISK.week>RISK.WEEK*0.5&&RISK.dd<RISK.MAX_DD*0.5&&RISK.streak<RISK.STREAK)RISK.latched=null;   // auto-recover
+ RISK.reasons=RISK.latched?RISK.latched.reasons.slice():[];if(RISK.manualKill)RISK.reasons.unshift('manual kill switch');
+ RISK.halted=!!RISK.manualKill||!!RISK.latched;}
+function riskCheck(S,T,size){
+ if(RISK.halted)return{ok:false,reason:'halted'};
+ if((T.vol||0)<RISK.MIN_LIQ)return{ok:false,reason:'illiquid'};
+ if(RISK.open>=RISK.MAX_OPEN)return{ok:false,reason:'max open'};
+ const eq=RISK.eq||totalEquity();if(eq>0&&(RISK.expo+size/eq)>RISK.MAX_EXPO)return{ok:false,reason:'max exposure'};
+ const d=(T.dex)||'?',se=sectorExposure();if(eq>0&&((se.sec[d]||0)+size)/eq>RISK.SECTOR)return{ok:false,reason:'sector concentration'};   // sector exposure as % of capital
+ let cc=0;for(const X of strategies)X.book.pos.forEach((p,m)=>{const tt=tokens.get(m);if(tt&&tt.dex===d)cc++;});if(cc>=RISK.CORR_MAX)return{ok:false,reason:'correlated cluster'};
+ if(REGIME.label==='panic'||REGIME.label==='capitulation')return{ok:false,reason:'regime '+REGIME.label};   // volatility-triggered tightening
+ return{ok:true};}
+function riskFlatten(){let n=0;for(const S of strategies)for(const m of [...S.book.pos.keys()]){const T=tokens.get(m),pos=S.book.pos.get(m);sClose(S,m,(T&&T.lastPrice)||pos.entry,'risk flatten',true);n++;}renderTrade();return n;}
+function toggleKill(){RISK.manualKill=!RISK.manualKill;localStorage.setItem('mchpai_kill',RISK.manualKill?'1':'0');riskMonitor();renderTrade();}
+function resetRisk(){RISK.latched=null;RISK.manualKill=false;localStorage.removeItem('mchpai_kill');RISK.peakEq=totalEquity();riskMonitor();renderTrade();}
 const trailForP=(ret,base)=>ret>=3?0.15:ret>=1?0.22:ret>=0.4?0.30:base;
 function sOpen(S,mint,price,ts,size,ctx,extra){const T=tokens.get(mint);const slip=COST.baseSlip+impactBps(size,T.vol),fill=price*(1+slip/1e4),fee=size*COST.feeBps/1e4+COST.fixed,toks=(size-fee)/fill;if(toks<=0)return;S.book.cash-=size;S.book.pos.set(mint,Object.assign({entry:fill,cost:size,tokens:toks,openTs:ts,peak:fill,ctx,lastRet:0},extra||{}));}
 function sClose(S,mint,price,reason,adv){const pos=S.book.pos.get(mint);if(!pos)return;const T=tokens.get(mint);let slip=COST.baseSlip+impactBps(pos.tokens*price,T?T.vol:1);if(adv)slip+=COST.exitGap;const fill=price*(1-slip/1e4),gross=pos.tokens*fill,fee=gross*COST.feeBps/1e4+COST.fixed,proc=Math.max(0,gross-fee),pnl=proc-pos.cost;S.book.cash+=proc;S.book.realized+=pnl;if(!replaying){tradeBuf.push({strat:S.name,mint,pnl:+pnl.toFixed(6),ret:+(price/pos.entry-1).toFixed(4),reason,ts:now()});logPnl(S.name,pnl);
@@ -1317,6 +1360,7 @@ function tieredQ(P,f,T){const b=T.buyers.size,s=T.sells,age=f.age;if(s>Math.max(
 async function sTick(S,mint,T,f){const P=S.params,ts=now(),b=S.book;
  if(b.pos.has(mint)){if(S.exitMode==='firstSell'){const p=b.pos.get(mint);if(T.sells>p.sellsAtEntry)sClose(S,mint,T.lastPrice||p.entry,'first sell',false);}return;}
  if(b.pos.size>=P.maxPos||f.price<=0)return;const conf=oppEval(T,f).score;const size=posSize(S,T,f,conf);if(b.cash<size)return;   // mission #5: Kelly/vol-parity sizing, confidence·regime scaled, drawdown·exposure throttled, blow-up capped
+ const rc=riskCheck(S,T,size);if(!rc.ok){RISK.lastBlock=rc.reason;RISK.blocks++;return;}   // mission #6: portfolio-level risk gate — block new risk before it lands
  if(S.entry==='tiered'){if(tieredQ(P,f,T)){if(Math.random()<COST.failP){b.missed++;return;}sOpen(S,mint,f.price,ts,size,ctxOf(f),{mode:'firstSell',sellsAtEntry:T.sells});}return;}
  if(!(f.age>=P.minAge&&f.age<=P.maxAge&&f.liq>=P.minLiq&&f.buyers>=P.minBuyers))return;
  let convSize=size,extra;
@@ -1791,6 +1835,13 @@ function delStrat(id){if(strategies.length>1){strategies=strategies.filter(s=>s.
 function addStrat(){strategies.push(newStrategy('New strategy','momentum'));saveStrats();renderTrade();}
 function renderTrade(){let aeq=0,astart=0;strategies.forEach(S=>{aeq+=bookEquity(S.book);astart+=S.book.start;});const chg=aeq-astart,up=chg>=0;
  $('bot_eq').textContent=aeq.toFixed(3)+' ◎';const bc=$('bot_chg');bc.className='chg '+(up?'up':'down');bc.textContent=(up?'▲ ':'▼ ')+Math.abs(chg).toFixed(3)+'◎  '+fmtPct(astart?chg/astart*100:0);
+ const rp=$('risk_panel');if(rp){const R=RISK,lim=(v,l,inv)=>{const bad=inv?v>=l:v<=l;return '<span class="'+(bad?'down':'up')+'">'+(v*100).toFixed(0)+'%</span>';};
+  rp.innerHTML=`<div class=row><span class=muted>status</span><span>${R.halted?'<b style=color:var(--down)>⛔ HALTED — '+(R.reasons[0]||'')+'</b>':'<b style=color:var(--up)>● armed</b>'}</span></div>
+   <div class=row><span class=muted>daily / weekly P&L vs limit</span><span>${lim(R.day,R.DAY)} / ${lim(R.week,R.WEEK)} <span class=muted>(lim ${R.DAY*100|0}/${R.WEEK*100|0}%)</span></span></div>
+   <div class=row><span class=muted>drawdown · exposure</span><span><span class="${R.dd>=R.MAX_DD?'down':''}">${(R.dd*100|0)}%</span> · <span class="${R.expo>=R.MAX_EXPO?'down':''}">${(R.expo*100|0)}%</span> <span class=muted>(max ${R.MAX_DD*100|0}/${R.MAX_EXPO*100|0}%)</span></span></div>
+   <div class=row><span class=muted>open · sector top · loss streak</span><span>${R.open}/${R.MAX_OPEN} · ${(R.sectorTop*100|0)}% · <span class="${R.streak>=R.STREAK?'down':''}">${R.streak}</span></span></div>
+   ${R.blocks?'<div class=row><span class=muted>entries blocked · last</span><span>'+R.blocks+' · '+R.lastBlock+'</span></div>':''}
+   <div class=row style=border:none><span class=muted>controls</span><span><button class="mini ${R.manualKill?'on':''}" onclick="toggleKill()">${R.manualKill?'● KILL ON':'○ kill switch'}</button><button class=mini onclick="if(confirm('Flatten ALL open positions now?'))alert('Flattened '+riskFlatten()+' positions')">⏏ flatten</button>${R.latched?'<button class=mini onclick="resetRisk()">↺ reset</button>':''}</span></div>`;}
  const rm=$('bot_rate');if(rm){const r60=rateStats(60),hit=r60.rate>=RATE_TARGET[0],warn=r60.rate>0&&!hit,cls=hit?'up':warn?'':'down';
   const span=Math.max(1,(now()-SESSION_START)/3600);
   rm.innerHTML=`<div class=row><span class=muted>🎯 realized rate (last 60m)</span><span class="${cls}"><b>${r60.rate>=0?'+':''}${r60.rate.toFixed(2)} ◎/hr</b> · target ${RATE_TARGET[0]}–${RATE_TARGET[1]}</span></div>
@@ -1918,7 +1969,7 @@ async function poll(){if(!KEY||busy)return;busy=true;try{let pend=[];
  hist.push({t:now(),swaps:cnt.swaps,buys:flow.buys,sells:flow.sells,bvol:flow.bvol,svol:flow.svol,tokens:tokens.size,wallets:wallets.size});if(hist.length>150)hist.shift();
  detectRegime();   // mission #3: refresh market-regime posterior each cycle
  strategies.forEach(S=>{S.book.eqHist.push(bookEquity(S.book));if(S.book.eqHist.length>150)S.book.eqHist.shift();});
- refreshProof();gradeWallets();scanSmartMoney();feLearn();flushStore();if(pollN%5===0)saveBrain();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
+ refreshProof();gradeWallets();scanSmartMoney();feLearn();riskMonitor();flushStore();if(pollN%5===0)saveBrain();if(pollN%6===0){maybePrune();updateStorageUI();}if(pollN%8===0)evolve();if(pollN%20===0)allocate();if(pollN%25===0)autopromote();if(pollN%15===0&&autoDiscover)discoverPatterns();if(pollN%30===0)pruneWallets();   // proof-gate, grade, persist, evolve, allocate, autopromote, LEARN patterns, prune
  render();if(!typedApp)requestAnimationFrame(typeApp);   // first populated render → whole app writes itself in
  $('status').textContent='live · '+new Date().toLocaleTimeString().replace(/:\d+ /,' ')+' · '+cnt.swaps+' swaps';
 }finally{busy=false;}}
