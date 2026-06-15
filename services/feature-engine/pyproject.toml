@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "feature-engine"
+version = "0.1.0"
+description = "MCHPAI feature-engine: creator/liquidity/entropy/spread/attention features."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common", "numpy>=1.26"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["feature_engine*"]

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mchpai
+  labels:
+    platform: mchpai
+    istio-injection: enabled

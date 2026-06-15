@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "creator-intelligence"
+version = "0.1.0"
+description = "MCHPAI creator-intelligence: creator_score from launch track records."
+requires-python = ">=3.11"
+dependencies = ["mchpai-common"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["creator_intelligence*"]

@@ -1,0 +1,35 @@
+# OpenTelemetry Collector — receives OTLP from all MCHPAI services and fans out
+# to Tempo (traces), Prometheus (metrics), and Loki (logs).
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  batch: {}
+  resourcedetection:
+    detectors: [env, system]
+
+exporters:
+  otlphttp/tempo:
+    endpoint: http://tempo:4318
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resourcedetection, batch]
+      exporters: [otlphttp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [loki]

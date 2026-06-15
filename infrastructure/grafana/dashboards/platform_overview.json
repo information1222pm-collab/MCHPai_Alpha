@@ -1,0 +1,42 @@
+{
+  "title": "MCHPAI — Platform Overview",
+  "uid": "mchpai-overview",
+  "schemaVersion": 39,
+  "tags": ["mchpai"],
+  "timezone": "utc",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Events / sec (ingestion)",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(rate(mchpai_events_published_total[1m]))"}]
+    },
+    {
+      "type": "stat",
+      "title": "Tokens discovered (24h)",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "increase(mchpai_tokens_discovered_total[24h])"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Decision → land latency (p50/p99 ms)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "histogram_quantile(0.5, sum(rate(mchpai_exec_latency_ms_bucket[5m])) by (le))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.99, sum(rate(mchpai_exec_latency_ms_bucket[5m])) by (le))", "legendFormat": "p99"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Buy signals generated",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "targets": [{"expr": "sum(rate(mchpai_buy_signals_total[5m]))"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Prediction model latency",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(mchpai_prediction_latency_ms_bucket[5m])) by (le))"}]
+    }
+  ]
+}
